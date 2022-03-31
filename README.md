@@ -16,18 +16,23 @@
 -->
 
 # Onehouse Internal fork of Apache hudi
+
+```
+# First clone repo from internal github
 git clone https://github.com/InfiniLake/hudi-internal.git
+# Add upstream repo as apache/hudi repo
 git remote add upstream https://github.com/apache/hudi.git
 git remote set-url --push upstream DISABLE
 git remote -v
 
-When you push, do so on origin with 
+# When you push, do so on origin with 
 git push origin.
 
-When you want to pull changes from upstream you can just fetch the remote and rebase on top of your work.
+# When you want to pull changes from upstream you can just fetch the remote and rebase on top of your work.
 git fetch upstream
 git rebase upstream/master
-And solve the conflicts if any
+#And solve the conflicts if any
+```
 
 # Apache Hudi
 
