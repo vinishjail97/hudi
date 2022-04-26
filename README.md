@@ -32,6 +32,7 @@ git push origin.
 git fetch upstream
 git rebase upstream/master
 #And solve the conflicts if any
+git push --force origin master
 ```
 
 # Apache Hudi

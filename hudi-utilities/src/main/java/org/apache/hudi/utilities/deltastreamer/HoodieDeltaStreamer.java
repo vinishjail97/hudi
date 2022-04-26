@@ -507,7 +507,7 @@ public class HoodieDeltaStreamer implements Serializable {
     }
   }
 
-  private static String toSortedTruncatedString(TypedProperties props) {
+  public static String toSortedTruncatedString(TypedProperties props) {
     List<String> allKeys = new ArrayList<>();
     for (Object k : props.keySet()) {
       allKeys.add(k.toString());

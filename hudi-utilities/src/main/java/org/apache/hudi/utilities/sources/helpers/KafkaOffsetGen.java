@@ -163,7 +163,7 @@ public class KafkaOffsetGen {
    */
   public static class Config {
 
-    private static final ConfigProperty<String> KAFKA_TOPIC_NAME = ConfigProperty
+    public static final ConfigProperty<String> KAFKA_TOPIC_NAME = ConfigProperty
             .key("hoodie.deltastreamer.source.kafka.topic")
             .noDefaultValue()
             .withDocumentation("Kafka topic name.");

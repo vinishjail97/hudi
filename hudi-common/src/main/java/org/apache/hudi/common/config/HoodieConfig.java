@@ -166,6 +166,12 @@ public class HoodieConfig implements Serializable {
     return rawValue.map(v -> Long.parseLong(v.toString())).orElse(null);
   }
 
+  public <T> Long getLongOrDefault(ConfigProperty<T> configProperty) {
+    Option<Object> rawValue = getRawValue(configProperty);
+    return rawValue.map(v -> Long.parseLong(v.toString()))
+        .orElse((Long) configProperty.defaultValue());
+  }
+
   public <T> Float getFloat(ConfigProperty<T> configProperty) {
     Option<Object> rawValue = getRawValue(configProperty);
     return rawValue.map(v -> Float.parseFloat(v.toString())).orElse(null);

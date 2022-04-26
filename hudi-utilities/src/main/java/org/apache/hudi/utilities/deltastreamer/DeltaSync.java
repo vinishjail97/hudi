@@ -215,6 +215,15 @@ public class DeltaSync implements Serializable {
 
   private transient HoodieMetrics hoodieMetrics;
 
+  public DeltaSync(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession, TypedProperties props,
+                   JavaSparkContext jssc, FileSystem fs, Configuration conf,
+                   Function<SparkRDDWriteClient, Boolean> onInitializingHoodieWriteClient) throws IOException {
+    this(cfg, sparkSession, UtilHelpers.wrapSchemaProviderWithPostProcessor(
+            UtilHelpers.createSchemaProvider(cfg.schemaProviderClassName, props, jssc),
+        props, jssc, cfg.transformerClassNames),
+        props, jssc, fs, conf, onInitializingHoodieWriteClient);
+  }
+
   public DeltaSync(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession, SchemaProvider schemaProvider,
                    TypedProperties props, JavaSparkContext jssc, FileSystem fs, Configuration conf,
                    Function<SparkRDDWriteClient, Boolean> onInitializingHoodieWriteClient) throws IOException {
