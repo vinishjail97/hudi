@@ -29,7 +29,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import static org.apache.hudi.metrics.Metrics.registerGauge;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.when;
@@ -39,10 +40,12 @@ public class TestPushGateWayReporter {
 
   @Mock
   HoodieWriteConfig config;
+  HoodieMetrics hoodieMetrics;
+  Metrics metrics;
 
   @AfterEach
   void shutdownMetrics() {
-    Metrics.shutdown();
+    metrics.shutdown();
   }
 
   @Test
@@ -56,13 +59,16 @@ public class TestPushGateWayReporter {
     when(config.getPushGatewayDeleteOnShutdown()).thenReturn(true);
     when(config.getPushGatewayJobName()).thenReturn("foo");
     when(config.getPushGatewayRandomJobNameSuffix()).thenReturn(false);
+    when(config.getBasePath()).thenReturn("s3://test" + UUID.randomUUID());
+    hoodieMetrics = new HoodieMetrics(config);
+    metrics = hoodieMetrics.getMetrics();
 
     assertDoesNotThrow(() -> {
       new HoodieMetrics(config);
     });
 
-    registerGauge("pushGateWayReporter_metric", 123L);
-    assertEquals("123", Metrics.getInstance().getRegistry().getGauges()
+    metrics.registerGauge("pushGateWayReporter_metric", 123L);
+    assertEquals("123", metrics.getRegistry().getGauges()
         .get("pushGateWayReporter_metric").getValue().toString());
   }
 }

@@ -29,6 +29,7 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
 
   private HoodieWriteConfig config;
   private String tableName;
+  private Metrics metrics;
 
   public String overallTimerName = null;
   public String hiveSyncTimerName = null;
@@ -41,7 +42,7 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
     this.config = config;
     this.tableName = config.getTableName();
     if (config.isMetricsOn()) {
-      Metrics.init(config);
+      metrics = Metrics.getInstance(config);
       this.overallTimerName = getMetricsName("timer", "deltastreamer");
       this.hiveSyncTimerName = getMetricsName("timer", "deltastreamerHiveSync");
       this.metaSyncTimerName = getMetricsName("timer", "deltastreamerMetaSync");
@@ -70,7 +71,7 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
   }
 
   private Timer createTimer(String name) {
-    return config.isMetricsOn() ? Metrics.getInstance().getRegistry().timer(name) : null;
+    return config.isMetricsOn() ? metrics.getRegistry().timer(name) : null;
   }
 
   String getMetricsName(String action, String metric) {
@@ -79,25 +80,61 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
 
   public void updateDeltaStreamerMetrics(long durationInNs) {
     if (config.isMetricsOn()) {
-      Metrics.registerGauge(getMetricsName("deltastreamer", "duration"), getDurationInMs(durationInNs));
+      metrics.registerGauge(getMetricsName("deltastreamer", "duration"), getDurationInMs(durationInNs));
     }
   }
 
   public void updateDeltaStreamerMetaSyncMetrics(String syncClassShortName, long syncNs) {
     if (config.isMetricsOn()) {
-      Metrics.registerGauge(getMetricsName("deltastreamer", syncClassShortName), getDurationInMs(syncNs));
+      metrics.registerGauge(getMetricsName("deltastreamer", syncClassShortName), getDurationInMs(syncNs));
     }
   }
 
   public void updateDeltaStreamerKafkaDelayCountMetrics(long kafkaDelayCount) {
     if (config.isMetricsOn()) {
-      Metrics.registerGauge(getMetricsName("deltastreamer", "kafkaDelayCount"), kafkaDelayCount);
+      metrics.registerGauge(getMetricsName("deltastreamer", "kafkaDelayCount"), kafkaDelayCount);
     }
   }
 
   public void updateDeltaStreamerSyncMetrics(long syncEpochTimeInMs) {
     if (config.isMetricsOn()) {
-      Metrics.registerGauge(getMetricsName("deltastreamer", "lastSync"), syncEpochTimeInMs);
+      metrics.registerGauge(getMetricsName("deltastreamer", "lastSync"), syncEpochTimeInMs);
+    }
+  }
+
+  public void updateNumSuccessfulSyncs(long numSuccessfulSyncs) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "numSuccessfulSyncs"), numSuccessfulSyncs);
+    }
+  }
+
+  public void updateNumFailedSyncs(long numFailedSyncs) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "numFailedSyncs"), numFailedSyncs);
+    }
+  }
+
+  public void updateNumConsecutiveFailures(int numConsecutiveFailures) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "numConsecutiveFailures"), numConsecutiveFailures);
+    }
+  }
+
+  public void updateTotalSourceBytesAvailableForIngest(long totalSourceBytesAvailable) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "totalSourceBytesAvailable"), totalSourceBytesAvailable);
+    }
+  }
+
+  public void updateTotalSyncDurationMs(long totalSyncDurationMs) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "totalSyncDurationMs"), totalSyncDurationMs);
+    }
+  }
+
+  public void updateActualSyncDurationMs(long actualSyncDurationMs) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "actualSyncDurationMs"), actualSyncDurationMs);
     }
   }
 

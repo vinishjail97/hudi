@@ -21,13 +21,13 @@ package org.apache.hudi.metrics;
 import org.apache.hudi.common.metrics.Registry;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieWriteConfig;
-import org.apache.hudi.exception.HoodieException;
 
 import com.codahale.metrics.MetricRegistry;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 import java.io.Closeable;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -37,14 +37,13 @@ public class Metrics {
 
   private static final Logger LOG = LogManager.getLogger(Metrics.class);
 
-  private static volatile boolean initialized = false;
-  private static Metrics instance = null;
+  private static final Map<String, Metrics> METRICS_INSTANCE_PER_BASEPATH = new HashMap<>();
 
   private final MetricRegistry registry;
   private MetricsReporter reporter;
   private final String commonMetricPrefix;
 
-  private Metrics(HoodieWriteConfig metricConfig) {
+  public Metrics(HoodieWriteConfig metricConfig) {
     registry = new MetricRegistry();
     commonMetricPrefix = metricConfig.getMetricReporterMetricsNamePrefix();
     reporter = MetricsReporterFactory.createReporter(metricConfig, registry);
@@ -53,10 +52,25 @@ public class Metrics {
     }
     reporter.start();
 
-    Runtime.getRuntime().addShutdownHook(new Thread(this::reportAndCloseReporter));
+    Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
   }
 
-  private void reportAndCloseReporter() {
+  private void registerHoodieCommonMetrics() {
+    registerGauges(Registry.getAllMetrics(true, true), Option.of(commonMetricPrefix));
+  }
+
+  public static synchronized Metrics getInstance(HoodieWriteConfig metricConfig) {
+    String basePath = metricConfig.getBasePath();
+    if (METRICS_INSTANCE_PER_BASEPATH.containsKey(basePath)) {
+      return METRICS_INSTANCE_PER_BASEPATH.get(basePath);
+    }
+
+    Metrics metrics = new Metrics(metricConfig);
+    METRICS_INSTANCE_PER_BASEPATH.put(basePath, metrics);
+    return metrics;
+  }
+
+  public synchronized void shutdown() {
     try {
       registerHoodieCommonMetrics();
       reporter.report();
@@ -68,61 +82,24 @@ public class Metrics {
     }
   }
 
-  private void reportAndFlushMetrics() {
+  public synchronized void flush() {
     try {
       LOG.info("Reporting and flushing all metrics");
-      this.registerHoodieCommonMetrics();
-      this.reporter.report();
-      this.registry.getNames().forEach(this.registry::remove);
+      registerHoodieCommonMetrics();
+      reporter.report();
+      registry.getNames().forEach(this.registry::remove);
     } catch (Exception e) {
       LOG.error("Error while reporting and flushing metrics", e);
     }
   }
 
-  private void registerHoodieCommonMetrics() {
-    registerGauges(Registry.getAllMetrics(true, true), Option.of(commonMetricPrefix));
-  }
-
-  public static Metrics getInstance() {
-    assert initialized;
-    return instance;
-  }
-
-  public static synchronized void init(HoodieWriteConfig metricConfig) {
-    if (initialized) {
-      return;
-    }
-    try {
-      instance = new Metrics(metricConfig);
-    } catch (Exception e) {
-      throw new HoodieException(e);
-    }
-    initialized = true;
-  }
-
-  public static synchronized void shutdown() {
-    if (!initialized) {
-      return;
-    }
-    instance.reportAndCloseReporter();
-    initialized = false;
-  }
-
-  public static synchronized void flush() {
-    if (!Metrics.initialized) {
-      return;
-    }
-    instance.reportAndFlushMetrics();
-  }
-
-  public static void registerGauges(Map<String, Long> metricsMap, Option<String> prefix) {
+  public void registerGauges(Map<String, Long> metricsMap, Option<String> prefix) {
     String metricPrefix = prefix.isPresent() ? prefix.get() + "." : "";
     metricsMap.forEach((k, v) -> registerGauge(metricPrefix + k, v));
   }
 
-  public static void registerGauge(String metricName, final long value) {
+  public void registerGauge(String metricName, final long value) {
     try {
-      MetricRegistry registry = Metrics.getInstance().getRegistry();
       HoodieGauge guage = (HoodieGauge) registry.gauge(metricName, () -> new HoodieGauge<>(value));
       guage.setValue(value);
     } catch (Exception e) {

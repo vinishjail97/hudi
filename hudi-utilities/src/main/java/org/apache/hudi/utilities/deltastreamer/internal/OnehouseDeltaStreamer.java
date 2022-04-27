@@ -64,6 +64,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_KEY;
@@ -261,6 +262,7 @@ public class OnehouseDeltaStreamer implements Serializable {
   public static class MultiTableSyncService extends HoodieAsyncService {
 
     private static final String PROPERTIES_FILE_EXTENSION = ".properties";
+    private static final Long MIN_TIME_EMIT_METRICS_MS = 5 * 60 * 1000L; // 5 mins
 
     private final transient Map<String, TargetTableState> targetTableStateMap;
     private final transient ExecutorService multiTableStreamThreadPool;
@@ -269,6 +271,8 @@ public class OnehouseDeltaStreamer implements Serializable {
      * Multitable DeltaSync Config.
      */
     private final transient Config multiTableConfigs;
+
+    private transient long lastTimeMetricsReportedMs;
 
     public MultiTableSyncService(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig) throws IOException {
       int totalExecutorResources = Integer.parseInt(jssc.getConf().get("spark.executor.cores", "0"))
@@ -280,6 +284,7 @@ public class OnehouseDeltaStreamer implements Serializable {
       multiTableStreamThreadPool = Executors.newFixedThreadPool(numThreads);
       targetTableStateMap = new HashMap<>();
       this.multiTableConfigs = multiTableConfigs;
+      this.lastTimeMetricsReportedMs = 0L;
 
       Map<String, HoodieMultiTableCommitStatsManager.TableCommitStats> initialTableCommitStatsMap = new HashMap<>();
       multiTableConfigs.tablePropsPaths.forEach(tablePropsPath -> {
@@ -345,12 +350,14 @@ public class OnehouseDeltaStreamer implements Serializable {
                   .filter(targetTableState -> sourceDataRateMap.containsKey(targetTableState.getName())
                       && sourceDataRateMap.get(targetTableState.getName()) >= multiTableConfigs.minSyncSourceBytes).collect(Collectors.toList());
 
-              LOG.info("Based on source data rates " + sourceDataRateMap + " selected the following tables " + selectedTargetTables);
+              LOG.info("Based on source data rates " + sourceDataRateMap
+                  + " selected the following tables " + selectedTargetTables.stream().map(TargetTableState::getName).collect(Collectors.toList()));
 
               selectedTargetTables.forEach(targetTable -> {
+                targetTable.onSyncScheduled();
                 CompletableFuture.supplyAsync(() -> {
                   try {
-                    targetTable.onSyncStart();
+                    targetTable.onSyncStarted();
                     HoodieDeltaStreamer.DeltaSyncService syncService = targetTable.deltaSync;
                     syncService.getDeltaSync().syncOnce();
                   } catch (IOException e) {
@@ -360,7 +367,7 @@ public class OnehouseDeltaStreamer implements Serializable {
                 }, multiTableStreamThreadPool)
                     .whenCompleteAsync((response, throwable) -> {
                       if (throwable != null) {
-                        targetTable.onSyncFailed();
+                        targetTable.onSyncFailure();
                         LOG.error("Failed to run job for table: " + targetTable.name, throwable.getCause());
                       } else {
                         targetTable.onSyncSuccess();
@@ -371,6 +378,19 @@ public class OnehouseDeltaStreamer implements Serializable {
 
               LOG.info("Sleeping for " + multiTableConfigs.minSyncIntervalSeconds + " secs before checking the source topics for ingestion.");
               Thread.sleep(multiTableConfigs.minSyncIntervalSeconds * 1000);
+
+              // Update metrics
+              sourceDataRateMap.keySet().forEach(key -> {
+                if (targetTableStateMap.containsKey(key)) {
+                  targetTableStateMap.get(key).updateSourceBytesAvailableForIngest(sourceDataRateMap.get(key));
+                }
+              });
+              if (lastTimeMetricsReportedMs == 0L
+                  || (System.currentTimeMillis() - lastTimeMetricsReportedMs) > MIN_TIME_EMIT_METRICS_MS) {
+                targetTableStateMap.values().forEach(TargetTableState::reportMetrics);
+                lastTimeMetricsReportedMs = System.currentTimeMillis();
+              }
+
 
             } catch (Exception e) {
               LOG.error("Shutting down delta-sync due to exception", e);
@@ -429,6 +449,24 @@ public class OnehouseDeltaStreamer implements Serializable {
        */
       private Long nextTimeScheduleMsecs;
 
+      /**
+       * Number of successful and failed syncs that get reported to the metrics reporter for the individual table.
+       */
+      private AtomicInteger numberSyncSuccesses;
+      private AtomicInteger numberSyncFailures;
+
+      /**
+       * Amount of available data in bytes ready for ingest at the source.
+       */
+      private AtomicLong sourceBytesAvailableForIngest;
+
+      /**
+       * Tracks the (1) total time to sync one batch (round) of ingest data for a table after being scheduled and
+       * (2) the actual time to sync once the thread was available from the pool.
+       */
+      private Long startSyncScheduledTimeMs;
+      private Long startSyncTimeMs;
+
       public TargetTableState(String name, HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs) {
         this.name = name;
         this.deltaSync = deltaSync;
@@ -436,6 +474,9 @@ public class OnehouseDeltaStreamer implements Serializable {
         this.configs = configs;
         this.isTableSyncActive = new AtomicBoolean(false);
         this.numberConsecutiveFailures = new AtomicInteger(0);
+        this.numberSyncSuccesses = new AtomicInteger(0);
+        this.numberSyncFailures = new AtomicInteger(0);
+        this.sourceBytesAvailableForIngest = new AtomicLong(0);
 
         LOG.info(HoodieDeltaStreamer.toSortedTruncatedString(props));
       }
@@ -452,27 +493,47 @@ public class OnehouseDeltaStreamer implements Serializable {
         // Ensure a sync is not already scheduled
         boolean shouldSyncNow = true;
         if (numberConsecutiveFailures.get() >= 1) {
-          shouldSyncNow = currentTimeMs >= nextTimeScheduleMsecs;
+          shouldSyncNow = (currentTimeMs >= nextTimeScheduleMsecs);
           LOG.info("After " + numberConsecutiveFailures.get() + " consecutive failures, the table " + name
               + " will get scheduled at: " + nextTimeScheduleMsecs + " currentTimeMs " + currentTimeMs);
         }
         return shouldSyncNow & !isTableSyncActive.get();
       }
 
-      void onSyncStart() {
+      void onSyncScheduled() {
         isTableSyncActive.compareAndSet(false, true);
+        startSyncScheduledTimeMs = System.currentTimeMillis();
+      }
+
+      void onSyncStarted() {
+        startSyncTimeMs = System.currentTimeMillis();
       }
 
       void onSyncSuccess() {
         numberConsecutiveFailures.set(0);
+        numberSyncSuccesses.incrementAndGet();
+        isTableSyncActive.compareAndSet(true, false);
+        long currentTimeMs = System.currentTimeMillis();
+        deltaSync.getDeltaSync().getMetrics().updateTotalSyncDurationMs(currentTimeMs - startSyncScheduledTimeMs);
+        deltaSync.getDeltaSync().getMetrics().updateActualSyncDurationMs(currentTimeMs - startSyncTimeMs);
+      }
+
+      void onSyncFailure() {
+        numberSyncFailures.incrementAndGet();
+        nextTimeScheduleMsecs = System.currentTimeMillis()
+            + (numberConsecutiveFailures.incrementAndGet() * configs.minSyncIntervalPostFailuresSeconds * 1000);
         isTableSyncActive.compareAndSet(true, false);
       }
 
-      void onSyncFailed() {
-        numberConsecutiveFailures.incrementAndGet();
-        nextTimeScheduleMsecs = System.currentTimeMillis()
-            + (numberConsecutiveFailures.get() * configs.minSyncIntervalPostFailuresSeconds * 1000);
-        isTableSyncActive.compareAndSet(true, false);
+      public void updateSourceBytesAvailableForIngest(long sourceBytes) {
+        sourceBytesAvailableForIngest.set(sourceBytes);
+      }
+
+      public void reportMetrics() {
+        deltaSync.getDeltaSync().getMetrics().updateNumSuccessfulSyncs(numberSyncSuccesses.getAndSet(0));
+        deltaSync.getDeltaSync().getMetrics().updateNumFailedSyncs(numberSyncFailures.getAndSet(0));
+        deltaSync.getDeltaSync().getMetrics().updateNumConsecutiveFailures(numberConsecutiveFailures.get());
+        deltaSync.getDeltaSync().getMetrics().updateTotalSourceBytesAvailableForIngest(sourceBytesAvailableForIngest.get());
       }
     }
 

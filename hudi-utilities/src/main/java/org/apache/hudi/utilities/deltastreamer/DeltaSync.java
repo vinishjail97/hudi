@@ -902,6 +902,10 @@ public class DeltaSync implements Serializable {
     return commitTimelineOpt;
   }
 
+  public HoodieDeltaStreamerMetrics getMetrics() {
+    return metrics;
+  }
+
   /**
    * Schedule clustering.
    * Called from {@link HoodieDeltaStreamer} when async clustering is enabled.
