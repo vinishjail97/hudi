@@ -120,6 +120,12 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
     }
   }
 
+  public void updateIsActivelyIngesting(int isActivelyIngesting) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "isActivelyIngesting"), isActivelyIngesting);
+    }
+  }
+
   public void updateTotalSourceBytesAvailableForIngest(long totalSourceBytesAvailable) {
     if (config.isMetricsOn()) {
       metrics.registerGauge(getMetricsName("deltastreamer", "totalSourceBytesAvailable"), totalSourceBytesAvailable);

@@ -435,7 +435,7 @@ public class OnehouseDeltaStreamer implements Serializable {
       private final Config configs;
 
       /**
-       * Is there an active ingestion job for the table.
+       * Is there an active or scheduled ingestion job for the table.
        */
       private final AtomicBoolean isTableSyncActive;
 
@@ -507,6 +507,7 @@ public class OnehouseDeltaStreamer implements Serializable {
 
       void onSyncStarted() {
         startSyncTimeMs = System.currentTimeMillis();
+        deltaSync.getDeltaSync().getMetrics().updateIsActivelyIngesting(1);
       }
 
       void onSyncSuccess() {
@@ -516,6 +517,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         long currentTimeMs = System.currentTimeMillis();
         deltaSync.getDeltaSync().getMetrics().updateTotalSyncDurationMs(currentTimeMs - startSyncScheduledTimeMs);
         deltaSync.getDeltaSync().getMetrics().updateActualSyncDurationMs(currentTimeMs - startSyncTimeMs);
+        deltaSync.getDeltaSync().getMetrics().updateIsActivelyIngesting(0);
       }
 
       void onSyncFailure() {
@@ -523,6 +525,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         nextTimeScheduleMsecs = System.currentTimeMillis()
             + (numberConsecutiveFailures.incrementAndGet() * configs.minSyncIntervalPostFailuresSeconds * 1000);
         isTableSyncActive.compareAndSet(true, false);
+        deltaSync.getDeltaSync().getMetrics().updateIsActivelyIngesting(0);
       }
 
       public void updateSourceBytesAvailableForIngest(long sourceBytes) {
