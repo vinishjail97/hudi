@@ -633,6 +633,7 @@ public class OnehouseDeltaStreamer implements Serializable {
     tableConfig.transformerClassNames = onehouseInternalDeltastreamerConfig.getTransformerClassName();
     tableConfig.operation = WriteOperationType.valueOf(configuredWriteConfig.getStringOrDefault(
         DataSourceWriteOptions.OPERATION(), DataSourceWriteOptions.OPERATION().defaultValue()).toUpperCase());
+    tableConfig.filterDupes = onehouseInternalDeltastreamerConfig.isFilterDupesEnabled();
     tableConfig.continuousMode = !config.syncOnce;
     tableConfig.minSyncIntervalSeconds = config.minSyncIntervalSeconds;
     tableConfig.enableMetaSync = onehouseInternalDeltastreamerConfig.isMetaSyncEnabled();

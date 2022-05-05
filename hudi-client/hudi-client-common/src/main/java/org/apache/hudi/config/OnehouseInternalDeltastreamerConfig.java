@@ -85,6 +85,11 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
       .defaultValue("org.apache.hudi.hive.HiveSyncTool")
       .withDocumentation("Meta sync client class, using comma to separate multiple classes.");
 
+  public static final ConfigProperty<String> DELTASTREAMER_ENABLE_FILTER_DUPES = ConfigProperty
+      .key("hoodie.deltastreamer.filter.dupes.enable")
+      .defaultValue("false")
+      .withDocumentation("Should duplicate records from source be dropped/filtered out before insert/bulk-insert.");
+
   private OnehouseInternalDeltastreamerConfig() {
     super();
   }
@@ -135,6 +140,10 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
 
   public String getMetaSyncClasses() {
     return getStringOrDefault(DELTASTREAMER_META_SYNC_CLASSES);
+  }
+
+  public boolean isFilterDupesEnabled() {
+    return getBooleanOrDefault(DELTASTREAMER_ENABLE_FILTER_DUPES);
   }
 
   public static OnehouseInternalDeltastreamerConfig.Builder newBuilder() {
