@@ -38,6 +38,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.config.HoodieClusteringConfig;
 import org.apache.hudi.config.HoodieWriteCommitCallbackConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
@@ -102,7 +103,7 @@ public class OnehouseDeltaStreamer implements Serializable {
       String tablePropsRelativePath = (tablePropertiesFiles.get(0).endsWith(".properties")) ? tablePropertiesFiles.get(0) : tablePropertiesFiles.get(0).concat(".properties");
       String tablePropsFilePath = String.format("%s/%s", cfg.propsDirRoot, tablePropsRelativePath);
       TypedProperties properties = combineProperties(tablePropsFilePath, cfg, hadoopConf);
-      HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(cfg, hadoopConf, properties, tablePropsFilePath);
+      HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(cfg, hadoopConf, properties, tablePropsFilePath, JobType.SINGLE_TABLE_DELTASTREAMER);
       this.syncService = Option.ofNullable(new HoodieDeltaStreamer.DeltaSyncService(tableConfig,
           jssc,
           FSUtils.getFs(tableConfig.targetBasePath, hadoopConf),
@@ -292,15 +293,13 @@ public class OnehouseDeltaStreamer implements Serializable {
 
         String tablePropsFilePath = String.format("%s/%s", multiTableConfigs.propsDirRoot, tablePropsPath);
         try {
-          TypedProperties properties = combineProperties(tablePropsFilePath, multiTableConfigs, hadoopConfig);
-          // Configure the write commit callback that updates the checkpoints
-          properties.setProperty(HoodieWriteCommitCallbackConfig.TURN_CALLBACK_ON.key(), String.valueOf(true));
-          properties.setProperty(HoodieWriteCommitCallbackConfig.CALLBACK_CLASS_NAME.key(), HoodieMultiTableCommitStatsManager.class.getName());
+          final TypedProperties properties = buildProperties(tablePropsFilePath, hadoopConfig);
 
           HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(multiTableConfigs,
               hadoopConfig,
               properties,
-              tablePropsFilePath);
+              tablePropsFilePath,
+              JobType.MULTI_TABLE_DELTASTREAMER);
 
           FileSystem fs = FSUtils.getFs(tableConfig.targetBasePath, hadoopConfig);
           HoodieDeltaStreamer.DeltaSyncService deltaSync = new HoodieDeltaStreamer.DeltaSyncService(tableConfig,
@@ -580,6 +579,26 @@ public class OnehouseDeltaStreamer implements Serializable {
       return Option.empty();
     }
 
+    private TypedProperties buildProperties(String tablePropsFilePath, Configuration hadoopConfig) {
+      TypedProperties properties = combineProperties(tablePropsFilePath, multiTableConfigs, hadoopConfig);
+      // Configure the write commit callback that updates the checkpoints
+      properties.setProperty(HoodieWriteCommitCallbackConfig.TURN_CALLBACK_ON.key(), String.valueOf(true));
+      properties.setProperty(HoodieWriteCommitCallbackConfig.CALLBACK_CLASS_NAME.key(), HoodieMultiTableCommitStatsManager.class.getName());
+
+      // ToDo Currently multi table deltastreamer only supports inline table services (including clustering)
+      // This will be fixed once we support async services for multi table
+      HoodieClusteringConfig clusteringConfig = HoodieClusteringConfig.from(properties);
+      if (clusteringConfig.isAsyncClusteringEnabled()) {
+        properties.setProperty(HoodieClusteringConfig.ASYNC_CLUSTERING_ENABLE.key(), "false");
+        properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING.key(), "true");
+        if (properties.containsKey(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS)) {
+          properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING_MAX_COMMITS.key(),
+              properties.getProperty(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key()));
+        }
+      }
+      return properties;
+    }
+
     // ToDo Convert to helper method and use it across Deltasync and here.
     private Option<HoodieCommitMetadata> getLatestCommitMetadataWithValidCheckpointInfo(HoodieTimeline timeline) {
       return (Option<HoodieCommitMetadata>) timeline.getReverseOrderedInstants().map(instant -> {
@@ -610,7 +629,8 @@ public class OnehouseDeltaStreamer implements Serializable {
       Config config,
       Configuration hadoopConf,
       TypedProperties properties,
-      String tablePropsFilePath) throws IOException {
+      String tablePropsFilePath,
+      JobType jobType) throws IOException {
     // Compile the Config for HoodieDeltaStreamer using the properties
     HoodieWriteConfig configuredWriteConfig = HoodieWriteConfig.newBuilder()
         .withProps(properties)
@@ -634,7 +654,8 @@ public class OnehouseDeltaStreamer implements Serializable {
     tableConfig.operation = WriteOperationType.valueOf(configuredWriteConfig.getStringOrDefault(
         DataSourceWriteOptions.OPERATION(), DataSourceWriteOptions.OPERATION().defaultValue()).toUpperCase());
     tableConfig.filterDupes = onehouseInternalDeltastreamerConfig.isFilterDupesEnabled();
-    tableConfig.continuousMode = !config.syncOnce;
+    // currently multi table job runs in sync once mode and uses inline services
+    tableConfig.continuousMode = !jobType.equals(JobType.MULTI_TABLE_DELTASTREAMER) && !config.syncOnce;
     tableConfig.minSyncIntervalSeconds = config.minSyncIntervalSeconds;
     tableConfig.enableMetaSync = onehouseInternalDeltastreamerConfig.isMetaSyncEnabled();
     tableConfig.syncClientToolClass = onehouseInternalDeltastreamerConfig.getMetaSyncClasses();
@@ -655,5 +676,10 @@ public class OnehouseDeltaStreamer implements Serializable {
 
     tableConfig.configs = config.configs;
     return tableConfig;
+  }
+
+  private enum JobType {
+    SINGLE_TABLE_DELTASTREAMER,
+    MULTI_TABLE_DELTASTREAMER
   }
 }
