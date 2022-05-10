@@ -589,11 +589,12 @@ public class OnehouseDeltaStreamer implements Serializable {
       // This will be fixed once we support async services for multi table
       HoodieClusteringConfig clusteringConfig = HoodieClusteringConfig.from(properties);
       if (clusteringConfig.isAsyncClusteringEnabled()) {
-        properties.setProperty(HoodieClusteringConfig.ASYNC_CLUSTERING_ENABLE.key(), "false");
+        properties.remove(HoodieClusteringConfig.ASYNC_CLUSTERING_ENABLE.key());
         properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING.key(), "true");
         if (properties.containsKey(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS)) {
           properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING_MAX_COMMITS.key(),
               properties.getProperty(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key()));
+          properties.remove(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key());
         }
       }
       return properties;
