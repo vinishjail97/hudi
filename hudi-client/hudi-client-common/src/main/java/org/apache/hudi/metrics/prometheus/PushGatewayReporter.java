@@ -35,6 +35,7 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
+import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.TimeUnit;
 
@@ -46,6 +47,7 @@ public class PushGatewayReporter extends ScheduledReporter {
   private final DropwizardExports metricExports;
   private final CollectorRegistry collectorRegistry;
   private final String jobName;
+  private final Map<String, String> labels;
   private final boolean deleteShutdown;
 
   protected PushGatewayReporter(MetricRegistry registry,
@@ -53,11 +55,13 @@ public class PushGatewayReporter extends ScheduledReporter {
                                 TimeUnit rateUnit,
                                 TimeUnit durationUnit,
                                 String jobName,
+                                Map<String, String> labels,
                                 String serverHost,
                                 int serverPort,
                                 boolean deleteShutdown) {
     super(registry, "hudi-push-gateway-reporter", filter, rateUnit, durationUnit);
     this.jobName = jobName;
+    this.labels = labels;
     this.deleteShutdown = deleteShutdown;
     collectorRegistry = new CollectorRegistry();
     metricExports = new DropwizardExports(registry);
@@ -84,7 +88,7 @@ public class PushGatewayReporter extends ScheduledReporter {
                      SortedMap<String, Meter> meters,
                      SortedMap<String, Timer> timers) {
     try {
-      pushGateway.pushAdd(collectorRegistry, jobName);
+      pushGateway.pushAdd(collectorRegistry, jobName, labels);
     } catch (IOException e) {
       LOG.warn("Can't push monitoring information to pushGateway", e);
     }

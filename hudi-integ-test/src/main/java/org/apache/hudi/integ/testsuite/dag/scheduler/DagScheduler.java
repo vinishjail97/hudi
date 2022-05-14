@@ -118,8 +118,6 @@ public class DagScheduler {
         new DelayNode(workflowDag.getIntermittentDelayMins()).execute(executionContext, curRound);
       }
 
-      // After each level, report and flush the metrics
-      Metrics.flush();
     } while (curRound++ < workflowDag.getRounds());
     log.info("Finished workloads");
   }
