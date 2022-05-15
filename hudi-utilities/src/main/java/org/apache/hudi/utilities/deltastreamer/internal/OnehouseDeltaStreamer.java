@@ -323,9 +323,9 @@ public class OnehouseDeltaStreamer implements Serializable {
         } catch (IOException exception) {
           throw new HoodieException("Reading table config files failed " + exception);
         }
-
-        HoodieMultiTableCommitStatsManager.initializeCommitStatsMap(initialTableCommitStatsMap);
       });
+
+      HoodieMultiTableCommitStatsManager.initializeCommitStatsMap(initialTableCommitStatsMap);
     }
 
     @Override
@@ -571,6 +571,8 @@ public class OnehouseDeltaStreamer implements Serializable {
                       + "was indeed built via delta streamer. Last Commit :" + lastCommit + ", Instants :"
                       + commitTimelineOpt.getInstants().collect(Collectors.toList()) + ", CommitMetadata="
                       + commitMetadata.toJsonString());
+            } else {
+              LOG.warn("Unable to get latest commit offset for table " + targetBasePath);
             }
           }
         }

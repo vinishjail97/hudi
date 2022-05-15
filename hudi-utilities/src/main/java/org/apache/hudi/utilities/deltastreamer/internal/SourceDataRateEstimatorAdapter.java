@@ -31,13 +31,11 @@ public class SourceDataRateEstimatorAdapter {
 
   private static final Logger LOG = LogManager.getLogger(SourceDataRateEstimatorAdapter.class);
 
-  private final long syncIntervalSeconds;
   private final Map<String, TypedProperties> multiTableProperties;
   private final Map<String, SourceDataRateEstimator> sourceDataRateEstimators;
 
   public SourceDataRateEstimatorAdapter(long syncIntervalSeconds,
                                         Map<String, TypedProperties> multiTableProperties) {
-    this.syncIntervalSeconds = syncIntervalSeconds;
     this.multiTableProperties = multiTableProperties;
     // Currently only Kafka sources are supported
     // ToDo Move data rate estimator to {@link Source} and use reflection to instantiate
@@ -48,11 +46,10 @@ public class SourceDataRateEstimatorAdapter {
   }
 
   public Map<String, Long> computeAggregateLoad() {
-    Map<String, HoodieMultiTableCommitStatsManager.TableCommitStats> commitStatsMap = HoodieMultiTableCommitStatsManager.getCommitStatsMap();
     return multiTableProperties.entrySet().stream()
         .collect(Collectors.toMap(Map.Entry::getKey, tableProperties -> {
           String key = tableProperties.getKey();
-          HoodieMultiTableCommitStatsManager.TableCommitStats commitStats = commitStatsMap.get(key);
+          HoodieMultiTableCommitStatsManager.TableCommitStats commitStats = HoodieMultiTableCommitStatsManager.getCommitStatsMap().get(key);
           return sourceDataRateEstimators.get(key).computeAvailableBytes(
               (commitStats != null) ? commitStats.getLastCommittedCheckpoint() : Option.empty(),
               (commitStats != null) ? commitStats.getAvgRecordSizes() : Option.empty());

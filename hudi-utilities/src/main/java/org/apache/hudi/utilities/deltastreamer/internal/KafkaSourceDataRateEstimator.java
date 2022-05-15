@@ -130,7 +130,7 @@ public class KafkaSourceDataRateEstimator extends SourceDataRateEstimator {
     }
 
     synchronized void refreshLatestOffsets() {
-      if (lastSyncTimeMs > 0 && (lastSyncTimeMs - System.currentTimeMillis()) <= syncIntervalMs) {
+      if (lastSyncTimeMs > 0 && (System.currentTimeMillis() - lastSyncTimeMs) <= syncIntervalMs) {
         return;
       }
       lastSyncTimeMs = System.currentTimeMillis();
