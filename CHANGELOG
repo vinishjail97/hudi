@@ -1,3 +1,7 @@
 
 ---[2022-04-25 15:07:34] [release-v0.0.1] Upgrade to version hudi-internal-v0.0.1---
 
+
+---[2022-05-19 00:33:52] [release-v0.1.1] ---
+c213fbb2d Fix a couple of issues for offsets in multi table ds (#14)
+f365f009e Support to add labels to prometheus metrics (#13)
