@@ -277,7 +277,8 @@ public class OnehouseDeltaStreamer implements Serializable {
 
     public MultiTableSyncService(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig) throws IOException {
       int totalExecutorResources = Integer.parseInt(jssc.getConf().get("spark.executor.cores", "0"))
-          * Integer.parseInt(jssc.getConf().get("spark.executor.instances", "0"));
+          * Math.max(Integer.parseInt(jssc.getConf().get("spark.executor.instances", "0")),
+          Integer.parseInt(jssc.getConf().get("spark.dynamicAllocation.maxExecutors", "0")));
       int numThreads = (multiTableConfigs.syncJobsThreadPool != Config.UNINITIALIZED) ? multiTableConfigs.syncJobsThreadPool
           : Math.max(totalExecutorResources, Config.MIN_SYNC_THREAD_POOL);
       LOG.info("The sync jobs will be scheduled concurrently across a thread pool of size " + numThreads);
