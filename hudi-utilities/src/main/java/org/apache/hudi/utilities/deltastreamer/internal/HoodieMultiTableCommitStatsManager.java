@@ -65,7 +65,7 @@ public class HoodieMultiTableCommitStatsManager implements HoodieWriteCommitCall
       TableCommitStats commitStats = new TableCommitStats(
           Option.ofNullable(lastCommittedCheckpoints),
           Option.ofNullable(averageRecordSize));
-      COMMIT_STATS_MAP.put(callbackMessage.getTableName(), commitStats);
+      COMMIT_STATS_MAP.put(callbackMessage.getBasePath(), commitStats);
     }
   }
 

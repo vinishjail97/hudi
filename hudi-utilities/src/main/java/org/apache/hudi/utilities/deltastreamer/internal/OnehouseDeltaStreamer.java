@@ -310,15 +310,15 @@ public class OnehouseDeltaStreamer implements Serializable {
               Option.of(properties));
 
           TargetTableState targetTableState = new TargetTableState(
-              tableConfig.targetTableName,
+              tableConfig.targetBasePath,
               deltaSync,
               properties,
               multiTableConfigs);
-          targetTableStateMap.put(tableConfig.targetTableName, targetTableState);
+          targetTableStateMap.put(tableConfig.targetBasePath, targetTableState);
 
           Option<String> resumeCheckpointStr = getLastCommittedOffsets(fs, tableConfig.targetBasePath, tableConfig.payloadClassName);
           if (resumeCheckpointStr.isPresent()) {
-            initialTableCommitStatsMap.put(targetTableState.name,
+            initialTableCommitStatsMap.put(targetTableState.getBasePath(),
                 new HoodieMultiTableCommitStatsManager.TableCommitStats(resumeCheckpointStr, Option.empty()));
           }
         } catch (IOException exception) {
@@ -347,11 +347,11 @@ public class OnehouseDeltaStreamer implements Serializable {
               long currentTimeMs = System.currentTimeMillis();
               List<TargetTableState> selectedTargetTables = targetTableStateMap.values().stream()
                   .filter(targetTableState -> targetTableState.canSchedule(currentTimeMs))
-                  .filter(targetTableState -> sourceDataRateMap.containsKey(targetTableState.getName())
-                      && sourceDataRateMap.get(targetTableState.getName()) >= multiTableConfigs.minSyncSourceBytes).collect(Collectors.toList());
+                  .filter(targetTableState -> sourceDataRateMap.containsKey(targetTableState.getBasePath())
+                      && sourceDataRateMap.get(targetTableState.getBasePath()) >= multiTableConfigs.minSyncSourceBytes).collect(Collectors.toList());
 
               LOG.info("Based on source data rates " + sourceDataRateMap
-                  + " selected the following tables " + selectedTargetTables.stream().map(TargetTableState::getName).collect(Collectors.toList()));
+                  + " selected the following tables " + selectedTargetTables.stream().map(TargetTableState::getBasePath).collect(Collectors.toList()));
 
               selectedTargetTables.forEach(targetTable -> {
                 targetTable.onSyncScheduled();
@@ -368,10 +368,10 @@ public class OnehouseDeltaStreamer implements Serializable {
                     .whenCompleteAsync((response, throwable) -> {
                       if (throwable != null) {
                         targetTable.onSyncFailure();
-                        LOG.error("Failed to run job for table: " + targetTable.name, throwable.getCause());
+                        LOG.error("Failed to run job for table: " + targetTable.getBasePath(), throwable.getCause());
                       } else {
                         targetTable.onSyncSuccess();
-                        LOG.info("Successfully ran job for table: " + targetTable.name);
+                        LOG.info("Successfully ran job for table: " + targetTable.getBasePath());
                       }
                     });
               });
@@ -415,9 +415,9 @@ public class OnehouseDeltaStreamer implements Serializable {
     public static class TargetTableState {
 
       /**
-       * Table Name.
+       * Target Table Path.
        */
-      private final String name;
+      private final String basePath;
 
       /**
        * Bag of properties with source, hoodie client, key generator etc.
@@ -467,8 +467,8 @@ public class OnehouseDeltaStreamer implements Serializable {
       private Long startSyncScheduledTimeMs;
       private Long startSyncTimeMs;
 
-      public TargetTableState(String name, HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs) {
-        this.name = name;
+      public TargetTableState(String basePath, HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs) {
+        this.basePath = basePath;
         this.deltaSync = deltaSync;
         this.props = props;
         this.configs = configs;
@@ -481,8 +481,8 @@ public class OnehouseDeltaStreamer implements Serializable {
         LOG.info(HoodieDeltaStreamer.toSortedTruncatedString(props));
       }
 
-      String getName() {
-        return name;
+      String getBasePath() {
+        return basePath;
       }
 
       TypedProperties getProps() {
@@ -494,7 +494,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         boolean shouldSyncNow = true;
         if (numberConsecutiveFailures.get() >= 1) {
           shouldSyncNow = (currentTimeMs >= nextTimeScheduleMsecs);
-          LOG.info("After " + numberConsecutiveFailures.get() + " consecutive failures, the table " + name
+          LOG.info("After " + numberConsecutiveFailures.get() + " consecutive failures, the table " + basePath
               + " will get scheduled at: " + nextTimeScheduleMsecs + " currentTimeMs " + currentTimeMs);
         }
         return shouldSyncNow & !isTableSyncActive.get();

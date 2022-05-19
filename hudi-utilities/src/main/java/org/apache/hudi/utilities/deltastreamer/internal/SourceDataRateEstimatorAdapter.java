@@ -48,9 +48,9 @@ public class SourceDataRateEstimatorAdapter {
   public Map<String, Long> computeAggregateLoad() {
     return multiTableProperties.entrySet().stream()
         .collect(Collectors.toMap(Map.Entry::getKey, tableProperties -> {
-          String key = tableProperties.getKey();
-          HoodieMultiTableCommitStatsManager.TableCommitStats commitStats = HoodieMultiTableCommitStatsManager.getCommitStatsMap().get(key);
-          return sourceDataRateEstimators.get(key).computeAvailableBytes(
+          String basePath = tableProperties.getKey();
+          HoodieMultiTableCommitStatsManager.TableCommitStats commitStats = HoodieMultiTableCommitStatsManager.getCommitStatsMap().get(basePath);
+          return sourceDataRateEstimators.get(basePath).computeAvailableBytes(
               (commitStats != null) ? commitStats.getLastCommittedCheckpoint() : Option.empty(),
               (commitStats != null) ? commitStats.getAvgRecordSizes() : Option.empty());
         }));
