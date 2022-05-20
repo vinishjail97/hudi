@@ -117,7 +117,6 @@ public class DagScheduler {
       if (curRound < workflowDag.getRounds()) {
         new DelayNode(workflowDag.getIntermittentDelayMins()).execute(executionContext, curRound);
       }
-
     } while (curRound++ < workflowDag.getRounds());
     log.info("Finished workloads");
   }
