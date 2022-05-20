@@ -855,7 +855,7 @@ public class DeltaSync implements Serializable {
       }
       return newWriteSchema;
     } catch (Exception e) {
-      throw new HoodieException("Failed to fetch schema from table.");
+      throw new HoodieException("Failed to fetch schema from table ", e);
     }
   }
 
