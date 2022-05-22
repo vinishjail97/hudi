@@ -21,6 +21,8 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
 
+import org.apache.spark.api.java.JavaSparkContext;
+
 /**
  * The derived classes of this class will implement the logic to compute
  * the total data volume in bytes that is available to be ingested at any
@@ -35,10 +37,12 @@ import org.apache.hudi.common.util.Option;
  */
 public abstract class SourceDataRateEstimator {
 
+  protected final JavaSparkContext jssc;
   protected final long syncIntervalSeconds;
   protected final TypedProperties properties;
 
-  public SourceDataRateEstimator(long syncIntervalSeconds, TypedProperties properties) {
+  public SourceDataRateEstimator(JavaSparkContext jssc, long syncIntervalSeconds, TypedProperties properties) {
+    this.jssc = jssc;
     this.syncIntervalSeconds = syncIntervalSeconds;
     this.properties = properties;
   }

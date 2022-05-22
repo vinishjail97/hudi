@@ -23,9 +23,13 @@ import org.apache.hudi.common.util.Option;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.apache.spark.api.java.JavaSparkContext;
 
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static org.apache.hudi.utilities.deltastreamer.internal.KafkaSourceDataRateEstimator.KafkaClusterInfo.KAFKA_SOURCE_RATE_ESTIMATOR_KEY;
+import static org.apache.hudi.utilities.deltastreamer.internal.S3IncrSourceDataRateEstimator.S3MetadataTableInfo.S3_INCR_SOURCE_RATE_ESTIMATOR_KEY;
 
 public class SourceDataRateEstimatorAdapter {
 
@@ -34,15 +38,22 @@ public class SourceDataRateEstimatorAdapter {
   private final Map<String, TypedProperties> multiTableProperties;
   private final Map<String, SourceDataRateEstimator> sourceDataRateEstimators;
 
-  public SourceDataRateEstimatorAdapter(long syncIntervalSeconds,
+  public SourceDataRateEstimatorAdapter(JavaSparkContext jssc,
+                                        long syncIntervalSeconds,
                                         Map<String, TypedProperties> multiTableProperties) {
     this.multiTableProperties = multiTableProperties;
     // Currently only Kafka sources are supported
     // ToDo Move data rate estimator to {@link Source} and use reflection to instantiate
     // the source class from properties, and calling the method: computeLoad.
     sourceDataRateEstimators = multiTableProperties.entrySet().stream()
-        .collect(Collectors.toMap(Map.Entry::getKey, tableProperties ->
-            new KafkaSourceDataRateEstimator(syncIntervalSeconds, tableProperties.getValue())));
+        .collect(Collectors.toMap(Map.Entry::getKey, tableProperties -> {
+          if (tableProperties.getValue().containsKey(S3_INCR_SOURCE_RATE_ESTIMATOR_KEY)) {
+            return new S3IncrSourceDataRateEstimator(jssc, syncIntervalSeconds, tableProperties.getValue());
+          } else if (tableProperties.getValue().containsKey(KAFKA_SOURCE_RATE_ESTIMATOR_KEY)) {
+            return new KafkaSourceDataRateEstimator(jssc, syncIntervalSeconds, tableProperties.getValue());
+          }
+          throw new RuntimeException("Source rate estimator is not supported for this source " + tableProperties.getKey());
+        }));
   }
 
   public Map<String, Long> computeAggregateLoad() {

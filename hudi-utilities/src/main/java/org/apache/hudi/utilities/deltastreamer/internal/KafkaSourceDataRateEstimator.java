@@ -28,6 +28,7 @@ import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.apache.spark.api.java.JavaSparkContext;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -36,8 +37,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Implements logic to collect the total bytes yet to be ingested for every topic in one or more
- * kafka clusters.
+ * Implements logic to collect the total bytes yet to be ingested for a kafka topic in a
+ * kafka cluster.
  *
  * NOTE: Eventually this class should be implemented by the {@link org.apache.hudi.utilities.sources.Source} class
  * that ingests data. To avoid changing the interface for
@@ -46,8 +47,8 @@ public class KafkaSourceDataRateEstimator extends SourceDataRateEstimator {
 
   private static final Logger LOG = LogManager.getLogger(KafkaSourceDataRateEstimator.class);
 
-  public KafkaSourceDataRateEstimator(long syncIntervalSeconds, TypedProperties properties) {
-    super(syncIntervalSeconds, properties);
+  public KafkaSourceDataRateEstimator(JavaSparkContext jssc, long syncIntervalSeconds, TypedProperties properties) {
+    super(jssc, syncIntervalSeconds, properties);
   }
 
   @Override
@@ -104,6 +105,10 @@ public class KafkaSourceDataRateEstimator extends SourceDataRateEstimator {
   }
 
   static class KafkaClusterInfo {
+    public static final String KAFKA_SOURCE_RATE_ESTIMATOR_KEY = "bootstrap.servers";
+    // In the case of Kafka, we do want to ingest in real-time, hence setting
+    // a min sync interval of 10secs.
+    private static final long MIN_SYNC_INTERVAL_MS = 10000;
     private static final Map<String, KafkaClusterInfo> CLUSTERS = new HashMap<>();
     private final TypedProperties props;
     private final Consumer consumer;
@@ -114,14 +119,14 @@ public class KafkaSourceDataRateEstimator extends SourceDataRateEstimator {
     private long lastSyncTimeMs;
 
     private KafkaClusterInfo(long syncIntervalSeconds, TypedProperties props) {
-      this.syncIntervalMs = (syncIntervalSeconds * 1000);
+      this.syncIntervalMs = Math.max(MIN_SYNC_INTERVAL_MS, syncIntervalSeconds * 1000);
       this.props = props;
       consumer = new KafkaConsumer(props);
       lastSyncTimeMs = 0L;
     }
 
     static synchronized KafkaClusterInfo createOrGetInstance(long syncIntervalMs, TypedProperties props) {
-      String bootstrapServers = props.getProperty("bootstrap.server");
+      String bootstrapServers = props.getProperty(KAFKA_SOURCE_RATE_ESTIMATOR_KEY);
       if (!CLUSTERS.containsKey(bootstrapServers)) {
         KafkaClusterInfo clusterInfo = new KafkaClusterInfo(syncIntervalMs, props);
         CLUSTERS.put(bootstrapServers, clusterInfo);

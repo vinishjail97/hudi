@@ -62,13 +62,13 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
 
   private static final Logger LOG = LogManager.getLogger(S3EventsHoodieIncrSource.class);
 
-  static class Config {
+  public static class Config {
     // control whether we do existence check for files before consuming them
     static final String ENABLE_EXISTS_CHECK = "hoodie.deltastreamer.source.s3incr.check.file.exists";
     static final Boolean DEFAULT_ENABLE_EXISTS_CHECK = false;
 
     // control whether to filter the s3 objects starting with this prefix
-    static final String S3_KEY_PREFIX = "hoodie.deltastreamer.source.s3incr.key.prefix";
+    public static final String S3_KEY_PREFIX = "hoodie.deltastreamer.source.s3incr.key.prefix";
     static final String S3_FS_PREFIX = "hoodie.deltastreamer.source.s3incr.fs.prefix";
 
     // control whether to ignore the s3 objects starting with this prefix

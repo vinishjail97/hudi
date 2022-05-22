@@ -272,7 +272,7 @@ public class OnehouseDeltaStreamer implements Serializable {
      * Multitable DeltaSync Config.
      */
     private final transient Config multiTableConfigs;
-
+    private final transient JavaSparkContext jssc;
     private transient long lastTimeMetricsReportedMs;
 
     public MultiTableSyncService(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig) throws IOException {
@@ -282,10 +282,11 @@ public class OnehouseDeltaStreamer implements Serializable {
       int numThreads = (multiTableConfigs.syncJobsThreadPool != Config.UNINITIALIZED) ? multiTableConfigs.syncJobsThreadPool
           : Math.max(totalExecutorResources, Config.MIN_SYNC_THREAD_POOL);
       LOG.info("The sync jobs will be scheduled concurrently across a thread pool of size " + numThreads);
-
       multiTableStreamThreadPool = Executors.newFixedThreadPool(numThreads);
-      targetTableStateMap = new HashMap<>();
+
+      this.targetTableStateMap = new HashMap<>();
       this.multiTableConfigs = multiTableConfigs;
+      this.jssc = jssc;
       this.lastTimeMetricsReportedMs = 0L;
 
       Map<String, HoodieMultiTableCommitStatsManager.TableCommitStats> initialTableCommitStatsMap = new HashMap<>();
@@ -335,6 +336,7 @@ public class OnehouseDeltaStreamer implements Serializable {
       return Pair.of(CompletableFuture.supplyAsync(() -> {
         try {
           SourceDataRateEstimatorAdapter sourceDataRateEstimatorAdapter = new SourceDataRateEstimatorAdapter(
+              jssc,
               multiTableConfigs.minSyncIntervalSeconds,
               targetTableStateMap.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, x -> x.getValue().getProps())));
           while (!isShutdownRequested()) {

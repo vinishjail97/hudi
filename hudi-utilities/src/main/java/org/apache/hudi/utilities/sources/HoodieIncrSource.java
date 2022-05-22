@@ -41,12 +41,12 @@ public class HoodieIncrSource extends RowSource {
 
   private static final Logger LOG = LogManager.getLogger(HoodieIncrSource.class);
 
-  static class Config {
+  public static class Config {
 
     /**
      * {@value #HOODIE_SRC_BASE_PATH} is the base-path for the source Hoodie table.
      */
-    static final String HOODIE_SRC_BASE_PATH = "hoodie.deltastreamer.source.hoodieincr.path";
+    public static final String HOODIE_SRC_BASE_PATH = "hoodie.deltastreamer.source.hoodieincr.path";
 
     /**
      * {@value #NUM_INSTANTS_PER_FETCH} allows the max number of instants whose changes can be incrementally fetched.

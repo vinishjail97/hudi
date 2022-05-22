@@ -1,0 +1,154 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.hudi.utilities.deltastreamer.internal;
+
+import org.apache.hudi.DataSourceReadOptions;
+import org.apache.hudi.common.config.TypedProperties;
+import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.utilities.sources.S3EventsHoodieIncrSource;
+
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_SRC_BASE_PATH;
+
+/**
+ * Implements logic to collect the total bytes yet to be ingested for a prefix in a S3 bucket
+ * being ingested using the S3 incr source.
+ *
+ * NOTE: Eventually this class should be implemented by the {@link org.apache.hudi.utilities.sources.Source} class
+ * that ingests data. To avoid changing the interface for
+ */
+public class S3IncrSourceDataRateEstimator extends SourceDataRateEstimator {
+
+  private static final Logger LOG = LogManager.getLogger(S3IncrSourceDataRateEstimator.class);
+  private final Option<String> s3KeyPrefix;
+
+  public S3IncrSourceDataRateEstimator(JavaSparkContext jssc, long syncIntervalSeconds, TypedProperties properties) {
+    super(jssc, syncIntervalSeconds, properties);
+    s3KeyPrefix = Option.ofNullable(properties.getString(S3EventsHoodieIncrSource.Config.S3_KEY_PREFIX, null));
+  }
+
+  @Override
+  public Long computeAvailableBytes(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes) {
+    S3MetadataTableInfo s3MetadataTableInfo = S3MetadataTableInfo.createOrGetInstance(jssc, syncIntervalSeconds, properties);
+    return s3MetadataTableInfo.getAggrBytesPerIncrJob(lastCommittedCheckpointStr, s3KeyPrefix);
+  }
+
+  static class S3MetadataTableInfo {
+    public static final String S3_INCR_SOURCE_RATE_ESTIMATOR_KEY = HOODIE_SRC_BASE_PATH;
+    private static final String S3_BUCKET_NAME_FIELD = "s3.bucket.name";
+    private static final String S3_OBJECT_FIELD = "s3.object.";
+    private static final String S3_KEY_FIELD = "key";
+    private static final String S3_SIZE_FIELD = "size";
+    // In the case of S3, we do not need to ingest in real-time, hence setting
+    // a min sync interval of 1min.
+    private static final long MIN_SYNC_INTERVAL_MS = 60000;
+    private static final String DEFAULT_BEGIN_TIMESTAMP = "000";
+    private static final Map<String, S3MetadataTableInfo> S3_METADATA_BASE_PATH = new HashMap<>();
+    private final TypedProperties props;
+    protected final long syncIntervalMs;
+
+    private final JavaSparkContext jssc;
+    private final String s3MetadataBasePath;
+    private final SparkSession sparkSession;
+    private Dataset<Row> source;
+    private long lastSyncTimeMs;
+
+    private S3MetadataTableInfo(JavaSparkContext jssc, String s3MetadataBasePath, long syncIntervalSeconds, TypedProperties props) {
+      this.jssc = jssc;
+      this.s3MetadataBasePath = s3MetadataBasePath;
+      this.sparkSession = SparkSession.builder().config(jssc.getConf()).getOrCreate();
+      this.syncIntervalMs = Math.max(MIN_SYNC_INTERVAL_MS, syncIntervalSeconds * 1000);
+      this.props = props;
+      lastSyncTimeMs = 0L;
+    }
+
+    static synchronized S3MetadataTableInfo createOrGetInstance(JavaSparkContext jssc, long syncIntervalMs, TypedProperties props) {
+      String s3MetadataBasePath = props.getString(S3_INCR_SOURCE_RATE_ESTIMATOR_KEY);
+      if (!S3_METADATA_BASE_PATH.containsKey(s3MetadataBasePath)) {
+        S3MetadataTableInfo s3MetadataTableInfo = new S3MetadataTableInfo(jssc, s3MetadataBasePath, syncIntervalMs, props);
+        S3_METADATA_BASE_PATH.put(s3MetadataBasePath, s3MetadataTableInfo);
+      }
+      return S3_METADATA_BASE_PATH.get(s3MetadataBasePath);
+    }
+
+    synchronized void refreshMetadataEvents() {
+      if (lastSyncTimeMs > 0 && (System.currentTimeMillis() - lastSyncTimeMs) <= syncIntervalMs) {
+        return;
+      }
+      lastSyncTimeMs = System.currentTimeMillis();
+
+      Pair<String, String> instantEndpts = calculateBeginAndEndInstants(jssc, s3MetadataBasePath);
+      source = sparkSession.read().format("org.apache.hudi")
+      .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_SNAPSHOT_OPT_VAL()).load(s3MetadataBasePath)
+          .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, instantEndpts.getLeft()))
+          .filter(S3_OBJECT_FIELD + S3_SIZE_FIELD + " > 0")
+          .select(HoodieRecord.COMMIT_TIME_METADATA_FIELD, S3_BUCKET_NAME_FIELD, S3_OBJECT_FIELD + S3_KEY_FIELD, S3_OBJECT_FIELD + S3_SIZE_FIELD)
+          .distinct();
+
+      LOG.info(String.format("Refreshed the s3 metadata %s source rate, took %s ms to get all data from instant %s ",
+          s3MetadataBasePath,
+          (System.currentTimeMillis() - lastSyncTimeMs),
+          instantEndpts.getLeft()));
+    }
+
+    Long getAggrBytesPerIncrJob(Option<String> lastCommittedInstant, Option<String> keyPrefix) {
+      long aggrBytes = 0L;
+      refreshMetadataEvents();
+      String minInstant = (lastCommittedInstant.isPresent()) ? lastCommittedInstant.get() : DEFAULT_BEGIN_TIMESTAMP;
+      if (keyPrefix.isPresent()) {
+        aggrBytes = source
+            .filter(S3_KEY_FIELD + " like '" + keyPrefix.get() + "%'")
+            .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, minInstant))
+            .agg(org.apache.spark.sql.functions.sum(S3_SIZE_FIELD).cast("long")).first().getLong(0);
+      }
+
+      LOG.info(String.format("Computed the total data waiting for ingest for the S3 metadata basepath: %s with prefix %s is %s bytes with starting commit (last committed commit) %s",
+          s3MetadataBasePath,
+          keyPrefix,
+          aggrBytes,
+          minInstant));
+      return aggrBytes;
+    }
+
+    // Compute aggr active timeline
+    private static Pair<String, String> calculateBeginAndEndInstants(JavaSparkContext jssc, String srcBasePath) {
+      HoodieTableMetaClient srcMetaClient = HoodieTableMetaClient.builder().setConf(jssc.hadoopConfiguration()).setBasePath(srcBasePath).setLoadActiveTimelineOnLoad(true).build();
+      final HoodieTimeline activeCommitTimeline =
+          srcMetaClient.getActiveTimeline().getCommitTimeline().filterCompletedInstants();
+
+      String beginInstantTime = (activeCommitTimeline.firstInstant().isPresent()) ? activeCommitTimeline.firstInstant().get().getTimestamp() : DEFAULT_BEGIN_TIMESTAMP;
+      Option<HoodieInstant> lastInstant = activeCommitTimeline.lastInstant();
+      return Pair.of(beginInstantTime, (lastInstant.isPresent()) ? lastInstant.get().getTimestamp() : DEFAULT_BEGIN_TIMESTAMP);
+    }
+  }
+}
