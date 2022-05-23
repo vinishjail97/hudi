@@ -42,7 +42,7 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_S
 
 /**
  * Implements logic to collect the total bytes yet to be ingested for a prefix in a S3 bucket
- * being ingested using the S3 incr source.
+ * being ingested using the S3 incr source (Sqs/Sns).
  *
  * NOTE: Eventually this class should be implemented by the {@link org.apache.hudi.utilities.sources.Source} class
  * that ingests data. To avoid changing the interface for
@@ -80,7 +80,7 @@ public class S3IncrSourceDataRateEstimator extends SourceDataRateEstimator {
     private final JavaSparkContext jssc;
     private final String s3MetadataBasePath;
     private final SparkSession sparkSession;
-    private Dataset<Row> source;
+    private Dataset<Row> incrementalDataset;
     private long lastSyncTimeMs;
 
     private S3MetadataTableInfo(JavaSparkContext jssc, String s3MetadataBasePath, long syncIntervalSeconds, TypedProperties props) {
@@ -101,54 +101,95 @@ public class S3IncrSourceDataRateEstimator extends SourceDataRateEstimator {
       return S3_METADATA_BASE_PATH.get(s3MetadataBasePath);
     }
 
-    synchronized void refreshMetadataEvents() {
+    /**
+     * Query all S3 events rows from metadata table between first and latest commits in Active Timeline.
+     * Only refresh the active timeline and make the incr query once in {syncIntervalMs} units of time.
+     * @return All rows created between the earliest and latest commits in Active timeline.
+     */
+    private synchronized Dataset<Row> refreshIncrementalEventsInActiveTimeline(HoodieTimeline activeCommitTimeline) {
       if (lastSyncTimeMs > 0 && (System.currentTimeMillis() - lastSyncTimeMs) <= syncIntervalMs) {
-        return;
+        return incrementalDataset;
       }
       lastSyncTimeMs = System.currentTimeMillis();
+      String beginInstantTime = (activeCommitTimeline.firstInstant().isPresent()) ? activeCommitTimeline.firstInstant().get().getTimestamp() : DEFAULT_BEGIN_TIMESTAMP;
+      Option<HoodieInstant> lastInstant = activeCommitTimeline.lastInstant();
 
-      Pair<String, String> instantEndpts = calculateBeginAndEndInstants(jssc, s3MetadataBasePath);
-      source = sparkSession.read().format("org.apache.hudi")
-      .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_SNAPSHOT_OPT_VAL()).load(s3MetadataBasePath)
-          .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, instantEndpts.getLeft()))
+      Pair<String, String> instantEndpts = Pair.of(beginInstantTime, (lastInstant.isPresent()) ? lastInstant.get().getTimestamp() : DEFAULT_BEGIN_TIMESTAMP);
+
+      incrementalDataset = sparkSession.read().format("org.apache.hudi")
+          .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_INCREMENTAL_OPT_VAL())
+          .option(DataSourceReadOptions.BEGIN_INSTANTTIME().key(), instantEndpts.getLeft())
+          .option(DataSourceReadOptions.END_INSTANTTIME().key(), instantEndpts.getRight())
+          .load(s3MetadataBasePath)
           .filter(S3_OBJECT_FIELD + S3_SIZE_FIELD + " > 0")
           .select(HoodieRecord.COMMIT_TIME_METADATA_FIELD, S3_BUCKET_NAME_FIELD, S3_OBJECT_FIELD + S3_KEY_FIELD, S3_OBJECT_FIELD + S3_SIZE_FIELD)
           .distinct();
 
-      LOG.info(String.format("Refreshed the s3 metadata %s source rate, took %s ms to get all data from instant %s ",
+      LOG.info(String.format("Refreshed the incr s3 metadata %s source rate, took %s ms to get all data from instant %s with source size %s",
           s3MetadataBasePath,
           (System.currentTimeMillis() - lastSyncTimeMs),
-          instantEndpts.getLeft()));
+          instantEndpts.getLeft(),
+          incrementalDataset.count()));
+
+      return incrementalDataset;
+    }
+
+    /**
+     * Run a one-time snapshot query on-demand to query all rows created at or after the given commit instant upto latest commit.
+     * @param commit The given commit instant.
+     * @return All rows created at or after the given commit instant upto latest commit.
+     */
+    private Dataset<Row> runSnapshotQuery(String commit) {
+      long snapshotStarTimeMs = System.currentTimeMillis();
+      Dataset<Row> source = sparkSession.read().format("org.apache.hudi")
+          .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_SNAPSHOT_OPT_VAL()).load(s3MetadataBasePath)
+          .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, commit))
+          .filter(S3_OBJECT_FIELD + S3_SIZE_FIELD + " > 0")
+          .select(HoodieRecord.COMMIT_TIME_METADATA_FIELD, S3_BUCKET_NAME_FIELD, S3_OBJECT_FIELD + S3_KEY_FIELD, S3_OBJECT_FIELD + S3_SIZE_FIELD)
+          .distinct();
+
+      LOG.info(String.format("Made a one-time snapshot query for the s3 metadata %s source rate, took %s ms to get all data from instant %s with source size %s",
+          s3MetadataBasePath,
+          (System.currentTimeMillis() - snapshotStarTimeMs),
+          commit,
+          source.count()));
+
+      return source;
+    }
+
+    private Dataset<Row> getEventsRows(String startCommitInstant) {
+      // Currently, we assume strategy is set to READ_UPTO_LATEST_COMMIT,
+      // if checkpoint is missing from source table we have to issue snapshot query
+      HoodieTableMetaClient srcMetaClient = HoodieTableMetaClient.builder().setConf(jssc.hadoopConfiguration()).setBasePath(s3MetadataBasePath).setLoadActiveTimelineOnLoad(true).build();
+      HoodieTimeline activeCommitTimeline = srcMetaClient.getActiveTimeline().getCommitTimeline().filterCompletedInstants();
+
+      if (activeCommitTimeline.isBeforeTimelineStarts(startCommitInstant)) {
+        return runSnapshotQuery(startCommitInstant);
+      } else {
+        return refreshIncrementalEventsInActiveTimeline(activeCommitTimeline)
+            .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, startCommitInstant));
+      }
     }
 
     Long getAggrBytesPerIncrJob(Option<String> lastCommittedInstant, Option<String> keyPrefix) {
       long aggrBytes = 0L;
-      refreshMetadataEvents();
-      String minInstant = (lastCommittedInstant.isPresent()) ? lastCommittedInstant.get() : DEFAULT_BEGIN_TIMESTAMP;
+      String startCommitInstant = (lastCommittedInstant.isPresent()) ? lastCommittedInstant.get() : DEFAULT_BEGIN_TIMESTAMP;
       if (keyPrefix.isPresent()) {
-        aggrBytes = source
+        Row aggregateRow = getEventsRows(startCommitInstant)
             .filter(S3_KEY_FIELD + " like '" + keyPrefix.get() + "%'")
-            .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, minInstant))
-            .agg(org.apache.spark.sql.functions.sum(S3_SIZE_FIELD).cast("long")).first().getLong(0);
+            .agg(org.apache.spark.sql.functions.sum(S3_SIZE_FIELD).cast("long")).first();
+
+        if (!aggregateRow.isNullAt(0)) {
+          aggrBytes = aggregateRow.getLong(0);
+        }
       }
 
       LOG.info(String.format("Computed the total data waiting for ingest for the S3 metadata basepath: %s with prefix %s is %s bytes with starting commit (last committed commit) %s",
           s3MetadataBasePath,
           keyPrefix,
           aggrBytes,
-          minInstant));
+          startCommitInstant));
       return aggrBytes;
-    }
-
-    // Compute aggr active timeline
-    private static Pair<String, String> calculateBeginAndEndInstants(JavaSparkContext jssc, String srcBasePath) {
-      HoodieTableMetaClient srcMetaClient = HoodieTableMetaClient.builder().setConf(jssc.hadoopConfiguration()).setBasePath(srcBasePath).setLoadActiveTimelineOnLoad(true).build();
-      final HoodieTimeline activeCommitTimeline =
-          srcMetaClient.getActiveTimeline().getCommitTimeline().filterCompletedInstants();
-
-      String beginInstantTime = (activeCommitTimeline.firstInstant().isPresent()) ? activeCommitTimeline.firstInstant().get().getTimestamp() : DEFAULT_BEGIN_TIMESTAMP;
-      Option<HoodieInstant> lastInstant = activeCommitTimeline.lastInstant();
-      return Pair.of(beginInstantTime, (lastInstant.isPresent()) ? lastInstant.get().getTimestamp() : DEFAULT_BEGIN_TIMESTAMP);
     }
   }
 }
