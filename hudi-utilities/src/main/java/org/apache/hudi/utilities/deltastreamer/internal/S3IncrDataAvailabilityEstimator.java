@@ -47,20 +47,28 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_S
  * NOTE: Eventually this class should be implemented by the {@link org.apache.hudi.utilities.sources.Source} class
  * that ingests data. To avoid changing the interface for
  */
-public class S3IncrSourceDataRateEstimator extends SourceDataRateEstimator {
+public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstimator {
 
-  private static final Logger LOG = LogManager.getLogger(S3IncrSourceDataRateEstimator.class);
+  private static final Logger LOG = LogManager.getLogger(S3IncrDataAvailabilityEstimator.class);
   private final Option<String> s3KeyPrefix;
 
-  public S3IncrSourceDataRateEstimator(JavaSparkContext jssc, long syncIntervalSeconds, TypedProperties properties) {
-    super(jssc, syncIntervalSeconds, properties);
+  public S3IncrDataAvailabilityEstimator(JavaSparkContext jssc, TypedProperties properties) {
+    super(jssc, properties);
     s3KeyPrefix = Option.ofNullable(properties.getString(S3EventsHoodieIncrSource.Config.S3_KEY_PREFIX, null));
   }
 
   @Override
-  public Long computeAvailableBytes(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes) {
-    S3MetadataTableInfo s3MetadataTableInfo = S3MetadataTableInfo.createOrGetInstance(jssc, syncIntervalSeconds, properties);
-    return s3MetadataTableInfo.getAggrBytesPerIncrJob(lastCommittedCheckpointStr, s3KeyPrefix);
+  public SourceDataAvailability getDataAvailability(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+    S3MetadataTableInfo s3MetadataTableInfo = S3MetadataTableInfo.createOrGetInstance(jssc, properties);
+    Long aggrBytesPerIncrJob = s3MetadataTableInfo.getAggrBytesPerIncrJob(lastCommittedCheckpointStr, s3KeyPrefix);
+
+    if (aggrBytesPerIncrJob >= minSourceBytesIngestion) {
+      return SourceDataAvailability.MIN_INGEST_DATA_AVAILABLE;
+    } else if (aggrBytesPerIncrJob > 0) {
+      return SourceDataAvailability.DATA_AVAILABLE;
+    }
+
+    return SourceDataAvailability.NO_DATA;
   }
 
   static class S3MetadataTableInfo {
@@ -75,7 +83,6 @@ public class S3IncrSourceDataRateEstimator extends SourceDataRateEstimator {
     private static final String DEFAULT_BEGIN_TIMESTAMP = "000";
     private static final Map<String, S3MetadataTableInfo> S3_METADATA_BASE_PATH = new HashMap<>();
     private final TypedProperties props;
-    protected final long syncIntervalMs;
 
     private final JavaSparkContext jssc;
     private final String s3MetadataBasePath;
@@ -83,19 +90,18 @@ public class S3IncrSourceDataRateEstimator extends SourceDataRateEstimator {
     private Dataset<Row> incrementalDataset;
     private long lastSyncTimeMs;
 
-    private S3MetadataTableInfo(JavaSparkContext jssc, String s3MetadataBasePath, long syncIntervalSeconds, TypedProperties props) {
+    private S3MetadataTableInfo(JavaSparkContext jssc, String s3MetadataBasePath, TypedProperties props) {
       this.jssc = jssc;
       this.s3MetadataBasePath = s3MetadataBasePath;
       this.sparkSession = SparkSession.builder().config(jssc.getConf()).getOrCreate();
-      this.syncIntervalMs = Math.max(MIN_SYNC_INTERVAL_MS, syncIntervalSeconds * 1000);
       this.props = props;
       lastSyncTimeMs = 0L;
     }
 
-    static synchronized S3MetadataTableInfo createOrGetInstance(JavaSparkContext jssc, long syncIntervalMs, TypedProperties props) {
+    static synchronized S3MetadataTableInfo createOrGetInstance(JavaSparkContext jssc, TypedProperties props) {
       String s3MetadataBasePath = props.getString(S3_INCR_SOURCE_RATE_ESTIMATOR_KEY);
       if (!S3_METADATA_BASE_PATH.containsKey(s3MetadataBasePath)) {
-        S3MetadataTableInfo s3MetadataTableInfo = new S3MetadataTableInfo(jssc, s3MetadataBasePath, syncIntervalMs, props);
+        S3MetadataTableInfo s3MetadataTableInfo = new S3MetadataTableInfo(jssc, s3MetadataBasePath, props);
         S3_METADATA_BASE_PATH.put(s3MetadataBasePath, s3MetadataTableInfo);
       }
       return S3_METADATA_BASE_PATH.get(s3MetadataBasePath);
@@ -107,7 +113,7 @@ public class S3IncrSourceDataRateEstimator extends SourceDataRateEstimator {
      * @return All rows created between the earliest and latest commits in Active timeline.
      */
     private synchronized Dataset<Row> refreshIncrementalEventsInActiveTimeline(HoodieTimeline activeCommitTimeline) {
-      if (lastSyncTimeMs > 0 && (System.currentTimeMillis() - lastSyncTimeMs) <= syncIntervalMs) {
+      if (lastSyncTimeMs > 0 && (System.currentTimeMillis() - lastSyncTimeMs) <= MIN_SYNC_INTERVAL_MS) {
         return incrementalDataset;
       }
       lastSyncTimeMs = System.currentTimeMillis();

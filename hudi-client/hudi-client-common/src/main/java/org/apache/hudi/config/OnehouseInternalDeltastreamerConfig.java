@@ -67,6 +67,11 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
           + "allows a SQL query templated to be passed as a transformation function). "
           + "Pass a comma-separated list of subclass names to chain the transformations.");
 
+  public static final ConfigProperty<Integer> MIN_SYNC_INTERVAL_SECS = ConfigProperty
+      .key("hoodie.deltastreamer.min.sync.interval.secs")
+      .defaultValue(300)
+      .withDocumentation("the min sync interval of each sync in continuous mode");
+
   public static final ConfigProperty<String> DELTASTREAMER_CHECKPOINT = ConfigProperty
       .key("hoodie.deltastreamer.checkpoint")
       .noDefaultValue()
@@ -89,6 +94,11 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
       .key("hoodie.deltastreamer.filter.dupes.enable")
       .defaultValue("false")
       .withDocumentation("Should duplicate records from source be dropped/filtered out before insert/bulk-insert.");
+
+  public static final ConfigProperty<Long> MIN_BYTES_INGESTION_SOURCE_PROP = ConfigProperty
+      .key("hoodie.deltastreamer.min.bytes.ingestion.source")
+      .defaultValue(1000000L) // 1MB
+      .withDocumentation("Minimum amount of bytes to schedule an ingestion from a source without delay.");
 
   private OnehouseInternalDeltastreamerConfig() {
     super();
@@ -128,6 +138,14 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
 
   public List<String> getTransformerClassName() {
     return Arrays.stream(getStringOrDefault(TRANSFORMER_CLASS_NAME, ",").split("\\s*,\\s*")).collect(Collectors.toList());
+  }
+
+  public Integer getMinSyncIntervalSecs() {
+    return getIntOrDefault(MIN_SYNC_INTERVAL_SECS);
+  }
+
+  public Long getMinSourceBytesIngestion() {
+    return getLongOrDefault(MIN_BYTES_INGESTION_SOURCE_PROP);
   }
 
   public String getCheckpoint() {

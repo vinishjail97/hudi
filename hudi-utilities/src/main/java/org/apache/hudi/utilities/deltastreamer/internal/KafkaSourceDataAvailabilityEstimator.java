@@ -43,45 +43,53 @@ import java.util.stream.Collectors;
  * NOTE: Eventually this class should be implemented by the {@link org.apache.hudi.utilities.sources.Source} class
  * that ingests data. To avoid changing the interface for
  */
-public class KafkaSourceDataRateEstimator extends SourceDataRateEstimator {
+public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailabilityEstimator {
 
-  private static final Logger LOG = LogManager.getLogger(KafkaSourceDataRateEstimator.class);
+  private static final Logger LOG = LogManager.getLogger(KafkaSourceDataAvailabilityEstimator.class);
+  private static final Long DEFAULT_RECORD_SIZE = 1000L;
 
-  public KafkaSourceDataRateEstimator(JavaSparkContext jssc, long syncIntervalSeconds, TypedProperties properties) {
-    super(jssc, syncIntervalSeconds, properties);
+  private final Long maxBatchEvents;
+
+  public KafkaSourceDataAvailabilityEstimator(JavaSparkContext jssc, TypedProperties properties) {
+    super(jssc, properties);
+    this.maxBatchEvents = properties.getLong(KafkaOffsetGen.Config.MAX_EVENTS_FROM_KAFKA_SOURCE_PROP.key(),
+        KafkaOffsetGen.Config.MAX_EVENTS_FROM_KAFKA_SOURCE_PROP.defaultValue());
   }
 
   @Override
-  public Long computeAvailableBytes(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes) {
-    return new KafkaTopicInfo(syncIntervalSeconds, properties, lastCommittedCheckpointStr, averageRecordSizeInBytes).getAggregateLoadForTopic();
+  SourceDataAvailability getDataAvailability(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+    long recordSizeBytes = (averageRecordSizeInBytes.isPresent() && averageRecordSizeInBytes.get() > 0L) ? averageRecordSizeInBytes.get() : DEFAULT_RECORD_SIZE;
+    Long totalEventsAvailable = new KafkaTopicInfo(properties, lastCommittedCheckpointStr, recordSizeBytes, sourceLimit).eventsAvailableForTopic();
+
+    // Either the aggr size of available kafka events is at least minSourceBytesIngestion
+    // or if the number of events exceeds the max number of events per ingestion batch.
+    if ((totalEventsAvailable * recordSizeBytes) >= minSourceBytesIngestion || totalEventsAvailable > Math.min(sourceLimit, maxBatchEvents)) {
+      return SourceDataAvailability.MIN_INGEST_DATA_AVAILABLE;
+    } else if (totalEventsAvailable > 0) {
+      return SourceDataAvailability.DATA_AVAILABLE;
+    }
+    return SourceDataAvailability.NO_DATA;
   }
 
   static class KafkaTopicInfo {
-
-    private static final Long DEFAULT_RECORD_SIZE = 1000L;
 
     private final KafkaClusterInfo clusterInfo;
     private final String topicName;
     private final Option<String> lastCommittedCheckpointStr;
     private final Long averageRecordSizeInBytes;
 
-    KafkaTopicInfo(long syncIntervalSeconds, TypedProperties properties, Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes) {
-      this.clusterInfo = KafkaClusterInfo.createOrGetInstance(syncIntervalSeconds, properties);
+    KafkaTopicInfo(TypedProperties properties, Option<String> lastCommittedCheckpointStr, Long averageRecordSizeInBytes, long sourceLimit) {
+      this.clusterInfo = KafkaClusterInfo.createOrGetInstance(properties);
       this.topicName = properties.getString(KafkaOffsetGen.Config.KAFKA_TOPIC_NAME.key());
       this.lastCommittedCheckpointStr = lastCommittedCheckpointStr;
-      if (!averageRecordSizeInBytes.isPresent() || averageRecordSizeInBytes.get() <= 0L) {
-        this.averageRecordSizeInBytes = DEFAULT_RECORD_SIZE;
-      } else {
-        this.averageRecordSizeInBytes = averageRecordSizeInBytes.get();
-      }
+      this.averageRecordSizeInBytes = averageRecordSizeInBytes;
     }
 
-    /** The total bytes yet to be ingested for every topic in one or more
-    * kafka clusters. It is computed as the difference between the latest offset per topic-partition and
-    * the committed offset from the latest Hudi commit file. The load is then summed across all
+    /** The source status is computed as the difference between the latest offset per topic-partition and
+    * the committed offset from the latest Hudi commit file. The load (num of events) is then summed across all
     * partitions of a topic.
     */
-    Long getAggregateLoadForTopic() {
+    Long eventsAvailableForTopic() {
       Map<Integer, Long> latestOffsets = clusterInfo.getLatestOffsetPerPartition(topicName);
       Map<Integer, Long> committedOffsets;
       if (lastCommittedCheckpointStr.isPresent() && !lastCommittedCheckpointStr.get().isEmpty()) {
@@ -96,11 +104,10 @@ public class KafkaSourceDataRateEstimator extends SourceDataRateEstimator {
         numUncommittedOffsets += (entry.getValue() - committedOffset) > 0 ? (entry.getValue() - committedOffset) : 0L;
       }
 
-      LOG.info(String.format("Computed the total data waiting for ingest %s for the Kafka Topic: %s as with latestOffsets %s"
-              + " committedOffsets %s  averageRecordSizeInBytes %s", (numUncommittedOffsets * averageRecordSizeInBytes),
-          topicName, latestOffsets, committedOffsets, averageRecordSizeInBytes));
+      LOG.info(String.format("Computed the total data waiting for ingest %s events %s bytes for the Kafka Topic: %s as with latestOffsets %s committedOffsets %s",
+          numUncommittedOffsets, (numUncommittedOffsets * averageRecordSizeInBytes), topicName, latestOffsets, committedOffsets));
 
-      return (numUncommittedOffsets * averageRecordSizeInBytes);
+      return numUncommittedOffsets;
     }
   }
 
@@ -108,34 +115,32 @@ public class KafkaSourceDataRateEstimator extends SourceDataRateEstimator {
     public static final String KAFKA_SOURCE_RATE_ESTIMATOR_KEY = "bootstrap.servers";
     // In the case of Kafka, we do want to ingest in real-time, hence setting
     // a min sync interval of 10secs.
-    private static final long MIN_SYNC_INTERVAL_MS = 10000;
+    private static final long MIN_SYNC_INTERVAL_MS = 15000;
     private static final Map<String, KafkaClusterInfo> CLUSTERS = new HashMap<>();
     private final TypedProperties props;
     private final Consumer consumer;
-    protected final long syncIntervalMs;
 
 
     private Map<TopicPartition, Long> lastOffsets = new HashMap<>();
     private long lastSyncTimeMs;
 
-    private KafkaClusterInfo(long syncIntervalSeconds, TypedProperties props) {
-      this.syncIntervalMs = Math.max(MIN_SYNC_INTERVAL_MS, syncIntervalSeconds * 1000);
+    private KafkaClusterInfo(TypedProperties props) {
       this.props = props;
       consumer = new KafkaConsumer(props);
       lastSyncTimeMs = 0L;
     }
 
-    static synchronized KafkaClusterInfo createOrGetInstance(long syncIntervalMs, TypedProperties props) {
+    static synchronized KafkaClusterInfo createOrGetInstance(TypedProperties props) {
       String bootstrapServers = props.getProperty(KAFKA_SOURCE_RATE_ESTIMATOR_KEY);
       if (!CLUSTERS.containsKey(bootstrapServers)) {
-        KafkaClusterInfo clusterInfo = new KafkaClusterInfo(syncIntervalMs, props);
+        KafkaClusterInfo clusterInfo = new KafkaClusterInfo(props);
         CLUSTERS.put(bootstrapServers, clusterInfo);
       }
       return CLUSTERS.get(bootstrapServers);
     }
 
     synchronized void refreshLatestOffsets() {
-      if (lastSyncTimeMs > 0 && (System.currentTimeMillis() - lastSyncTimeMs) <= syncIntervalMs) {
+      if (lastSyncTimeMs > 0 && (System.currentTimeMillis() - lastSyncTimeMs) <= MIN_SYNC_INTERVAL_MS) {
         return;
       }
       lastSyncTimeMs = System.currentTimeMillis();
