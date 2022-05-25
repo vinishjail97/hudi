@@ -28,6 +28,7 @@ import org.apache.hudi.common.config.ConfigProperty;
 import org.apache.hudi.common.config.HoodieCommonConfig;
 import org.apache.hudi.common.config.HoodieConfig;
 import org.apache.hudi.common.config.HoodieMetadataConfig;
+import org.apache.hudi.common.config.HoodieMetastoreConfig;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.engine.EngineType;
 import org.apache.hudi.common.fs.ConsistencyGuardConfig;
@@ -47,6 +48,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.ValidationUtils;
+import org.apache.hudi.config.metrics.HoodieMetricsCloudWatchConfig;
 import org.apache.hudi.config.metrics.HoodieMetricsConfig;
 import org.apache.hudi.config.metrics.HoodieMetricsDatadogConfig;
 import org.apache.hudi.config.metrics.HoodieMetricsGraphiteConfig;
@@ -150,7 +152,7 @@ public class HoodieWriteConfig extends HoodieConfig {
       .key("hoodie.table.base.file.format")
       .defaultValue(HoodieFileFormat.PARQUET)
       .withAlternatives("hoodie.table.ro.file.format")
-      .withDocumentation("");
+      .withDocumentation("Base file format to store all the base file data.");
 
   public static final ConfigProperty<String> BASE_PATH = ConfigProperty
       .key("hoodie.base.path")
@@ -495,6 +497,7 @@ public class HoodieWriteConfig extends HoodieConfig {
   private FileSystemViewStorageConfig viewStorageConfig;
   private HoodiePayloadConfig hoodiePayloadConfig;
   private HoodieMetadataConfig metadataConfig;
+  private HoodieMetastoreConfig metastoreConfig;
   private HoodieCommonConfig commonConfig;
   private EngineType engineType;
 
@@ -886,6 +889,7 @@ public class HoodieWriteConfig extends HoodieConfig {
     this.viewStorageConfig = clientSpecifiedViewStorageConfig;
     this.hoodiePayloadConfig = HoodiePayloadConfig.newBuilder().fromProperties(newProps).build();
     this.metadataConfig = HoodieMetadataConfig.newBuilder().fromProperties(props).build();
+    this.metastoreConfig = HoodieMetastoreConfig.newBuilder().fromProperties(props).build();
     this.commonConfig = HoodieCommonConfig.newBuilder().fromProperties(props).build();
   }
 
@@ -1428,6 +1432,10 @@ public class HoodieWriteConfig extends HoodieConfig {
     return getString(HoodieIndexConfig.INDEX_CLASS_NAME);
   }
 
+  public HoodieIndex.BucketIndexEngineType getBucketIndexEngineType() {
+    return HoodieIndex.BucketIndexEngineType.valueOf(getString(HoodieIndexConfig.BUCKET_INDEX_ENGINE_TYPE));
+  }
+
   public int getBloomFilterNumEntries() {
     return getInt(HoodieIndexConfig.BLOOM_FILTER_NUM_ENTRIES_VALUE);
   }
@@ -1486,6 +1494,26 @@ public class HoodieWriteConfig extends HoodieConfig {
 
   public boolean getHBaseIndexShouldComputeQPSDynamically() {
     return getBoolean(HoodieHBaseIndexConfig.COMPUTE_QPS_DYNAMICALLY);
+  }
+
+  public String getHBaseIndexSecurityAuthentication() {
+    return getString(HoodieHBaseIndexConfig.SECURITY_AUTHENTICATION);
+  }
+
+  public String getHBaseIndexKerberosUserKeytab() {
+    return getString(HoodieHBaseIndexConfig.KERBEROS_USER_KEYTAB);
+  }
+
+  public String getHBaseIndexKerberosUserPrincipal() {
+    return getString(HoodieHBaseIndexConfig.KERBEROS_USER_PRINCIPAL);
+  }
+
+  public String getHBaseIndexRegionserverPrincipal() {
+    return getString(HoodieHBaseIndexConfig.REGIONSERVER_PRINCIPAL);
+  }
+
+  public String getHBaseIndexMasterPrincipal() {
+    return getString(HoodieHBaseIndexConfig.MASTER_PRINCIPAL);
   }
 
   public int getHBaseIndexDesiredPutsTime() {
@@ -2080,6 +2108,13 @@ public class HoodieWriteConfig extends HoodieConfig {
     return HoodieStorageLayout.LayoutType.valueOf(getString(HoodieLayoutConfig.LAYOUT_TYPE));
   }
 
+  /**
+   * Metastore configs.
+   */
+  public boolean isMetastoreEnabled() {
+    return metastoreConfig.enableMetastore();
+  }
+
   public static class Builder {
 
     protected final HoodieWriteConfig writeConfig = new HoodieWriteConfig();
@@ -2472,6 +2507,8 @@ public class HoodieWriteConfig extends HoodieConfig {
       writeConfig.setDefaultValue(MARKERS_TYPE, getDefaultMarkersType(engineType));
       // Check for mandatory properties
       writeConfig.setDefaults(HoodieWriteConfig.class.getName());
+      // Set default values of HoodieHBaseIndexConfig
+      writeConfig.setDefaults(HoodieHBaseIndexConfig.class.getName());
       // Make sure the props is propagated
       writeConfig.setDefaultOnCondition(
           !isIndexConfigSet, HoodieIndexConfig.newBuilder().withEngineType(engineType).fromProperties(
