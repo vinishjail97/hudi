@@ -849,7 +849,7 @@ public class DeltaSync implements Serializable {
             && SchemaCompatibility.checkReaderWriterCompatibility(InputBatch.NULL_SCHEMA, targetSchema).getType() == SchemaCompatibility.SchemaCompatibilityType.COMPATIBLE) {
           // target schema is null. fetch schema from commit metadata and use it
           HoodieTableMetaClient meta = HoodieTableMetaClient.builder().setConf(new Configuration(fs.getConf())).setBasePath(cfg.targetBasePath).setPayloadClassName(cfg.payloadClassName).build();
-          int totalCompleted = meta.getArchivedTimeline().getCommitsTimeline().filterCompletedInstants().countInstants();
+          int totalCompleted = meta.getActiveTimeline().getCommitsTimeline().filterCompletedInstants().countInstants();
           if (totalCompleted > 0) {
             try {
               TableSchemaResolver schemaResolver = new TableSchemaResolver(meta);
