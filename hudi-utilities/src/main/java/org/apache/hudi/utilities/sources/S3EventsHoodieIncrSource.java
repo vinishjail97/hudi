@@ -43,10 +43,13 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.DEFAULT_NUM_INSTANTS_PER_FETCH;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.DEFAULT_READ_LATEST_INSTANT_ON_MISSING_CKPT;
@@ -81,6 +84,9 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
      * - --hoodie-conf hoodie.deltastreamer.source.s3incr.spark.datasource.options={"header":"true","encoding":"UTF-8"}
      */
     static final String SPARK_DATASOURCE_OPTIONS = "hoodie.deltastreamer.source.s3incr.spark.datasource.options";
+
+    // ToDo make it a list of extensions
+    static final String S3_ACTUAL_FILE_EXTENSIONS = "hoodie.deltastreamer.source.s3incr.file.extensions";
   }
 
   public S3EventsHoodieIncrSource(
@@ -167,7 +173,10 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       filter = filter + " and s3.object.key not like '%" + props.getString(Config.S3_IGNORE_KEY_SUBSTRING) + "%'";
     }
     // add file format filtering by default
-    filter = filter + " and s3.object.key like '%" + fileFormat + "%'";
+    // ToDo this was an urgent fix for Zendesk, we need to make this config more formal with a
+    // list of extensions
+    String fileExtensionFilter = props.getString(Config.S3_ACTUAL_FILE_EXTENSIONS, fileFormat);
+    filter = filter + " and s3.object.key like '%" + fileExtensionFilter + "'";
 
     String s3FS = props.getString(Config.S3_FS_PREFIX, "s3").toLowerCase();
     String s3Prefix = s3FS + "://";
@@ -185,17 +194,22 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       // construct file path, row index 0 refers to bucket and 1 refers to key
       String bucket = row.getString(0);
       String filePath = s3Prefix + bucket + "/" + row.getString(1);
-      if (checkExists) {
-        FileSystem fs = FSUtils.getFs(s3Prefix + bucket, sparkSession.sparkContext().hadoopConfiguration());
-        try {
-          if (fs.exists(new Path(filePath))) {
-            cloudFiles.add(filePath);
+      try {
+        String decodeUrl = URLDecoder.decode(filePath, StandardCharsets.UTF_8.name());
+        if (checkExists) {
+          FileSystem fs = FSUtils.getFs(s3Prefix + bucket, sparkSession.sparkContext().hadoopConfiguration());
+          try {
+            if (fs.exists(new Path(decodeUrl))) {
+              cloudFiles.add(decodeUrl);
+            }
+          } catch (IOException e) {
+            LOG.error(String.format("Error while checking path exists for %s ", decodeUrl), e);
           }
-        } catch (IOException e) {
-          LOG.error(String.format("Error while checking path exists for %s ", filePath), e);
+        } else {
+          cloudFiles.add(decodeUrl);
         }
-      } else {
-        cloudFiles.add(filePath);
+      } catch (Exception exception) {
+        LOG.warn("Failed to add cloud file ", exception);
       }
     }
     Option<Dataset<Row>> dataset = Option.empty();
@@ -203,6 +217,10 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       DataFrameReader dataFrameReader = getDataFrameReader(fileFormat);
       dataset = Option.of(dataFrameReader.load(cloudFiles.toArray(new String[0])));
     }
+    LOG.warn("Extracted distinct files " + cloudMetaDf.size()
+        + " subset of files that exist " + cloudFiles.size()
+        + " and some samples " + cloudFiles.stream().limit(10).collect(Collectors.toList())
+        + " read as dataframes by spark: " + (dataset.isPresent() ? dataset.get().count() : "Empty"));
     return Pair.of(dataset, queryTypeAndInstantEndpts.getRight().getRight());
   }
 }
