@@ -503,21 +503,26 @@ public class OnehouseDeltaStreamer implements Serializable {
           }
         }
 
-        HoodieMultiTableCommitStatsManager.TableCommitStats commitStats = HoodieMultiTableCommitStatsManager.getCommitStatsMap().get(basePath);
-        SourceDataAvailabilityEstimator.SourceDataAvailability sourceDataAvailability = sourceDataAvailabilityEstimator.getDataAvailability(
-            (commitStats != null) ? commitStats.getLastCommittedCheckpoint() : Option.empty(),
-            (commitStats != null) ? commitStats.getAvgRecordSizes() : Option.empty(),
-            readSourceLimit);
+        try {
+          HoodieMultiTableCommitStatsManager.TableCommitStats commitStats = HoodieMultiTableCommitStatsManager.getCommitStatsMap().get(basePath);
+          SourceDataAvailabilityEstimator.SourceDataAvailability sourceDataAvailability = sourceDataAvailabilityEstimator.getDataAvailability(
+              (commitStats != null) ? commitStats.getLastCommittedCheckpoint() : Option.empty(),
+              (commitStats != null) ? commitStats.getAvgRecordSizes() : Option.empty(),
+              readSourceLimit);
 
-        // If number of bytes available in source exceeds {@link OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP},
-        // schedule right away.
-        if (sourceDataAvailability.equals(SourceDataAvailabilityEstimator.SourceDataAvailability.MIN_INGEST_DATA_AVAILABLE)) {
-          return true;
-        }
+          // If number of bytes available in source exceeds {@link OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP},
+          // schedule right away.
+          if (sourceDataAvailability.equals(SourceDataAvailabilityEstimator.SourceDataAvailability.MIN_INGEST_DATA_AVAILABLE)) {
+            return true;
+          }
 
-        // If there is data in the source, schedule only if minSyncTimeMs has passed since the last ingest round.
-        return sourceDataAvailability.equals(SourceDataAvailabilityEstimator.SourceDataAvailability.DATA_AVAILABLE)
+          // If there is data in the source, schedule only if minSyncTimeMs has passed since the last ingest round.
+          return sourceDataAvailability.equals(SourceDataAvailabilityEstimator.SourceDataAvailability.DATA_AVAILABLE)
               && (currentTimeMs - lastSyncCompletedTimeMs >= minSyncTimeMs);
+        } catch (Exception exception) {
+          LOG.warn("Failed to detect data availability in source, falling back to using time based scheduling ", exception);
+          return (currentTimeMs - lastSyncCompletedTimeMs >= minSyncTimeMs);
+        }
       }
 
       void onSyncScheduled() {
