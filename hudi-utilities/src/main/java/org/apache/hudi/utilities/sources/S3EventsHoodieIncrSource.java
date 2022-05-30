@@ -27,6 +27,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.keygen.constant.KeyGeneratorOptions;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 
@@ -41,11 +42,14 @@ import org.apache.spark.sql.DataFrameReader;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import static org.apache.spark.sql.functions.input_file_name;
+import static org.apache.spark.sql.functions.split;
 
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +91,9 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
 
     // ToDo make it a list of extensions
     static final String S3_ACTUAL_FILE_EXTENSIONS = "hoodie.deltastreamer.source.s3incr.file.extensions";
+
+    static final String ATTACH_SOURCE_PARTITION_COLUMN = "hoodie.deltastreamer.source.s3incr.source.partition.exists";
+    static final Boolean DEFAULT_ATTACH_SOURCE_PARTITION_COLUMN = true;
   }
 
   public S3EventsHoodieIncrSource(
@@ -111,6 +118,26 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       dataFrameReader = dataFrameReader.options(sparkOptionsMap);
     }
     return dataFrameReader;
+  }
+
+  private Dataset addPartitionColumn(Dataset ds, List<String> cloudFiles) {
+    if (props.getBoolean(Config.ATTACH_SOURCE_PARTITION_COLUMN, Config.DEFAULT_ATTACH_SOURCE_PARTITION_COLUMN)
+        && !StringUtils.isNullOrEmpty(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key())) {
+      String partitionKey = props.getString(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key()).split(":")[0];
+      String partitionPathPattern = String.format("%s=",partitionKey);
+      String filePath = cloudFiles.get(0);
+      List<String> nestedPartition = Arrays.stream(filePath.split("/"))
+          .filter(level -> level.contains(partitionPathPattern)).collect(Collectors.toList());
+      if (nestedPartition.size() > 1) {
+        throw new HoodieException("More than one level of partitioning exists");
+      }
+      if (nestedPartition.size() == 1) {
+        LOG.info(String.format("adding column name = %s to dataset",partitionKey));
+        ds = ds.withColumn(partitionKey, split(split(input_file_name(),
+            partitionPathPattern).getItem(1), "/").getItem(0));
+      }
+    }
+    return ds;
   }
 
   @Override
@@ -189,38 +216,45 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
         .collectAsList();
     // Create S3 paths
     final boolean checkExists = props.getBoolean(Config.ENABLE_EXISTS_CHECK, Config.DEFAULT_ENABLE_EXISTS_CHECK);
-    List<String> cloudFiles = new ArrayList<>();
-    for (Row row : cloudMetaDf) {
-      // construct file path, row index 0 refers to bucket and 1 refers to key
-      String bucket = row.getString(0);
-      String filePath = s3Prefix + bucket + "/" + row.getString(1);
-      try {
-        String decodeUrl = URLDecoder.decode(filePath, StandardCharsets.UTF_8.name());
-        if (checkExists) {
-          FileSystem fs = FSUtils.getFs(s3Prefix + bucket, sparkSession.sparkContext().hadoopConfiguration());
-          try {
-            if (fs.exists(new Path(decodeUrl))) {
-              cloudFiles.add(decodeUrl);
+    List<String> cloudFiles = source
+        .filter(filter)
+        .select("s3.bucket.name", "s3.object.key")
+        .distinct()
+        .rdd().toJavaRDD().mapPartitions(fileListIterator -> {
+          List<String> cloudFilesPerPartition = new ArrayList<>();
+          fileListIterator.forEachRemaining(row -> {
+            String bucket = row.getString(0);
+            String filePath = s3Prefix + bucket + "/" + row.getString(1);
+            try {
+              String decodeUrl = URLDecoder.decode(filePath, StandardCharsets.UTF_8.name());
+              if (checkExists) {
+                FileSystem fs = FSUtils.getFs(s3Prefix + bucket, sparkSession.sparkContext().hadoopConfiguration());
+                try {
+                  if (fs.exists(new Path(decodeUrl))) {
+                    cloudFilesPerPartition.add(decodeUrl);
+                  }
+                } catch (IOException e) {
+                  LOG.error(String.format("Error while checking path exists for %s ", decodeUrl), e);
+                }
+              } else {
+                cloudFilesPerPartition.add(decodeUrl);
+              }
+            } catch (Exception exception) {
+              LOG.warn("Failed to add cloud file ", exception);
             }
-          } catch (IOException e) {
-            LOG.error(String.format("Error while checking path exists for %s ", decodeUrl), e);
-          }
-        } else {
-          cloudFiles.add(decodeUrl);
-        }
-      } catch (Exception exception) {
-        LOG.warn("Failed to add cloud file ", exception);
-      }
-    }
+          });
+          return cloudFilesPerPartition.iterator();
+        }).collect();
     Option<Dataset<Row>> dataset = Option.empty();
     if (!cloudFiles.isEmpty()) {
       DataFrameReader dataFrameReader = getDataFrameReader(fileFormat);
-      dataset = Option.of(dataFrameReader.load(cloudFiles.toArray(new String[0])));
+      Dataset ds = addPartitionColumn(dataFrameReader.load(cloudFiles.toArray(new String[0])),cloudFiles);
+      dataset = Option.of(ds);
     }
     LOG.warn("Extracted distinct files " + cloudMetaDf.size()
         + " subset of files that exist " + cloudFiles.size()
-        + " and some samples " + cloudFiles.stream().limit(10).collect(Collectors.toList())
-        + " read as dataframes by spark: " + (dataset.isPresent() ? dataset.get().count() : "Empty"));
+        + " and some samples " + cloudFiles.stream().limit(10).collect(Collectors.toList()));
     return Pair.of(dataset, queryTypeAndInstantEndpts.getRight().getRight());
   }
+
 }
