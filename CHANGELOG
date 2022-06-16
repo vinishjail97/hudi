@@ -5,3 +5,9 @@
 ---[2022-05-19 00:33:52] [release-v0.1.1] ---
 c213fbb2d Fix a couple of issues for offsets in multi table ds (#14)
 f365f009e Support to add labels to prometheus metrics (#13)
+
+---[2022-06-16 11:59:11] [release-v0.3.1] ---
+657ec1c613 Fix S3 incr source to add custom extensions and proper URI formation (#25)
+4ef3b3cd62 Ensure data availability estimator exceptions do not fail the entire multi table DS job (#24)
+5c8b7f9017 Add hudi-aws to hudi utilities package
+b1a9a86f24 Fix npe due to min sync time ms
