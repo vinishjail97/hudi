@@ -11,3 +11,12 @@ f365f009e Support to add labels to prometheus metrics (#13)
 4ef3b3cd62 Ensure data availability estimator exceptions do not fail the entire multi table DS job (#24)
 5c8b7f9017 Add hudi-aws to hudi utilities package
 b1a9a86f24 Fix npe due to min sync time ms
+
+---[2022-06-24 14:23:48] [release-v0.4.0] Adding release tag for hudi-internal release-v0.4.0---
+9bb1e6a5d Merge pull request #26 from onehouseinc/support_auto_partition_column_discovery
+763773418 Support auto discovery of partition columns in s3EventSource if source is partitioned by "equalTo" semantics
+0f9023907 Upgrade to version release-v0.3.1
+657ec1c61 Fix S3 incr source to add custom extensions and proper URI formation (#25)
+4ef3b3cd6 Ensure data availability estimator exceptions do not fail the entire multi table DS job (#24)
+5c8b7f901 Add hudi-aws to hudi utilities package
+b1a9a86f2 Fix npe due to min sync time ms
