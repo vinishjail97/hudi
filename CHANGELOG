@@ -20,3 +20,8 @@ b1a9a86f24 Fix npe due to min sync time ms
 4ef3b3cd6 Ensure data availability estimator exceptions do not fail the entire multi table DS job (#24)
 5c8b7f901 Add hudi-aws to hudi utilities package
 b1a9a86f2 Fix npe due to min sync time ms
+
+---[2022-06-24 22:33:17] [release-v0.4.1] Adding release tag for hudi-internal release-v0.4.1---
+2a4e71696 Merge pull request #28 from onehouseinc/hotfix-serializable-hadoop-conf
+eb9723755 serializable-hadoop-conf needed to be passed in s3Incr source
+0cca099e1 Upgrade to version release-v0.4.0
