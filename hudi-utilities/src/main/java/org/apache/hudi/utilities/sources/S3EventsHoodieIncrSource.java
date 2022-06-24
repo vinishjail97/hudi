@@ -20,6 +20,7 @@ package org.apache.hudi.utilities.sources;
 
 import org.apache.hudi.DataSourceReadOptions;
 import org.apache.hudi.DataSourceUtils;
+import org.apache.hudi.common.config.SerializableConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.HoodieRecord;
@@ -33,6 +34,7 @@ import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 
 import com.esotericsoftware.minlog.Log;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
@@ -209,13 +211,9 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     String s3Prefix = s3FS + "://";
 
     // Extract distinct file keys from s3 meta hoodie table
-    final List<Row> cloudMetaDf = source
-        .filter(filter)
-        .select("s3.bucket.name", "s3.object.key")
-        .distinct()
-        .collectAsList();
     // Create S3 paths
     final boolean checkExists = props.getBoolean(Config.ENABLE_EXISTS_CHECK, Config.DEFAULT_ENABLE_EXISTS_CHECK);
+    SerializableConfiguration serializableConfiguration = new SerializableConfiguration(sparkContext.hadoopConfiguration());
     List<String> cloudFiles = source
         .filter(filter)
         .select("s3.bucket.name", "s3.object.key")
@@ -223,12 +221,13 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
         .rdd().toJavaRDD().mapPartitions(fileListIterator -> {
           List<String> cloudFilesPerPartition = new ArrayList<>();
           fileListIterator.forEachRemaining(row -> {
+            final Configuration configuration = serializableConfiguration.newCopy();
             String bucket = row.getString(0);
             String filePath = s3Prefix + bucket + "/" + row.getString(1);
             try {
               String decodeUrl = URLDecoder.decode(filePath, StandardCharsets.UTF_8.name());
               if (checkExists) {
-                FileSystem fs = FSUtils.getFs(s3Prefix + bucket, sparkSession.sparkContext().hadoopConfiguration());
+                FileSystem fs = FSUtils.getFs(s3Prefix + bucket, configuration);
                 try {
                   if (fs.exists(new Path(decodeUrl))) {
                     cloudFilesPerPartition.add(decodeUrl);
@@ -251,8 +250,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       Dataset ds = addPartitionColumn(dataFrameReader.load(cloudFiles.toArray(new String[0])),cloudFiles);
       dataset = Option.of(ds);
     }
-    LOG.warn("Extracted distinct files " + cloudMetaDf.size()
-        + " subset of files that exist " + cloudFiles.size()
+    LOG.warn("Extracted distinct files " + cloudFiles.size()
         + " and some samples " + cloudFiles.stream().limit(10).collect(Collectors.toList()));
     return Pair.of(dataset, queryTypeAndInstantEndpts.getRight().getRight());
   }
