@@ -51,6 +51,13 @@ public class HoodieWriteCommitCallbackConfig extends HoodieConfig {
       .withDocumentation("Full path of callback class and must be a subclass of HoodieWriteCommitCallback class, "
           + "org.apache.hudi.callback.impl.HoodieWriteCommitHttpCallback by default");
 
+  public static final ConfigProperty<String> CALLBACK_MUTLI_WRITER_CLASS_NAME = ConfigProperty
+      .key(CALLBACK_PREFIX + "multiWriter.class")
+      .defaultValue("org.apache.hudi.utilities.deltastreamer.internal.HoodieMultiWriterCheckpointUpdateManager")
+      .sinceVersion("0.6.0")
+      .withDocumentation("Full path of callback class and must be a subclass of HoodieWriteCommitCallback class, "
+          + "org.apache.hudi.utilities.deltastreamer.internal.HoodieMultiWriterCheckpointUpdateManager");
+
   // ***** HTTP callback configs *****
   public static final ConfigProperty<String> CALLBACK_HTTP_URL = ConfigProperty
       .key(CALLBACK_PREFIX + "http.url")

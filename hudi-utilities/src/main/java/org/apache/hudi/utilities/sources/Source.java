@@ -18,24 +18,34 @@
 
 package org.apache.hudi.utilities.sources;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hudi.ApiMaturityLevel;
 import org.apache.hudi.PublicAPIClass;
 import org.apache.hudi.PublicAPIMethod;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.utilities.callback.SourceCommitCallback;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SparkSession;
 
+import java.io.IOException;
 import java.io.Serializable;
+import java.util.Map;
+
+import static org.apache.hudi.config.OnehouseInternalDeltastreamerConfig.MUTLI_WRITER_SOURCE_CHECKPOINT_ID;
 
 /**
  * Represents a source from which we can tail data. Assumes a constructor that takes properties.
  */
 @PublicAPIClass(maturity = ApiMaturityLevel.STABLE)
 public abstract class Source<T> implements SourceCommitCallback, Serializable {
+  private static final Logger LOG = LogManager.getLogger(Source.class);
+  private static final  ObjectMapper OM = new ObjectMapper();
 
   public enum SourceType {
     JSON, AVRO, ROW
@@ -62,21 +72,41 @@ public abstract class Source<T> implements SourceCommitCallback, Serializable {
     this.sourceType = sourceType;
   }
 
+  protected Option<String> getConsumerCheckpointForMultiWriter(Option<String> lastCkptStr) {
+    Option<String> consumerCheckpoint = Option.empty();
+    if (props.containsKey(MUTLI_WRITER_SOURCE_CHECKPOINT_ID.key()) && lastCkptStr.isPresent()) {
+      String sourceCheckpointId = props.getString(MUTLI_WRITER_SOURCE_CHECKPOINT_ID.key());
+      String checkPointStr = lastCkptStr.get();
+      Map<String, String> checkpointMap = null;
+      try {
+        checkpointMap = OM.readValue(checkPointStr, Map.class);
+        consumerCheckpoint = checkpointMap.containsKey(sourceCheckpointId) ? Option.of(checkpointMap.get(sourceCheckpointId)) : Option.empty();
+        LOG.info(String.format("checkpoint of multi_writer_source_checkpoint id=%s value=%s",sourceCheckpointId,consumerCheckpoint));
+      } catch (IOException e) {
+        throw new HoodieException("failed to parse as map", e);
+      }
+    }
+    return consumerCheckpoint;
+  }
+
   @PublicAPIMethod(maturity = ApiMaturityLevel.STABLE)
   protected abstract InputBatch<T> fetchNewData(Option<String> lastCkptStr, long sourceLimit);
 
   /**
    * Main API called by Hoodie Delta Streamer to fetch records.
-   * 
+   *
    * @param lastCkptStr Last Checkpoint
    * @param sourceLimit Source Limit
    * @return
    */
   public final InputBatch<T> fetchNext(Option<String> lastCkptStr, long sourceLimit) {
-    InputBatch<T> batch = fetchNewData(lastCkptStr, sourceLimit);
+    Option<String> consumerCheckpoint = props.containsKey(MUTLI_WRITER_SOURCE_CHECKPOINT_ID.key())
+        ? getConsumerCheckpointForMultiWriter(lastCkptStr) : lastCkptStr;
+    InputBatch<T> batch = fetchNewData(consumerCheckpoint, sourceLimit);
     // If overriddenSchemaProvider is passed in CLI, use it
     return overriddenSchemaProvider == null ? batch
-        : new InputBatch<>(batch.getBatch(), batch.getCheckpointForNextBatch(), overriddenSchemaProvider);
+        : new InputBatch<>(batch.getBatch(), batch.getCheckpointForNextBatch(),
+        overriddenSchemaProvider);
   }
 
   public SourceType getSourceType() {

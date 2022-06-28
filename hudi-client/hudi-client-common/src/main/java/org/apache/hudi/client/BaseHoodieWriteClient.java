@@ -33,6 +33,7 @@ import org.apache.hudi.avro.model.HoodieRollbackMetadata;
 import org.apache.hudi.avro.model.HoodieRollbackPlan;
 import org.apache.hudi.callback.HoodieWriteCommitCallback;
 import org.apache.hudi.callback.common.HoodieWriteCommitCallbackMessage;
+import org.apache.hudi.callback.common.HoodieWriteCommitCallbackMultiWriter;
 import org.apache.hudi.callback.util.HoodieCommitCallbackFactory;
 import org.apache.hudi.client.embedded.EmbeddedTimelineService;
 import org.apache.hudi.client.heartbeat.HeartbeatUtils;
@@ -59,6 +60,7 @@ import org.apache.hudi.common.util.CleanerUtils;
 import org.apache.hudi.common.util.ClusteringUtils;
 import org.apache.hudi.common.util.CommitUtils;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.HoodieArchivalConfig;
@@ -116,6 +118,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.hudi.common.model.HoodieCommitMetadata.SCHEMA_KEY;
+import static org.apache.hudi.config.OnehouseInternalDeltastreamerConfig.MUTLI_WRITER_SOURCE_CHECKPOINT_ID;
 
 /**
  * Abstract Write Client providing functionality for performing commit, index updates and rollback
@@ -232,6 +235,13 @@ public abstract class BaseHoodieWriteClient<T extends HoodieRecordPayload, I, K,
     this.txnManager.beginTransaction(Option.of(inflightInstant),
         lastCompletedTxnAndMetadata.isPresent() ? Option.of(lastCompletedTxnAndMetadata.get().getLeft()) : Option.empty());
     try {
+      if (!StringUtils.isNullOrEmpty(config.getCallbackMultiWriterClass())) {
+        //synchronized checkpoint update for multi writers
+        HoodieWriteCommitCallbackMultiWriter hoodieWriteCommitCallbackMultiWriter = new HoodieWriteCommitCallbackMultiWriter(instantTime,
+            config.getTableName(), config.getBasePath(), stats, Option.of(commitActionType),
+            extraMetadata,lastCompletedTxnAndMetadata, metadata, this.config.getProps());
+        HoodieCommitCallbackFactory.create(config,config.getCallbackMultiWriterClass()).call(hoodieWriteCommitCallbackMultiWriter);
+      }
       preCommit(inflightInstant, metadata);
       commit(table, commitActionType, instantTime, metadata, stats);
       // already within lock, and so no lock requried for archival

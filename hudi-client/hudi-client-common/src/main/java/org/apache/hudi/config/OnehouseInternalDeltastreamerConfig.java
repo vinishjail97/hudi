@@ -99,6 +99,10 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
       .key("hoodie.deltastreamer.min.bytes.ingestion.source")
       .defaultValue(1000000L) // 1MB
       .withDocumentation("Minimum amount of bytes to schedule an ingestion from a source without delay.");
+  public static final ConfigProperty<String> MUTLI_WRITER_SOURCE_CHECKPOINT_ID = ConfigProperty
+      .key("hoodie.deltastreamer.multiwriter.source.checkpoint.id")
+      .noDefaultValue()
+      .withDocumentation("Define Unique Id for source to be used in commit checkpoint");
 
   private OnehouseInternalDeltastreamerConfig() {
     super();
