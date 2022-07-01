@@ -35,6 +35,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Converts Json record to Avro Generic Record.
@@ -42,6 +43,8 @@ import java.util.Map;
 public class MercifulJsonConverter {
 
   private static final Map<Schema.Type, JsonToAvroFieldProcessor> FIELD_TYPE_PROCESSORS = getFieldTypeProcessors();
+  // For each schema, stores a mapping of schema field name to json field name to account for sanitization of fields
+  private static final Map<Schema, Map<String, String>> SANITIZED_FIELD_MAPPINGS = new ConcurrentHashMap<>();
 
   private final ObjectMapper mapper;
 
@@ -99,12 +102,27 @@ public class MercifulJsonConverter {
   private static GenericRecord convertJsonToAvro(Map<String, Object> inputJson, Schema schema) {
     GenericRecord avroRecord = new GenericData.Record(schema);
     for (Schema.Field f : schema.getFields()) {
-      Object val = inputJson.get(f.name());
+      Object val = getFieldFromJson(f.name(), inputJson, schema);
       if (val != null) {
         avroRecord.put(f.pos(), convertJsonToAvroField(val, f.name(), f.schema()));
       }
     }
     return avroRecord;
+  }
+
+  private static Object getFieldFromJson(final String schemaFieldName, final Map<String, Object> inputJson, final Schema schema) {
+    Map<String, String> schemaToJsonFieldNames = SANITIZED_FIELD_MAPPINGS.computeIfAbsent(schema, unused -> new ConcurrentHashMap<>());
+    if (!schemaToJsonFieldNames.containsKey(schemaFieldName)) {
+      // if we don't have field mapping, proactively populate as many as possible based on input json
+      for (String inputFieldName : inputJson.keySet()) {
+        // we expect many fields won't need sanitization so check if un-sanitized field name is already present
+        if (!schemaToJsonFieldNames.containsKey(inputFieldName)) {
+          String sanitizedJsonFieldName = HoodieAvroUtils.sanitizeName(inputFieldName);
+          schemaToJsonFieldNames.putIfAbsent(sanitizedJsonFieldName, inputFieldName);
+        }
+      }
+    }
+    return inputJson.get(schemaToJsonFieldNames.getOrDefault(schemaFieldName, schemaFieldName));
   }
 
   private static Schema getNonNull(Schema schema) {
