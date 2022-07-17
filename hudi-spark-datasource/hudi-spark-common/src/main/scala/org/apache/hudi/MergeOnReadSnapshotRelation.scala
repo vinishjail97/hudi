@@ -104,16 +104,8 @@ class MergeOnReadSnapshotRelation(sqlContext: SQLContext,
       val fileSlices = fileIndex.listFileSlices(convertedPartitionFilters)
       buildSplits(fileSlices.values.flatten.toSeq)
     } else {
-      // TODO refactor to avoid iterating over listed files multiple times
-      val partitions = listLatestBaseFiles(globPaths, convertedPartitionFilters, dataFilters)
-      val partitionPaths = partitions.keys.toSeq
-      if (partitionPaths.isEmpty || latestInstant.isEmpty) {
-        // If this an empty table OR it has no completed commits yet, return
-        List.empty[HoodieMergeOnReadFileSplit]
-      } else {
-        val fileSlices = listFileSlices(partitionPaths)
-        buildSplits(fileSlices)
-      }
+      val fileSlices = listLatestFileSlices(globPaths, partitionFilters, dataFilters)
+      buildSplits(fileSlices)
     }
   }
 
@@ -129,20 +121,6 @@ class MergeOnReadSnapshotRelation(sqlContext: SQLContext,
 
       HoodieMergeOnReadFileSplit(partitionedBaseFile, logFiles)
     }.toList
-  }
-
-  private def listFileSlices(partitionPaths: Seq[Path]): Seq[FileSlice] = {
-    // NOTE: It's critical for us to re-use [[InMemoryFileIndex]] to make sure we're leveraging
-    //       [[FileStatusCache]] and avoid listing the whole table again
-    val inMemoryFileIndex = HoodieInMemoryFileIndex.create(sparkSession, partitionPaths)
-    val fsView = new HoodieTableFileSystemView(metaClient, timeline, inMemoryFileIndex.allFiles.toArray)
-
-    val queryTimestamp = this.queryTimestamp.get
-
-    partitionPaths.flatMap { partitionPath =>
-      val relativePath = getRelativePartitionPath(new Path(basePath), partitionPath)
-      fsView.getLatestMergedFileSlicesBeforeOrOn(relativePath, queryTimestamp).iterator().asScala.toSeq
-    }
   }
 }
 

@@ -40,6 +40,7 @@ import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.api.internal.TableEnvironmentImpl;
 import org.apache.flink.table.catalog.ObjectPath;
 import org.apache.flink.table.catalog.exceptions.TableNotExistException;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.test.util.AbstractTestBase;
 import org.apache.flink.types.Row;
 import org.apache.flink.util.CollectionUtil;
@@ -1122,6 +1123,39 @@ public class ITTestHoodieDataSource extends AbstractTestBase {
 
   @ParameterizedTest
   @EnumSource(value = HoodieTableType.class)
+  void testIncrementalReadArchivedCommits(HoodieTableType tableType) throws Exception {
+    TableEnvironment tableEnv = batchTableEnv;
+    Configuration conf = TestConfigurations.getDefaultConf(tempFile.getAbsolutePath());
+    conf.setString(FlinkOptions.TABLE_NAME, "t1");
+    conf.setString(FlinkOptions.TABLE_TYPE, tableType.name());
+    conf.setInteger(FlinkOptions.ARCHIVE_MIN_COMMITS, 3);
+    conf.setInteger(FlinkOptions.ARCHIVE_MAX_COMMITS, 4);
+    conf.setInteger(FlinkOptions.CLEAN_RETAIN_COMMITS, 2);
+    conf.setString("hoodie.commits.archival.batch", "1");
+
+    // write 10 batches of data set
+    for (int i = 0; i < 20; i += 2) {
+      List<RowData> dataset = TestData.dataSetInsert(i + 1, i + 2);
+      TestData.writeData(dataset, conf);
+    }
+
+    String secondArchived = TestUtils.getNthArchivedInstant(tempFile.getAbsolutePath(), 1);
+
+    String hoodieTableDDL = sql("t1")
+        .option(FlinkOptions.PATH, tempFile.getAbsolutePath())
+        .option(FlinkOptions.TABLE_TYPE, tableType)
+        .option(FlinkOptions.READ_START_COMMIT, secondArchived)
+        .end();
+    tableEnv.executeSql(hoodieTableDDL);
+
+    List<Row> result = CollectionUtil.iterableToList(
+        () -> tableEnv.sqlQuery("select * from t1").execute().collect());
+    assertRowsEquals(result, TestData.dataSetInsert(3, 4, 5, 6, 7, 8, 9, 10,
+        11, 12, 13, 14, 15, 16, 17, 18, 19, 20));
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = HoodieTableType.class)
   void testReadWithWiderSchema(HoodieTableType tableType) throws Exception {
     TableEnvironment tableEnv = batchTableEnv;
     Configuration conf = TestConfigurations.getDefaultConf(tempFile.getAbsolutePath());
@@ -1256,6 +1290,37 @@ public class ITTestHoodieDataSource extends AbstractTestBase {
     assertRowsEquals(partitionResult, "[+I[1, 2022-02-02]]");
   }
 
+  @Test
+  void testWriteAndReadWithDataSkipping() {
+    TableEnvironment tableEnv = batchTableEnv;
+    String hoodieTableDDL = sql("t1")
+        .option(FlinkOptions.PATH, tempFile.getAbsolutePath())
+        .option(FlinkOptions.METADATA_ENABLED, true)
+        .option("hoodie.metadata.index.column.stats.enable", true)
+        .option(FlinkOptions.READ_DATA_SKIPPING_ENABLED, true)
+        .end();
+    tableEnv.executeSql(hoodieTableDDL);
+
+    execInsertSql(tableEnv, TestSQL.INSERT_T1);
+
+    List<Row> result1 = CollectionUtil.iterableToList(
+        () -> tableEnv.sqlQuery("select * from t1").execute().collect());
+    assertRowsEquals(result1, TestData.DATA_SET_SOURCE_INSERT);
+    // apply filters
+    List<Row> result2 = CollectionUtil.iterableToList(
+        () -> tableEnv.sqlQuery("select * from t1 where uuid > 'id5' and age > 20").execute().collect());
+    assertRowsEquals(result2, "["
+        + "+I[id7, Bob, 44, 1970-01-01T00:00:07, par4], "
+        + "+I[id8, Han, 56, 1970-01-01T00:00:08, par4]]");
+    // filter by timestamp
+    List<Row> result3 = CollectionUtil.iterableToList(
+        () -> tableEnv.sqlQuery("select * from t1 where ts > TIMESTAMP '1970-01-01 00:00:05'").execute().collect());
+    assertRowsEquals(result3, "["
+        + "+I[id6, Emma, 20, 1970-01-01T00:00:06, par3], "
+        + "+I[id7, Bob, 44, 1970-01-01T00:00:07, par4], "
+        + "+I[id8, Han, 56, 1970-01-01T00:00:08, par4]]");
+  }
+
   // -------------------------------------------------------------------------
   //  Utilities
   // -------------------------------------------------------------------------
@@ -1319,7 +1384,7 @@ public class ITTestHoodieDataSource extends AbstractTestBase {
     TableResult tableResult = tEnv.executeSql(insert);
     // wait to finish
     try {
-      tableResult.getJobClient().get().getJobExecutionResult().get();
+      tableResult.await();
     } catch (InterruptedException | ExecutionException ex) {
       // ignored
     }

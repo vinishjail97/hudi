@@ -35,7 +35,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.config.HoodieBootstrapConfig;
-import org.apache.hudi.config.HoodieCompactionConfig;
+import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.config.HoodieIndexConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieSavepointException;
@@ -148,7 +148,7 @@ public class SparkMain {
           }
           configs = new ArrayList<>();
           if (args.length > 9) {
-            configs.addAll(Arrays.asList(args).subList(8, args.length));
+            configs.addAll(Arrays.asList(args).subList(9, args.length));
           }
 
           returnCode = compact(jsc, args[3], args[4], null, Integer.parseInt(args[5]), args[6],
@@ -296,7 +296,7 @@ public class SparkMain {
       SparkRDDWriteClient client = createHoodieClient(jsc, basePath, false);
       HoodieWriteConfig config = client.getConfig();
       HoodieEngineContext context = client.getEngineContext();
-      HoodieSparkTable table = HoodieSparkTable.create(config, context, true);
+      HoodieSparkTable table = HoodieSparkTable.create(config, context);
       WriteMarkersFactory.get(config.getMarkersType(), table, instantTime)
           .quietDeleteMarkerDir(context, config.getMarkersDeleteParallelism());
       return 0;
@@ -451,7 +451,7 @@ public class SparkMain {
   }
 
   private static int rollback(JavaSparkContext jsc, String instantTime, String basePath, Boolean rollbackUsingMarkers) throws Exception {
-    SparkRDDWriteClient client = createHoodieClient(jsc, basePath, rollbackUsingMarkers);
+    SparkRDDWriteClient client = createHoodieClient(jsc, basePath, rollbackUsingMarkers, false);
     if (client.rollback(instantTime)) {
       LOG.info(String.format("The commit \"%s\" rolled back.", instantTime));
       return 0;
@@ -538,7 +538,7 @@ public class SparkMain {
   private static HoodieWriteConfig getWriteConfig(String basePath, Boolean rollbackUsingMarkers, boolean lazyCleanPolicy) {
     return HoodieWriteConfig.newBuilder().withPath(basePath)
         .withRollbackUsingMarkers(rollbackUsingMarkers)
-        .withCompactionConfig(HoodieCompactionConfig.newBuilder().withFailedWritesCleaningPolicy(lazyCleanPolicy ? HoodieFailedWritesCleaningPolicy.LAZY :
+        .withCleanConfig(HoodieCleanConfig.newBuilder().withFailedWritesCleaningPolicy(lazyCleanPolicy ? HoodieFailedWritesCleaningPolicy.LAZY :
             HoodieFailedWritesCleaningPolicy.EAGER).build())
         .withIndexConfig(HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.BLOOM).build()).build();
   }

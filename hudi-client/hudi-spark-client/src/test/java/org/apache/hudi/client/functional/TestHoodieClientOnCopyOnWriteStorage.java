@@ -71,12 +71,13 @@ import org.apache.hudi.common.util.MarkerUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.Pair;
-import org.apache.hudi.config.HoodieClusteringConfig;
 import org.apache.hudi.config.HoodieCompactionConfig;
 import org.apache.hudi.config.HoodieIndexConfig;
-import org.apache.hudi.config.HoodiePreCommitValidatorConfig;
+import org.apache.hudi.config.HoodieClusteringConfig;
 import org.apache.hudi.config.HoodieStorageConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.config.HoodiePreCommitValidatorConfig;
+import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.data.HoodieJavaRDD;
 import org.apache.hudi.exception.HoodieCommitException;
 import org.apache.hudi.exception.HoodieCorruptedDataException;
@@ -360,7 +361,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
         .withPrecommitValidatorSingleResultSqlQueries(COUNT_SQL_QUERY_FOR_VALIDATION + "#" + 500)
         .build();
     HoodieWriteConfig config = getConfigBuilder()
-        .withCompactionConfig(HoodieCompactionConfig.newBuilder().withFailedWritesCleaningPolicy(HoodieFailedWritesCleaningPolicy.NEVER).build())
+        .withCleanConfig(HoodieCleanConfig.newBuilder().withFailedWritesCleaningPolicy(HoodieFailedWritesCleaningPolicy.NEVER).build())
         .withPreCommitValidatorConfig(validatorConfig)
         .build();
 
@@ -386,7 +387,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
         .withPrecommitValidatorSingleResultSqlQueries(COUNT_SQL_QUERY_FOR_VALIDATION + "#" + numRecords)
         .build();
     config = getConfigBuilder()
-        .withCompactionConfig(HoodieCompactionConfig.newBuilder().withFailedWritesCleaningPolicy(HoodieFailedWritesCleaningPolicy.NEVER).build())
+        .withCleanConfig(HoodieCleanConfig.newBuilder().withFailedWritesCleaningPolicy(HoodieFailedWritesCleaningPolicy.NEVER).build())
         .withPreCommitValidatorConfig(validatorConfig)
         .build();
     String instant2 = HoodieActiveTimeline.createNewInstantTime();
@@ -921,7 +922,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
       .setTimelineLayoutVersion(VERSION_0)
       .initTable(metaClient.getHadoopConf(), metaClient.getBasePath());
     // Set rollback to LAZY so no inflights are deleted
-    hoodieWriteConfig.getProps().put(HoodieCompactionConfig.FAILED_WRITES_CLEANER_POLICY.key(),
+    hoodieWriteConfig.getProps().put(HoodieCleanConfig.FAILED_WRITES_CLEANER_POLICY.key(),
         HoodieFailedWritesCleaningPolicy.LAZY.name());
     SparkRDDWriteClient client = getHoodieWriteClient(hoodieWriteConfig);
 
@@ -2094,13 +2095,13 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
       HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
           .fromBytes(commitTimeline.getInstantDetails(commitInstant).get(), HoodieCommitMetadata.class);
       String basePath = table.getMetaClient().getBasePath();
-      Collection<String> commitPathNames = commitMetadata.getFileIdAndFullPaths(basePath).values();
+      Collection<String> commitPathNames = commitMetadata.getFileIdAndFullPaths(new Path(basePath)).values();
 
       // Read from commit file
       try (FSDataInputStream inputStream = fs.open(testTable.getCommitFilePath(instantTime))) {
         String everything = FileIOUtils.readAsUTFString(inputStream);
         HoodieCommitMetadata metadata = HoodieCommitMetadata.fromJsonString(everything, HoodieCommitMetadata.class);
-        HashMap<String, String> paths = metadata.getFileIdAndFullPaths(basePath);
+        HashMap<String, String> paths = metadata.getFileIdAndFullPaths(new Path(basePath));
         // Compare values in both to make sure they are equal.
         for (String pathName : paths.values()) {
           assertTrue(commitPathNames.contains(pathName));
@@ -2606,17 +2607,16 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
     if (!populateMetaFields) {
       builder.withIndexConfig(HoodieIndexConfig.newBuilder().withIndexType(IndexType.SIMPLE).build());
     }
-    return builder
-        .withCompactionConfig(
-            HoodieCompactionConfig.newBuilder()
-                .compactionSmallFileSize(smallFileSize)
-                // Set rollback to LAZY so no inflights are deleted
-                .withFailedWritesCleaningPolicy(HoodieFailedWritesCleaningPolicy.LAZY)
-                .insertSplitSize(insertSplitSize).build())
-        .withStorageConfig(
-            HoodieStorageConfig.newBuilder()
-                .hfileMaxFileSize(dataGen.getEstimatedFileSizeInBytes(200))
-                .parquetMaxFileSize(dataGen.getEstimatedFileSizeInBytes(200)).build())
+    return builder.withCompactionConfig(HoodieCompactionConfig.newBuilder()
+            .compactionSmallFileSize(smallFileSize)
+            // Set rollback to LAZY so no inflights are deleted
+            .insertSplitSize(insertSplitSize).build())
+        .withCleanConfig(HoodieCleanConfig.newBuilder()
+            .withFailedWritesCleaningPolicy(HoodieFailedWritesCleaningPolicy.LAZY)
+            .build())
+        .withStorageConfig(HoodieStorageConfig.newBuilder()
+            .hfileMaxFileSize(dataGen.getEstimatedFileSizeInBytes(200))
+            .parquetMaxFileSize(dataGen.getEstimatedFileSizeInBytes(200)).build())
         .withMergeAllowDuplicateOnInserts(mergeAllowDuplicateInserts)
         .withProps(props)
         .build();
@@ -2636,7 +2636,7 @@ public class TestHoodieClientOnCopyOnWriteStorage extends HoodieClientTestBase {
   private HoodieWriteConfig getParallelWritingWriteConfig(HoodieFailedWritesCleaningPolicy cleaningPolicy, boolean populateMetaFields) {
     return getConfigBuilder()
         .withEmbeddedTimelineServerEnabled(false)
-        .withCompactionConfig(HoodieCompactionConfig.newBuilder()
+        .withCleanConfig(HoodieCleanConfig.newBuilder()
             .withFailedWritesCleaningPolicy(cleaningPolicy)
             .withAutoClean(false).build())
         .withTimelineLayoutVersion(1)

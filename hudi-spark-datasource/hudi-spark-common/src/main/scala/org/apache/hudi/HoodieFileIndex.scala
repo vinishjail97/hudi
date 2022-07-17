@@ -76,7 +76,7 @@ case class HoodieFileIndex(spark: SparkSession,
     metaClient = metaClient,
     schemaSpec = schemaSpec,
     configProperties = getConfigProperties(spark, options),
-    queryPaths = Seq(HoodieFileIndex.getQueryPath(options)),
+    queryPaths = HoodieFileIndex.getQueryPaths(options),
     specifiedQueryInstant = options.get(DataSourceReadOptions.TIME_TRAVEL_AS_OF_INSTANT.key).map(HoodieSqlCommonUtils.formatQueryInstant),
     fileStatusCache = fileStatusCache
   )
@@ -108,9 +108,6 @@ case class HoodieFileIndex(spark: SparkSession,
    * @return list of PartitionDirectory containing partition to base files mapping
    */
   override def listFiles(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Seq[PartitionDirectory] = {
-    val convertedPartitionFilters =
-      HoodieFileIndex.convertFilterForTimestampKeyGenerator(metaClient, partitionFilters)
-
     // Look up candidate files names in the col-stats index, if all of the following conditions are true
     //    - Data-skipping is enabled
     //    - Col-Stats Index is present
@@ -144,7 +141,7 @@ case class HoodieFileIndex(spark: SparkSession,
       Seq(PartitionDirectory(InternalRow.empty, candidateFiles))
     } else {
       // Prune the partition path by the partition filters
-      val prunedPartitions = prunePartition(cachedAllInputFileSlices.keySet.asScala.toSeq, convertedPartitionFilters)
+      val prunedPartitions = prunePartition(cachedAllInputFileSlices.keySet.asScala.toSeq, partitionFilters)
       var totalFileSize = 0
       var candidateFileSize = 0
 
@@ -165,9 +162,9 @@ case class HoodieFileIndex(spark: SparkSession,
         PartitionDirectory(InternalRow.fromSeq(partition.values), candidateFiles)
       }
 
-      logInfo(s"Total base files: ${totalFileSize}; " +
-        s"candidate files after data skipping : ${candidateFileSize}; " +
-        s"skipping percent ${if (allFiles.nonEmpty) (totalFileSize - candidateFileSize) / totalFileSize.toDouble else 0}")
+      logInfo(s"Total base files: $totalFileSize; " +
+        s"candidate files after data skipping : $candidateFileSize; " +
+        s"skipping percent ${if (allFiles.nonEmpty && totalFileSize > 0) (totalFileSize - candidateFileSize) / totalFileSize.toDouble else 0}")
 
       result
     }
@@ -254,7 +251,7 @@ case class HoodieFileIndex(spark: SparkSession,
   override def sizeInBytes: Long = cachedFileSize
 
   private def isColumnStatsIndexAvailable =
-    HoodieTableMetadataUtil.getCompletedMetadataPartitions(metaClient.getTableConfig)
+    metaClient.getTableConfig.getMetadataPartitions
       .contains(HoodieTableMetadataUtil.PARTITION_NAME_COLUMN_STATS)
 
   private def isDataSkippingEnabled: Boolean =
@@ -267,7 +264,7 @@ case class HoodieFileIndex(spark: SparkSession,
   private def validateConfig(): Unit = {
     if (isDataSkippingEnabled && (!isMetadataTableEnabled || !isColumnStatsIndexEnabled)) {
       logWarning("Data skipping requires both Metadata Table and Column Stats Index to be enabled as well! " +
-        s"(isMetadataTableEnabled = ${isMetadataTableEnabled}, isColumnStatsIndexEnabled = ${isColumnStatsIndexEnabled}")
+        s"(isMetadataTableEnabled = $isMetadataTableEnabled, isColumnStatsIndexEnabled = $isColumnStatsIndexEnabled")
     }
   }
 }
@@ -344,10 +341,15 @@ object HoodieFileIndex extends Logging {
     }
   }
 
-  private def getQueryPath(options: Map[String, String]) = {
-    new Path(options.get("path") match {
-      case Some(p) => p
-      case None => throw new IllegalArgumentException("'path' option required")
-    })
+  private def getQueryPaths(options: Map[String, String]): Seq[Path] = {
+    options.get("path") match {
+      case Some(p) => Seq(new Path(p))
+      case None =>
+        options.getOrElse("glob.paths",
+          throw new IllegalArgumentException("'path' or 'glob paths' option required"))
+          .split(",")
+          .map(new Path(_))
+          .toSeq
+    }
   }
 }

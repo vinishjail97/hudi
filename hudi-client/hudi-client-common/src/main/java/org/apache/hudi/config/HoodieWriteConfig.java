@@ -89,6 +89,8 @@ import java.util.Properties;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import static org.apache.hudi.config.HoodieCleanConfig.CLEANER_POLICY;
+
 /**
  * Class storing configs for the HoodieWriteClient.
  */
@@ -174,11 +176,6 @@ public class HoodieWriteConfig extends HoodieConfig {
       .noDefaultValue()
       .withDocumentation("Schema string representing the latest schema of the table. Hudi passes this to "
           + "implementations of evolution of schema");
-
-  public static final ConfigProperty<Boolean> SCHEMA_EVOLUTION_ENABLE = ConfigProperty
-      .key("hoodie.schema.on.read.enable")
-      .defaultValue(false)
-      .withDocumentation("enable full schema evolution for hoodie");
 
   public static final ConfigProperty<Boolean> ENABLE_INTERNAL_SCHEMA_CACHE = ConfigProperty
       .key("hoodie.schema.cache.enable")
@@ -364,8 +361,8 @@ public class HoodieWriteConfig extends HoodieConfig {
 
   public static final ConfigProperty<Boolean> REFRESH_TIMELINE_SERVER_BASED_ON_LATEST_COMMIT = ConfigProperty
       .key("hoodie.refresh.timeline.server.based.on.latest.commit")
-      .defaultValue(false)
-      .withDocumentation("Refresh timeline in timeline server based on latest commit apart from timeline hash difference. By default (false), ");
+      .defaultValue(true)
+      .withDocumentation("Refresh timeline in timeline server based on latest commit apart from timeline hash difference. By default (true).");
 
   public static final ConfigProperty<Long> INITIAL_CONSISTENCY_CHECK_INTERVAL_MS = ConfigProperty
       .key("hoodie.consistency.check.initial_interval_ms")
@@ -929,11 +926,11 @@ public class HoodieWriteConfig extends HoodieConfig {
   }
 
   public boolean getSchemaEvolutionEnable() {
-    return getBoolean(SCHEMA_EVOLUTION_ENABLE);
+    return getBoolean(HoodieCommonConfig.SCHEMA_EVOLUTION_ENABLE);
   }
 
   public void setSchemaEvolutionEnable(boolean enable) {
-    setValue(SCHEMA_EVOLUTION_ENABLE, String.valueOf(enable));
+    setValue(HoodieCommonConfig.SCHEMA_EVOLUTION_ENABLE, String.valueOf(enable));
   }
 
   /**
@@ -1064,6 +1061,10 @@ public class HoodieWriteConfig extends HoodieConfig {
     return MarkerType.valueOf(markerType.toUpperCase());
   }
 
+  public boolean isHiveStylePartitioningEnabled() {
+    return getBooleanOrDefault(KeyGeneratorOptions.HIVE_STYLE_PARTITIONING_ENABLE);
+  }
+
   public int getMarkersTimelineServerBasedBatchNumThreads() {
     return getInt(MARKERS_TIMELINE_SERVER_BASED_BATCH_NUM_THREADS);
   }
@@ -1149,31 +1150,31 @@ public class HoodieWriteConfig extends HoodieConfig {
    * compaction properties.
    */
   public HoodieCleaningPolicy getCleanerPolicy() {
-    return HoodieCleaningPolicy.valueOf(getString(HoodieCompactionConfig.CLEANER_POLICY));
+    return HoodieCleaningPolicy.valueOf(getString(CLEANER_POLICY));
   }
 
   public int getCleanerFileVersionsRetained() {
-    return getInt(HoodieCompactionConfig.CLEANER_FILE_VERSIONS_RETAINED);
+    return getInt(HoodieCleanConfig.CLEANER_FILE_VERSIONS_RETAINED);
   }
 
   public int getCleanerCommitsRetained() {
-    return getInt(HoodieCompactionConfig.CLEANER_COMMITS_RETAINED);
+    return getInt(HoodieCleanConfig.CLEANER_COMMITS_RETAINED);
   }
 
   public int getCleanerHoursRetained() {
-    return getInt(HoodieCompactionConfig.CLEANER_HOURS_RETAINED);
+    return getInt(HoodieCleanConfig.CLEANER_HOURS_RETAINED);
   }
 
   public int getMaxCommitsToKeep() {
-    return getInt(HoodieCompactionConfig.MAX_COMMITS_TO_KEEP);
+    return getInt(HoodieArchivalConfig.MAX_COMMITS_TO_KEEP);
   }
 
   public int getMinCommitsToKeep() {
-    return getInt(HoodieCompactionConfig.MIN_COMMITS_TO_KEEP);
+    return getInt(HoodieArchivalConfig.MIN_COMMITS_TO_KEEP);
   }
 
   public int getArchiveMergeFilesBatchSize() {
-    return getInt(HoodieCompactionConfig.ARCHIVE_MERGE_FILES_BATCH_SIZE);
+    return getInt(HoodieArchivalConfig.ARCHIVE_MERGE_FILES_BATCH_SIZE);
   }
 
   public int getParquetSmallFileLimit() {
@@ -1193,7 +1194,7 @@ public class HoodieWriteConfig extends HoodieConfig {
   }
 
   public boolean allowMultipleCleans() {
-    return getBoolean(HoodieCompactionConfig.ALLOW_MULTIPLE_CLEANS);
+    return getBoolean(HoodieCleanConfig.ALLOW_MULTIPLE_CLEANS);
   }
 
   public boolean shouldAutoTuneInsertSplits() {
@@ -1201,43 +1202,43 @@ public class HoodieWriteConfig extends HoodieConfig {
   }
 
   public int getCleanerParallelism() {
-    return getInt(HoodieCompactionConfig.CLEANER_PARALLELISM_VALUE);
+    return getInt(HoodieCleanConfig.CLEANER_PARALLELISM_VALUE);
   }
 
   public int getCleaningMaxCommits() {
-    return getInt(HoodieCompactionConfig.CLEAN_MAX_COMMITS);
+    return getInt(HoodieCleanConfig.CLEAN_MAX_COMMITS);
   }
 
   public CleaningTriggerStrategy getCleaningTriggerStrategy() {
-    return CleaningTriggerStrategy.valueOf(getString(HoodieCompactionConfig.CLEAN_TRIGGER_STRATEGY));
+    return CleaningTriggerStrategy.valueOf(getString(HoodieCleanConfig.CLEAN_TRIGGER_STRATEGY));
   }
 
   public boolean isAutoClean() {
-    return getBoolean(HoodieCompactionConfig.AUTO_CLEAN);
+    return getBoolean(HoodieCleanConfig.AUTO_CLEAN);
   }
 
   public boolean getArchiveMergeEnable() {
-    return getBoolean(HoodieCompactionConfig.ARCHIVE_MERGE_ENABLE);
+    return getBoolean(HoodieArchivalConfig.ARCHIVE_MERGE_ENABLE);
   }
 
   public long getArchiveMergeSmallFileLimitBytes() {
-    return getLong(HoodieCompactionConfig.ARCHIVE_MERGE_SMALL_FILE_LIMIT_BYTES);
+    return getLong(HoodieArchivalConfig.ARCHIVE_MERGE_SMALL_FILE_LIMIT_BYTES);
   }
 
   public boolean isAutoArchive() {
-    return getBoolean(HoodieCompactionConfig.AUTO_ARCHIVE);
+    return getBoolean(HoodieArchivalConfig.AUTO_ARCHIVE);
   }
 
   public boolean isAsyncArchive() {
-    return getBoolean(HoodieCompactionConfig.ASYNC_ARCHIVE);
+    return getBoolean(HoodieArchivalConfig.ASYNC_ARCHIVE);
   }
 
   public boolean isAsyncClean() {
-    return getBoolean(HoodieCompactionConfig.ASYNC_CLEAN);
+    return getBoolean(HoodieCleanConfig.ASYNC_CLEAN);
   }
 
   public boolean incrementalCleanerModeEnabled() {
-    return getBoolean(HoodieCompactionConfig.CLEANER_INCREMENTAL_MODE_ENABLE);
+    return getBoolean(HoodieCleanConfig.CLEANER_INCREMENTAL_MODE_ENABLE);
   }
 
   public boolean inlineCompactionEnabled() {
@@ -1281,7 +1282,7 @@ public class HoodieWriteConfig extends HoodieConfig {
   }
 
   public int getArchiveDeleteParallelism() {
-    return getInt(HoodieCompactionConfig.DELETE_ARCHIVED_INSTANT_PARALLELISM_VALUE);
+    return getInt(HoodieArchivalConfig.DELETE_ARCHIVED_INSTANT_PARALLELISM_VALUE);
   }
 
   public boolean inlineClusteringEnabled() {
@@ -1322,7 +1323,7 @@ public class HoodieWriteConfig extends HoodieConfig {
   }
 
   public String getPayloadClass() {
-    return getString(HoodieCompactionConfig.PAYLOAD_CLASS_NAME);
+    return getString(HoodiePayloadConfig.PAYLOAD_CLASS_NAME);
   }
 
   public int getTargetPartitionsPerDayBasedCompaction() {
@@ -1330,11 +1331,11 @@ public class HoodieWriteConfig extends HoodieConfig {
   }
 
   public int getCommitArchivalBatchSize() {
-    return getInt(HoodieCompactionConfig.COMMITS_ARCHIVAL_BATCH_SIZE);
+    return getInt(HoodieArchivalConfig.COMMITS_ARCHIVAL_BATCH_SIZE);
   }
 
   public Boolean shouldCleanBootstrapBaseFile() {
-    return getBoolean(HoodieCompactionConfig.CLEANER_BOOTSTRAP_BASE_FILE_ENABLE);
+    return getBoolean(HoodieCleanConfig.CLEANER_BOOTSTRAP_BASE_FILE_ENABLE);
   }
 
   public String getClusteringUpdatesStrategyClass() {
@@ -1343,7 +1344,7 @@ public class HoodieWriteConfig extends HoodieConfig {
 
   public HoodieFailedWritesCleaningPolicy getFailedWritesCleanPolicy() {
     return HoodieFailedWritesCleaningPolicy
-        .valueOf(getString(HoodieCompactionConfig.FAILED_WRITES_CLEANER_POLICY));
+        .valueOf(getString(HoodieCleanConfig.FAILED_WRITES_CLEANER_POLICY));
   }
 
   /**
@@ -2122,6 +2123,8 @@ public class HoodieWriteConfig extends HoodieConfig {
     private boolean isIndexConfigSet = false;
     private boolean isStorageConfigSet = false;
     private boolean isCompactionConfigSet = false;
+    private boolean isCleanConfigSet = false;
+    private boolean isArchivalConfigSet = false;
     private boolean isClusteringConfigSet = false;
     private boolean isOptimizeConfigSet = false;
     private boolean isMetricsConfigSet = false;
@@ -2175,7 +2178,7 @@ public class HoodieWriteConfig extends HoodieConfig {
     }
 
     public Builder withSchemaEvolutionEnable(boolean enable) {
-      writeConfig.setValue(SCHEMA_EVOLUTION_ENABLE, String.valueOf(enable));
+      writeConfig.setValue(HoodieCommonConfig.SCHEMA_EVOLUTION_ENABLE, String.valueOf(enable));
       return this;
     }
 
@@ -2286,6 +2289,18 @@ public class HoodieWriteConfig extends HoodieConfig {
     public Builder withCompactionConfig(HoodieCompactionConfig compactionConfig) {
       writeConfig.getProps().putAll(compactionConfig.getProps());
       isCompactionConfigSet = true;
+      return this;
+    }
+
+    public Builder withCleanConfig(HoodieCleanConfig cleanConfig) {
+      writeConfig.getProps().putAll(cleanConfig.getProps());
+      isCleanConfigSet = true;
+      return this;
+    }
+
+    public Builder withArchivalConfig(HoodieArchivalConfig cleanConfig) {
+      writeConfig.getProps().putAll(cleanConfig.getProps());
+      isArchivalConfigSet = true;
       return this;
     }
 
@@ -2503,6 +2518,11 @@ public class HoodieWriteConfig extends HoodieConfig {
       return this;
     }
 
+    public Builder withRefreshTimelineServerBasedOnLatestCommit(boolean refreshTimelineServerBasedOnLatestCommit) {
+      writeConfig.setValue(REFRESH_TIMELINE_SERVER_BASED_ON_LATEST_COMMIT, Boolean.toString(refreshTimelineServerBasedOnLatestCommit));
+      return this;
+    }
+
     protected void setDefaults() {
       writeConfig.setDefaultValue(MARKERS_TYPE, getDefaultMarkersType(engineType));
       // Check for mandatory properties
@@ -2517,6 +2537,10 @@ public class HoodieWriteConfig extends HoodieConfig {
           writeConfig.getProps()).build());
       writeConfig.setDefaultOnCondition(!isCompactionConfigSet,
           HoodieCompactionConfig.newBuilder().fromProperties(writeConfig.getProps()).build());
+      writeConfig.setDefaultOnCondition(!isCleanConfigSet,
+          HoodieCleanConfig.newBuilder().fromProperties(writeConfig.getProps()).build());
+      writeConfig.setDefaultOnCondition(!isArchivalConfigSet,
+          HoodieArchivalConfig.newBuilder().fromProperties(writeConfig.getProps()).build());
       writeConfig.setDefaultOnCondition(!isClusteringConfigSet,
           HoodieClusteringConfig.newBuilder().withEngineType(engineType)
               .fromProperties(writeConfig.getProps()).build());
@@ -2587,10 +2611,10 @@ public class HoodieWriteConfig extends HoodieConfig {
       if (WriteConcurrencyMode.OPTIMISTIC_CONCURRENCY_CONTROL.value()
           .equalsIgnoreCase(writeConcurrencyMode)) {
         // In this case, we assume that the user takes care of setting the lock provider used
-        writeConfig.setValue(HoodieCompactionConfig.FAILED_WRITES_CLEANER_POLICY.key(),
+        writeConfig.setValue(HoodieCleanConfig.FAILED_WRITES_CLEANER_POLICY.key(),
             HoodieFailedWritesCleaningPolicy.LAZY.name());
         LOG.info(String.format("Automatically set %s=%s since optimistic concurrency control is used",
-            HoodieCompactionConfig.FAILED_WRITES_CLEANER_POLICY.key(),
+            HoodieCleanConfig.FAILED_WRITES_CLEANER_POLICY.key(),
             HoodieFailedWritesCleaningPolicy.LAZY.name()));
       }
     }
@@ -2602,9 +2626,34 @@ public class HoodieWriteConfig extends HoodieConfig {
       Objects.requireNonNull(writeConfig.getString(BASE_PATH));
       if (writeConfig.getString(WRITE_CONCURRENCY_MODE)
           .equalsIgnoreCase(WriteConcurrencyMode.OPTIMISTIC_CONCURRENCY_CONTROL.value())) {
-        ValidationUtils.checkArgument(!writeConfig.getString(HoodieCompactionConfig.FAILED_WRITES_CLEANER_POLICY)
+        ValidationUtils.checkArgument(!writeConfig.getString(HoodieCleanConfig.FAILED_WRITES_CLEANER_POLICY)
             .equals(HoodieFailedWritesCleaningPolicy.EAGER.name()), "To enable optimistic concurrency control, set hoodie.cleaner.policy.failed.writes=LAZY");
       }
+
+      HoodieCleaningPolicy.valueOf(writeConfig.getString(CLEANER_POLICY));
+      // Ensure minInstantsToKeep > cleanerCommitsRetained, otherwise we will archive some
+      // commit instant on timeline, that still has not been cleaned. Could miss some data via incr pull
+      int minInstantsToKeep = Integer.parseInt(writeConfig.getStringOrDefault(HoodieArchivalConfig.MIN_COMMITS_TO_KEEP));
+      int maxInstantsToKeep = Integer.parseInt(writeConfig.getStringOrDefault(HoodieArchivalConfig.MAX_COMMITS_TO_KEEP));
+      int cleanerCommitsRetained =
+          Integer.parseInt(writeConfig.getStringOrDefault(HoodieCleanConfig.CLEANER_COMMITS_RETAINED));
+      ValidationUtils.checkArgument(maxInstantsToKeep > minInstantsToKeep,
+          String.format(
+              "Increase %s=%d to be greater than %s=%d.",
+              HoodieArchivalConfig.MAX_COMMITS_TO_KEEP.key(), maxInstantsToKeep,
+              HoodieArchivalConfig.MIN_COMMITS_TO_KEEP.key(), minInstantsToKeep));
+      ValidationUtils.checkArgument(minInstantsToKeep > cleanerCommitsRetained,
+          String.format(
+              "Increase %s=%d to be greater than %s=%d. Otherwise, there is risk of incremental pull "
+                  + "missing data from few instants.",
+              HoodieArchivalConfig.MIN_COMMITS_TO_KEEP.key(), minInstantsToKeep,
+              HoodieCleanConfig.CLEANER_COMMITS_RETAINED.key(), cleanerCommitsRetained));
+
+      boolean inlineCompact = writeConfig.getBoolean(HoodieCompactionConfig.INLINE_COMPACT);
+      boolean inlineCompactSchedule = writeConfig.getBoolean(HoodieCompactionConfig.SCHEDULE_INLINE_COMPACT);
+      ValidationUtils.checkArgument(!(inlineCompact && inlineCompactSchedule), String.format("Either of inline compaction (%s) or "
+              + "schedule inline compaction (%s) can be enabled. Both can't be set to true at the same time. %s, %s", HoodieCompactionConfig.INLINE_COMPACT.key(),
+          HoodieCompactionConfig.SCHEDULE_INLINE_COMPACT.key(), inlineCompact, inlineCompactSchedule));
     }
 
     public HoodieWriteConfig build() {
