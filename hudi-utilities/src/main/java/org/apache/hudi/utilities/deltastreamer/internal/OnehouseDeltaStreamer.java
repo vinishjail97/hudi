@@ -315,7 +315,7 @@ public class OnehouseDeltaStreamer implements Serializable {
                 new HoodieMultiTableCommitStatsManager.TableCommitStats(resumeCheckpointStr, Option.empty()));
           }
         } catch (IOException exception) {
-          throw new HoodieException("Reading table config files failed " + exception);
+          throw new HoodieException("Reading table config files failed ", exception);
         }
       });
 
