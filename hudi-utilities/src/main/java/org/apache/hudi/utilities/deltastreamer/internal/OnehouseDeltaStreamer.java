@@ -489,6 +489,9 @@ public class OnehouseDeltaStreamer implements Serializable {
       }
 
       boolean canSchedule(long currentTimeMs) {
+        // Send a heartbeat metrics event to track the active ingestion job for this table.
+        deltaSync.getDeltaSync().getMetrics().updateDeltaStreamerHeartbeatTimestamp(currentTimeMs);
+
         // If an ingestion job is active, then do not schedule right away.
         if (isTableSyncActive.get()) {
           return false;

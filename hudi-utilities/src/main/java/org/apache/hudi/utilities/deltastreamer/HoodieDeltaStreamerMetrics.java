@@ -144,6 +144,16 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
     }
   }
 
+  /**
+   * Update heartbeat from deltastreamer ingestion job when active for a table.
+   * @param heartbeatTimestampMs the timestamp in milliseconds at which heartbeat is emitted.
+   */
+  public void updateDeltaStreamerHeartbeatTimestamp(long heartbeatTimestampMs) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "heartbeatTimestampMs"), heartbeatTimestampMs);
+    }
+  }
+
   public long getDurationInMs(long ctxDuration) {
     return ctxDuration / 1000000;
   }
