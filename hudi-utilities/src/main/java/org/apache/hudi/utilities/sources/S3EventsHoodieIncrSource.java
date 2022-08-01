@@ -28,6 +28,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.keygen.constant.KeyGeneratorOptions;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
@@ -232,14 +233,16 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
                   if (fs.exists(new Path(decodeUrl))) {
                     cloudFilesPerPartition.add(decodeUrl);
                   }
-                } catch (IOException e) {
-                  LOG.error(String.format("Error while checking path exists for %s ", decodeUrl), e);
+                } catch (IOException ioe) {
+                  LOG.error(String.format("Error while checking path exists for %s ", decodeUrl), ioe);
+                  throw new HoodieIOException(String.format("Error while checking path exists for %s ", decodeUrl), ioe);
                 }
               } else {
                 cloudFilesPerPartition.add(decodeUrl);
               }
             } catch (Exception exception) {
               LOG.warn("Failed to add cloud file ", exception);
+              throw new HoodieException("Failed to add cloud file", exception);
             }
           });
           return cloudFilesPerPartition.iterator();
