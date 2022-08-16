@@ -96,7 +96,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     static final String S3_ACTUAL_FILE_EXTENSIONS = "hoodie.deltastreamer.source.s3incr.file.extensions";
 
     static final String ATTACH_SOURCE_PARTITION_COLUMN = "hoodie.deltastreamer.source.s3incr.source.partition.exists";
-    static final Boolean DEFAULT_ATTACH_SOURCE_PARTITION_COLUMN = true;
+    static final Boolean DEFAULT_ATTACH_SOURCE_PARTITION_COLUMN = false;
   }
 
   public S3EventsHoodieIncrSource(
@@ -125,17 +125,17 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
 
   private Dataset addPartitionColumn(Dataset ds, List<String> cloudFiles) {
     if (props.getBoolean(Config.ATTACH_SOURCE_PARTITION_COLUMN, Config.DEFAULT_ATTACH_SOURCE_PARTITION_COLUMN)
-        && !StringUtils.isNullOrEmpty(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key())) {
+        && !StringUtils.isNullOrEmpty(props.getString(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key(), null))) {
       String partitionKey = props.getString(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key()).split(":")[0];
       String partitionPathPattern = String.format("%s=",partitionKey);
       String filePath = cloudFiles.get(0);
       List<String> nestedPartition = Arrays.stream(filePath.split("/"))
           .filter(level -> level.contains(partitionPathPattern)).collect(Collectors.toList());
       if (nestedPartition.size() > 1) {
-        throw new HoodieException("More than one level of partitioning exists");
+        throw new HoodieException(String.format("More than one level of partitioning exists in the files and one such file is %s", filePath));
       }
       if (nestedPartition.size() == 1) {
-        LOG.info(String.format("adding column name = %s to dataset",partitionKey));
+        LOG.info(String.format("adding column name = %s to dataset", partitionKey));
         ds = ds.withColumn(partitionKey, split(split(input_file_name(),
             partitionPathPattern).getItem(1), "/").getItem(0));
       }
@@ -241,8 +241,8 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
                 cloudFilesPerPartition.add(decodeUrl);
               }
             } catch (Exception exception) {
-              LOG.warn("Failed to add cloud file ", exception);
-              throw new HoodieException("Failed to add cloud file", exception);
+              LOG.warn(String.format("Failed to add cloud file %s", filePath), exception);
+              throw new HoodieException(String.format("Failed to add cloud file %s", filePath), exception);
             }
           });
           return cloudFilesPerPartition.iterator();
@@ -250,7 +250,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     Option<Dataset<Row>> dataset = Option.empty();
     if (!cloudFiles.isEmpty()) {
       DataFrameReader dataFrameReader = getDataFrameReader(fileFormat);
-      Dataset ds = addPartitionColumn(dataFrameReader.load(cloudFiles.toArray(new String[0])),cloudFiles);
+      Dataset ds = addPartitionColumn(dataFrameReader.load(cloudFiles.toArray(new String[0])), cloudFiles);
       dataset = Option.of(ds);
     }
     LOG.warn("Extracted distinct files " + cloudFiles.size()
