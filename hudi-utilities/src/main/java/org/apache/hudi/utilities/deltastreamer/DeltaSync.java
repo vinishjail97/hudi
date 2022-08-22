@@ -67,6 +67,8 @@ import org.apache.hudi.utilities.callback.kafka.HoodieWriteCommitKafkaCallbackCo
 import org.apache.hudi.utilities.callback.pulsar.HoodieWriteCommitPulsarCallback;
 import org.apache.hudi.utilities.callback.pulsar.HoodieWriteCommitPulsarCallbackConfig;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.Config;
+import org.apache.hudi.utilities.deltastreamer.internal.QuarantineEvent;
+import org.apache.hudi.utilities.deltastreamer.internal.QuarantineJsonEvent;
 import org.apache.hudi.utilities.exception.HoodieDeltaStreamerException;
 import org.apache.hudi.utilities.exception.HoodieSourceTimeoutException;
 import org.apache.hudi.utilities.schema.DelegatingSchemaProvider;
@@ -100,6 +102,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -111,6 +114,7 @@ import static org.apache.hudi.common.table.HoodieTableConfig.DROP_PARTITION_COLU
 import static org.apache.hudi.config.HoodieClusteringConfig.ASYNC_CLUSTERING_ENABLE;
 import static org.apache.hudi.config.HoodieClusteringConfig.INLINE_CLUSTERING;
 import static org.apache.hudi.config.HoodieCompactionConfig.INLINE_COMPACT;
+import static org.apache.hudi.config.HoodieQuarantineTableConfig.QUARANTINE_TABLE_ENABLED;
 import static org.apache.hudi.config.HoodieWriteConfig.AUTO_COMMIT_ENABLE;
 import static org.apache.hudi.config.HoodieWriteConfig.COMBINE_BEFORE_INSERT;
 import static org.apache.hudi.config.HoodieWriteConfig.COMBINE_BEFORE_UPSERT;
@@ -215,6 +219,8 @@ public class DeltaSync implements Serializable {
    */
   private transient SparkRDDWriteClient writeClient;
 
+  private Option<QuarantineTableWriterInterface> quarantineTableWriterInterfaceImpl = Option.empty();
+
   private transient HoodieDeltaStreamerMetrics metrics;
 
   private transient HoodieMetrics hoodieMetrics;
@@ -249,10 +255,13 @@ public class DeltaSync implements Serializable {
 
     this.metrics = new HoodieDeltaStreamerMetrics(getHoodieClientConfig(this.schemaProvider));
     this.hoodieMetrics = new HoodieMetrics(getHoodieClientConfig(this.schemaProvider));
-
-    this.formatAdapter = new SourceFormatAdapter(
-        UtilHelpers.createSource(cfg.sourceClassName, props, jssc, sparkSession, schemaProvider, metrics));
     this.conf = conf;
+    if (props.getBoolean(QUARANTINE_TABLE_ENABLED.key(),QUARANTINE_TABLE_ENABLED.defaultValue())) {
+      this.quarantineTableWriterInterfaceImpl = Option.of(new JsonQuarantineTableWriter(cfg,sparkSession,props,jssc,fs));
+    }
+    this.formatAdapter = new SourceFormatAdapter(
+        UtilHelpers.createSource(cfg.sourceClassName, props, jssc, sparkSession, schemaProvider, metrics),
+        this.quarantineTableWriterInterfaceImpl);
   }
 
   /**
@@ -435,6 +444,8 @@ public class DeltaSync implements Serializable {
       Option<Dataset<Row>> transformed =
           dataAndCheckpoint.getBatch().map(data -> transformer.get().apply(jssc, sparkSession, data, props));
 
+      transformed = formatAdapter.transformDatasetWithQuarantineEvents(transformed);
+
       checkpointStr = dataAndCheckpoint.getCheckpointForNextBatch();
       boolean reconcileSchema = props.getBoolean(DataSourceWriteOptions.RECONCILE_SCHEMA().key());
       if (this.userProvidedSchemaProvider != null && this.userProvidedSchemaProvider.getTargetSchema() != null) {
@@ -548,13 +559,13 @@ public class DeltaSync implements Serializable {
     return resumeCheckpointStr;
   }
 
-  protected Option<HoodieCommitMetadata> getLatestCommitMetadataWithValidCheckpointInfo(HoodieTimeline timeline) throws IOException {
-    return (Option<HoodieCommitMetadata>) timeline.getReverseOrderedInstants().map(instant -> {
+  protected Option<Pair<String, HoodieCommitMetadata>> getLatestInstantAndCommitMetadataWithValidCheckpointInfo(HoodieTimeline timeline) throws IOException {
+    return (Option<Pair<String, HoodieCommitMetadata>>) timeline.getReverseOrderedInstants().map(instant -> {
       try {
         HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
             .fromBytes(timeline.getInstantDetails(instant).get(), HoodieCommitMetadata.class);
         if (!StringUtils.isNullOrEmpty(commitMetadata.getMetadata(CHECKPOINT_KEY)) || !StringUtils.isNullOrEmpty(commitMetadata.getMetadata(CHECKPOINT_RESET_KEY))) {
-          return Option.of(commitMetadata);
+          return Option.of(Pair.of(instant, commitMetadata));
         } else {
           return Option.empty();
         }
@@ -562,6 +573,20 @@ public class DeltaSync implements Serializable {
         throw new HoodieIOException("Failed to parse HoodieCommitMetadata for " + instant.toString(), e);
       }
     }).filter(Option::isPresent).findFirst().orElse(Option.empty());
+  }
+
+  protected Option<HoodieCommitMetadata> getLatestCommitMetadataWithValidCheckpointInfo(HoodieTimeline timeline) throws IOException {
+    return getLatestInstantAndCommitMetadataWithValidCheckpointInfo(timeline).map(pair -> pair.getRight());
+  }
+
+  protected Option<String> getLatestInstantWithValidCheckpointInfo(Option<HoodieTimeline> timelineOpt) {
+    return timelineOpt.map(timeline -> {
+      try {
+        return getLatestInstantAndCommitMetadataWithValidCheckpointInfo(timeline).map(pair -> pair.getLeft());
+      } catch (IOException e) {
+        throw new HoodieIOException("failed to get latest instant with ValidCheckpointInfo", e);
+      }
+    }).orElse(Option.empty());
   }
 
   /**
@@ -630,6 +655,18 @@ public class DeltaSync implements Serializable {
             + totalErrorRecords + "/" + totalRecords);
       }
       String commitActionType = CommitUtils.getCommitActionType(cfg.operation, HoodieTableType.valueOf(cfg.tableType));
+      if (quarantineTableWriterInterfaceImpl.isPresent()) {
+        String qurantineTableStartInstant = quarantineTableWriterInterfaceImpl.get().startCommit();
+        quarantineTableWriterInterfaceImpl.get().addErrorEvents(getErrorEventsForWriteStatus(writeStatusRDD));
+        Option<String> commitedInstantTime = getLatestInstantWithValidCheckpointInfo(commitTimelineOpt);
+        boolean quarantineTableSuccess = quarantineTableWriterInterfaceImpl.get().upsertAndCommit(qurantineTableStartInstant, instantTime, commitedInstantTime);
+        if (!quarantineTableSuccess) {
+          LOG.info("Qurantine Table Commit " + qurantineTableStartInstant + " failed!");
+          LOG.info("Commit " + instantTime + " failed!");
+          writeClient.rollback(instantTime);
+          throw new HoodieException("Qurantine Table Commit " + qurantineTableStartInstant + " failed!");
+        }
+      }
       boolean success = writeClient.commit(instantTime, writeStatusRDD, Option.of(checkpointCommitMetadata), commitActionType, Collections.emptyMap());
       if (success) {
         LOG.info("Commit " + instantTime + " successful!");
@@ -664,6 +701,29 @@ public class DeltaSync implements Serializable {
     // Send DeltaStreamer Metrics
     metrics.updateDeltaStreamerMetrics(overallTimeMs);
     return Pair.of(scheduledCompactionInstant, writeStatusRDD);
+  }
+
+  protected JavaRDD<QuarantineJsonEvent> getErrorEventsForWriteStatus(JavaRDD<WriteStatus> writeStatusRDD) {
+    HoodieWriteConfig config = writeClient.getConfig();
+
+    return writeStatusRDD
+        .filter(WriteStatus::hasErrors)
+        .flatMap(x -> {
+          Schema schema = Schema.parse(config.getSchema());
+          Properties props = config.getPayloadConfig().getProps();
+          return x.getFailedRecords().stream()
+              .map(z -> {
+                HoodieRecordPayload hoodieRecordPayload = (HoodieRecordPayload)z.getData();
+                String recordStr;
+                try {
+                  recordStr = (String) hoodieRecordPayload.getInsertValue(schema,
+                      props).map(value -> value.toString()).get();
+                } catch (IOException e) {
+                  recordStr = null;
+                }
+                return new QuarantineJsonEvent(recordStr, QuarantineEvent.QuarantineReason.HUDI_WRITE_FAILURES);
+              }).iterator();
+        });
   }
 
   /**
