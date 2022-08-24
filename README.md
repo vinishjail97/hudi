@@ -30,7 +30,7 @@ git push origin.
 
 # When you want to pull changes from upstream you can just fetch the remote and rebase on top of your work.
 git fetch upstream
-git rebase upstream/master
+git merge upstream/master
 #And solve the conflicts if any
 git push --force origin master
 ```
