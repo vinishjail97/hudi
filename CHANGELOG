@@ -25,3 +25,9 @@ b1a9a86f2 Fix npe due to min sync time ms
 2a4e71696 Merge pull request #28 from onehouseinc/hotfix-serializable-hadoop-conf
 eb9723755 serializable-hadoop-conf needed to be passed in s3Incr source
 0cca099e1 Upgrade to version release-v0.4.0
+
+---[2022-08-25 21:57:06] [release-v0.6.0] Adding release tag for hudi-internal release-v0.6.0---
+74b46263d7 Merge OSS master (#54)
+5eeef5c1c8 Update README.md
+937458f797 Merge pull request #34 from onehouseinc/support_quarantine_table
+21d578adf5 Quarantine table support for error events
