@@ -41,8 +41,10 @@ import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.DataFrameReader;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import static org.apache.spark.sql.functions.input_file_name;
@@ -211,7 +213,6 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     String s3FS = props.getString(Config.S3_FS_PREFIX, "s3").toLowerCase();
     String s3Prefix = s3FS + "://";
 
-    // Extract distinct file keys from s3 meta hoodie table
     // Create S3 paths
     final boolean checkExists = props.getBoolean(Config.ENABLE_EXISTS_CHECK, Config.DEFAULT_ENABLE_EXISTS_CHECK);
     SerializableConfiguration serializableConfiguration = new SerializableConfiguration(sparkContext.hadoopConfiguration());
@@ -219,43 +220,42 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
         .filter(filter)
         .select("s3.bucket.name", "s3.object.key")
         .distinct()
-        .rdd().toJavaRDD().mapPartitions(fileListIterator -> {
+        .mapPartitions((MapPartitionsFunction<Row, String>)  fileListIterator -> {
           List<String> cloudFilesPerPartition = new ArrayList<>();
+          final Configuration configuration = serializableConfiguration.newCopy();
           fileListIterator.forEachRemaining(row -> {
-            final Configuration configuration = serializableConfiguration.newCopy();
             String bucket = row.getString(0);
             String filePath = s3Prefix + bucket + "/" + row.getString(1);
+            String decodeUrl = null;
             try {
-              String decodeUrl = URLDecoder.decode(filePath, StandardCharsets.UTF_8.name());
+              decodeUrl = URLDecoder.decode(filePath, StandardCharsets.UTF_8.name());
               if (checkExists) {
                 FileSystem fs = FSUtils.getFs(s3Prefix + bucket, configuration);
-                try {
-                  if (fs.exists(new Path(decodeUrl))) {
-                    cloudFilesPerPartition.add(decodeUrl);
-                  }
-                } catch (IOException ioe) {
-                  LOG.error(String.format("Error while checking path exists for %s ", decodeUrl), ioe);
-                  throw new HoodieIOException(String.format("Error while checking path exists for %s ", decodeUrl), ioe);
+                if (fs.exists(new Path(decodeUrl))) {
+                  cloudFilesPerPartition.add(decodeUrl);
                 }
               } else {
                 cloudFilesPerPartition.add(decodeUrl);
               }
-            } catch (Exception exception) {
-              LOG.warn(String.format("Failed to add cloud file %s", filePath), exception);
-              throw new HoodieException(String.format("Failed to add cloud file %s", filePath), exception);
+            } catch (IOException e) {
+              LOG.error(String.format("Error while checking path exists for %s ", decodeUrl), e);
+              throw new HoodieIOException(String.format("Error while checking path exists for %s ", decodeUrl), e);
+            } catch (Throwable e) {
+              LOG.warn("Failed to add cloud file ", e);
+              throw new HoodieException("Failed to add cloud file", e);
             }
           });
           return cloudFilesPerPartition.iterator();
-        }).collect();
+        }, Encoders.STRING()).collectAsList();
+
     Option<Dataset<Row>> dataset = Option.empty();
     if (!cloudFiles.isEmpty()) {
       DataFrameReader dataFrameReader = getDataFrameReader(fileFormat);
       Dataset ds = addPartitionColumn(dataFrameReader.load(cloudFiles.toArray(new String[0])), cloudFiles);
       dataset = Option.of(ds);
     }
-    LOG.warn("Extracted distinct files " + cloudFiles.size()
+    LOG.debug("Extracted distinct files " + cloudFiles.size()
         + " and some samples " + cloudFiles.stream().limit(10).collect(Collectors.toList()));
     return Pair.of(dataset, queryTypeAndInstantEndpts.getRight().getRight());
   }
-
 }

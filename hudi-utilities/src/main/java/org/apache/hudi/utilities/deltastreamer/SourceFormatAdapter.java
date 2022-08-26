@@ -21,6 +21,7 @@ package org.apache.hudi.utilities.deltastreamer;
 import org.apache.hudi.AvroConversionUtils;
 import org.apache.hudi.HoodieSparkUtils;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.deltastreamer.internal.QuarantineEvent;
 import org.apache.hudi.utilities.deltastreamer.internal.QuarantineJsonEvent;
@@ -44,11 +45,12 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
 import scala.util.Either;
-
 
 import static org.apache.hudi.utilities.deltastreamer.QuarantineTableWriterInterface.QUARANTINE_TABLE_CURRUPT_RECORD_COL_NAME;
 import static org.apache.hudi.utilities.schema.RowBasedSchemaProvider.HOODIE_RECORD_NAMESPACE;
@@ -57,7 +59,7 @@ import static org.apache.hudi.utilities.schema.RowBasedSchemaProvider.HOODIE_REC
 /**
  * Adapts data-format provided by the source to the data-format required by the client (DeltaStreamer).
  */
-public final class SourceFormatAdapter {
+public final class SourceFormatAdapter implements Closeable {
 
   private final Source source;
 
@@ -195,4 +197,14 @@ public final class SourceFormatAdapter {
     return source;
   }
 
+  @Override
+  public void close() {
+    if (source instanceof Closeable) {
+      try {
+        ((Closeable) source).close();
+      } catch (IOException e) {
+        throw new HoodieIOException(String.format("Failed to shutdown the source (%s)", source.getClass().getName()), e);
+      }
+    }
+  }
 }

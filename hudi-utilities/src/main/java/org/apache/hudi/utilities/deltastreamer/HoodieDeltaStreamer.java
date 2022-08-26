@@ -305,6 +305,9 @@ public class HoodieDeltaStreamer implements Serializable {
     @Parameter(names = {"--enable-sync"}, description = "Enable syncing meta")
     public Boolean enableMetaSync = false;
 
+    @Parameter(names = {"--force-empty-sync"}, description = "Force syncing meta even on empty commit")
+    public Boolean forceEmptyMetaSync = false;
+
     @Parameter(names = {"--sync-tool-classes"}, description = "Meta sync client tool, using comma to separate multi tools")
     public String syncClientToolClassNames = HiveSyncTool.class.getName();
 
@@ -443,6 +446,7 @@ public class HoodieDeltaStreamer implements Serializable {
               && Objects.equals(filterDupes, config.filterDupes)
               && Objects.equals(enableHiveSync, config.enableHiveSync)
               && Objects.equals(enableMetaSync, config.enableMetaSync)
+              && Objects.equals(forceEmptyMetaSync, config.forceEmptyMetaSync)
               && Objects.equals(syncClientToolClassNames, config.syncClientToolClassNames)
               && Objects.equals(maxPendingCompactions, config.maxPendingCompactions)
               && Objects.equals(maxPendingClustering, config.maxPendingClustering)
@@ -468,7 +472,7 @@ public class HoodieDeltaStreamer implements Serializable {
               baseFileFormat, propsFilePath, configs, sourceClassName,
               sourceOrderingField, payloadClassName, schemaProviderClassName,
               transformerClassNames, sourceLimit, operation, filterDupes,
-              enableHiveSync, enableMetaSync, syncClientToolClassNames, maxPendingCompactions, maxPendingClustering,
+              enableHiveSync, enableMetaSync, forceEmptyMetaSync, syncClientToolClassNames, maxPendingCompactions, maxPendingClustering,
               continuousMode, minSyncIntervalSeconds, sparkMaster, commitOnErrors,
               deltaSyncSchedulingWeight, compactSchedulingWeight, clusterSchedulingWeight, deltaSyncSchedulingMinShare,
               compactSchedulingMinShare, clusterSchedulingMinShare, forceDisableCompaction, checkpoint,
@@ -494,6 +498,7 @@ public class HoodieDeltaStreamer implements Serializable {
               + ", filterDupes=" + filterDupes
               + ", enableHiveSync=" + enableHiveSync
               + ", enableMetaSync=" + enableMetaSync
+              + ", forceEmptyMetaSync=" + forceEmptyMetaSync
               + ", syncClientToolClassNames=" + syncClientToolClassNames
               + ", maxPendingCompactions=" + maxPendingCompactions
               + ", maxPendingClustering=" + maxPendingClustering
@@ -684,8 +689,6 @@ public class HoodieDeltaStreamer implements Serializable {
           while (!isShutdownRequested()) {
             try {
               long start = System.currentTimeMillis();
-              // Send a heartbeat metrics event to track the active ingestion job for this table.
-              deltaSync.getMetrics().updateDeltaStreamerHeartbeatTimestamp(start);
               Option<Pair<Option<String>, JavaRDD<WriteStatus>>> scheduledCompactionInstantAndRDD = Option.ofNullable(deltaSync.syncOnce());
               if (scheduledCompactionInstantAndRDD.isPresent() && scheduledCompactionInstantAndRDD.get().getLeft().isPresent()) {
                 LOG.info("Enqueuing new pending compaction instant (" + scheduledCompactionInstantAndRDD.get().getLeft() + ")");
