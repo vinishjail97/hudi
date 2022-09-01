@@ -46,6 +46,7 @@ import java.util.Map;
 public class FilebasedSchemaProvider extends SchemaProvider {
 
   private static final String AVRO_NAME = "name";
+
   /**
    * Configs supported.
    */
@@ -66,36 +67,36 @@ public class FilebasedSchemaProvider extends SchemaProvider {
    * Please refer https://avro.apache.org/docs/1.11.1/specification/ for additional details.
    */
   private String renameForAvroNamingRules(String s) {
-     if (s == null || s.isEmpty()) {
-       return s;
-     }
-     StringBuilder sb = new StringBuilder();
-     for (int i = 0; i < s.length(); i++) {
-       Character c = s.charAt(i);
-       if (Character.isLetter(c) || c == '_') {
-          sb.append(c);
-       } else if (Character.isDigit(c)) {
-          sb.append(i == 0 ? '_' : c);
-       } else {
-          // invalid character here. replace with '_';
-          sb.append('_');
-       }
-     }
-     return sb.toString();
+    if (s == null || s.isEmpty()) {
+      return s;
+    }
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < s.length(); i++) {
+      Character c = s.charAt(i);
+      if (Character.isLetter(c) || c == '_') {
+        sb.append(c);
+      } else if (Character.isDigit(c)) {
+        sb.append(i == 0 ? '_' : c);
+      } else {
+        // invalid character here. replace with '_';
+        sb.append('_');
+      }
+    }
+    return sb.toString();
   }
 
   private List<Object> transformList(List<Object> src) {
-     List<Object> target = new ArrayList<>();
-     for (Object obj : src) {
-       if (obj instanceof List) {
-         target.add(transformList((List<Object>)obj));
-       } else if (obj instanceof Map) {
-         target.add(transformMap((Map<String,Object>)obj));
-       } else {
-         target.add(obj);
-       }
-     }
-     return target;
+    List<Object> target = new ArrayList<>();
+    for (Object obj : src) {
+      if (obj instanceof List) {
+        target.add(transformList((List<Object>) obj));
+      } else if (obj instanceof Map) {
+        target.add(transformMap((Map<String, Object>) obj));
+      } else {
+        target.add(obj);
+      }
+    }
+    return target;
   }
 
   private Map<String, Object> transformMap(Map<String, Object> src) {
@@ -129,13 +130,13 @@ public class FilebasedSchemaProvider extends SchemaProvider {
   }
 
   private ParseResult parseAvroSchemaWrapper(String schemaStr) {
-     try {
-        Schema avroSchema = parseAvroSchemaWithRenaming(schemaStr);
-        return new ParseResult(avroSchema, false);
-     } catch (Exception ex) {
-       // for any exception, set parsing to failed and return.
-       return new ParseResult(null, true);
-     }
+    try {
+      Schema avroSchema = parseAvroSchemaWithRenaming(schemaStr);
+      return new ParseResult(avroSchema, false);
+    } catch (Exception ex) {
+      // for any exception, set parsing to failed and return.
+      return new ParseResult(null, true);
+    }
   }
 
   /*
@@ -150,25 +151,25 @@ public class FilebasedSchemaProvider extends SchemaProvider {
       // Here modify avro names and try parsing once again.
       ParseResult parseResult = parseAvroSchemaWrapper(schemaStr);
       if (parseResult.isParsingFailed()) {
-         // throw original exception.
-         throw spe;
+        // throw original exception.
+        throw spe;
       }
       return parseResult.getParsedSchema();
     }
   }
 
   private Schema readAvroSchemaFromFile(String schemaPath) {
-     String schemaStr;
-     FSDataInputStream in = null;
-     try {
-       in = this.fs.open(new Path(schemaPath));
-       schemaStr = FileIOUtils.readAsUTFString(in);
-     } catch (IOException ioe) {
-       throw new HoodieIOException(String.format("Error reading schema from file %s", schemaPath), ioe);
-     } finally {
-       IOUtils.closeStream(in);
-     }
-     return parseAvroSchema(schemaStr);
+    String schemaStr;
+    FSDataInputStream in = null;
+    try {
+      in = this.fs.open(new Path(schemaPath));
+      schemaStr = FileIOUtils.readAsUTFString(in);
+    } catch (IOException ioe) {
+      throw new HoodieIOException(String.format("Error reading schema from file %s", schemaPath), ioe);
+    } finally {
+      IOUtils.closeStream(in);
+    }
+    return parseAvroSchema(schemaStr);
   }
 
   public FilebasedSchemaProvider(TypedProperties props, JavaSparkContext jssc) {
@@ -197,20 +198,20 @@ public class FilebasedSchemaProvider extends SchemaProvider {
   }
 
   private static class ParseResult {
-     private Schema parsedSchema;
-     private boolean parsingFailed;
+    private Schema parsedSchema;
+    private boolean parsingFailed;
 
-     public ParseResult(Schema parsedSchema, boolean parsingFailed) {
-        this.parsedSchema = parsedSchema;
-        this.parsingFailed = parsingFailed;
-     }
+    public ParseResult(Schema parsedSchema, boolean parsingFailed) {
+      this.parsedSchema = parsedSchema;
+      this.parsingFailed = parsingFailed;
+    }
 
-     public Schema getParsedSchema() {
-        return this.parsedSchema;
-     }
+    public Schema getParsedSchema() {
+      return this.parsedSchema;
+    }
 
-     public boolean isParsingFailed() {
-        return this.parsingFailed;
-     }
+    public boolean isParsingFailed() {
+      return this.parsingFailed;
+    }
   }
 }
