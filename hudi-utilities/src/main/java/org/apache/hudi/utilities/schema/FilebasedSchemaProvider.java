@@ -19,6 +19,7 @@
 package org.apache.hudi.utilities.schema;
 
 import org.apache.hudi.DataSourceUtils;
+import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.util.FileIOUtils;
@@ -61,33 +62,9 @@ public class FilebasedSchemaProvider extends SchemaProvider {
 
   protected Schema targetSchema;
 
-  /*
-   * Replace all invalid characters with "_";
-   * Avro names should start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_].
-   * Please refer https://avro.apache.org/docs/1.11.1/specification/ for additional details.
-   */
-  private String renameForAvroNamingRules(String s) {
-    if (s == null || s.isEmpty()) {
-      return s;
-    }
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < s.length(); i++) {
-      Character c = s.charAt(i);
-      if (Character.isLetter(c) || c == '_') {
-        sb.append(c);
-      } else if (Character.isDigit(c)) {
-        sb.append(i == 0 ? '_' : c);
-      } else {
-        // invalid character here. replace with '_';
-        sb.append('_');
-      }
-    }
-    return sb.toString();
-  }
-
   private List<Object> transformList(List<Object> src) {
     List<Object> target = new ArrayList<>();
-    for (Object obj : src) {
+    src.forEach(obj -> {
       if (obj instanceof List) {
         target.add(transformList((List<Object>) obj));
       } else if (obj instanceof Map) {
@@ -95,14 +72,13 @@ public class FilebasedSchemaProvider extends SchemaProvider {
       } else {
         target.add(obj);
       }
-    }
+    });
     return target;
   }
 
   private Map<String, Object> transformMap(Map<String, Object> src) {
     Map<String, Object> target = new HashMap<>();
-    for (Map.Entry<String, Object> e : src.entrySet()) {
-      Object currValue = e.getValue();
+    src.forEach((currKey, currValue) -> {
       Object modifiedValue;
       if (currValue instanceof List) {
         modifiedValue = transformList((List<Object>) currValue);
@@ -111,14 +87,14 @@ public class FilebasedSchemaProvider extends SchemaProvider {
       } else if (currValue instanceof String) {
         String currentStrValue = (String) currValue;
         modifiedValue = currentStrValue;
-        if (e.getKey().equals(AVRO_NAME)) {
-          modifiedValue = renameForAvroNamingRules(currentStrValue);
+        if (currKey.equals(AVRO_NAME)) {
+          modifiedValue = HoodieAvroUtils.sanitizeName(currentStrValue);
         }
       } else {
         modifiedValue = currValue;
       }
-      target.put(e.getKey(), modifiedValue);
-    }
+      target.put(currKey, modifiedValue);
+    });
     return target;
   }
 
@@ -140,15 +116,15 @@ public class FilebasedSchemaProvider extends SchemaProvider {
   }
 
   /*
-   * We first rely on Avro to parse and we try to repair names only for those failed.
-   * This way we can improve our repair process without breaking existing functionality.
-   * For example we don't support repairing where multiple named schemas are defined in a file.
+   * We first rely on Avro to parse and then try to rename only for those failed.
+   * This way we can improve our parsing capabilities without breaking existing functionality.
+   * For example we don't yet support multiple named schemas defined in a file.
    */
   private Schema parseAvroSchema(String schemaStr) {
     try {
       return new Schema.Parser().parse(schemaStr);
     } catch (SchemaParseException spe) {
-      // Here modify avro names and try parsing once again.
+      // Rename avro fields and try parsing once again.
       ParseResult parseResult = parseAvroSchemaWrapper(schemaStr);
       if (parseResult.isParsingFailed()) {
         // throw original exception.

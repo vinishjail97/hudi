@@ -73,13 +73,13 @@ public class TestFilebasedSchemaProvider extends UtilitiesTestBase {
   }
 
   private Schema generateRenamedSchema() {
-    Schema addressSchema = SchemaBuilder.record("_Address").fields()
-        .requiredString("_stree9add_ress")
-        .requiredString("cit_y_")
+    Schema addressSchema = SchemaBuilder.record("__Address").fields()
+        .requiredString("__stree9add__ress")
+        .requiredString("cit__y__")
         .endRecord();
     Schema personSchema = SchemaBuilder.record("Person").fields()
-        .requiredString("_firstname")
-        .requiredString("_lastname")
+        .requiredString("__firstname")
+        .requiredString("__lastname")
         .name("address").type(addressSchema).noDefault()
         .endRecord();
     return personSchema;
