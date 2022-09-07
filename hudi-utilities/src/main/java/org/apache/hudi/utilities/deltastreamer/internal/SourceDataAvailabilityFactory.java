@@ -27,7 +27,6 @@ import org.apache.spark.api.java.JavaSparkContext;
 
 import static org.apache.hudi.config.OnehouseInternalDeltastreamerConfig.DELTASTREAMER_SOURCE_CLASS_NAME;
 import static org.apache.hudi.utilities.deltastreamer.internal.KafkaSourceDataAvailabilityEstimator.KafkaClusterInfo.KAFKA_SOURCE_RATE_ESTIMATOR_KEY;
-import static org.apache.hudi.utilities.deltastreamer.internal.S3IncrDataAvailabilityEstimator.S3MetadataTableInfo.S3_INCR_SOURCE_RATE_ESTIMATOR_KEY;
 
 public class SourceDataAvailabilityFactory {
 
