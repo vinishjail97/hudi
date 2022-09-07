@@ -31,6 +31,16 @@ import org.apache.spark.sql.SparkSession;
 
 public abstract class RowSource extends Source<Dataset<Row>> {
 
+  public static class Config {
+    // renames invalid columns both in the data read from source and also in the schema provider.
+    // invalid definition here goes by avro naming convention (https://avro.apache.org/docs/current/spec.html#names).
+    public static final String RENAME_INVALID_COLUMN_NAMES = "hoodie.deltastreamer.source.rename.invalid.columns";
+    static final Boolean DEFAULT_RENAME_INVALID_COLUMNS = false;
+
+    // Replacement for invalid characters in avro names.
+    public static final String REPLACEMENT_FOR_INVALID_CHARACTERS = "hoodie.deltastreamer.source.replacement.for.invalid.char";
+  }
+
   public RowSource(TypedProperties props, JavaSparkContext sparkContext, SparkSession sparkSession,
       SchemaProvider schemaProvider) {
     super(props, sparkContext, sparkSession, schemaProvider, SourceType.ROW);

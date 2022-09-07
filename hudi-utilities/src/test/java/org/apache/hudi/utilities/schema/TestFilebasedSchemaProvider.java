@@ -74,7 +74,7 @@ public class TestFilebasedSchemaProvider extends UtilitiesTestBase {
 
   private Schema generateRenamedSchema() {
     Schema addressSchema = SchemaBuilder.record("__Address").fields()
-        .requiredString("__stree9add__ress")
+        .nullableString("__stree9add__ress", "@@@any_address")
         .requiredString("cit__y__")
         .endRecord();
     Schema personSchema = SchemaBuilder.record("Person").fields()

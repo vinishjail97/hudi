@@ -23,8 +23,10 @@ import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.util.FileIOUtils;
+import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieIOException;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.Schema;
 import org.apache.avro.SchemaParseException;
@@ -40,6 +42,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * A simple schema provider, that reads off files on DFS.
@@ -63,43 +66,39 @@ public class FilebasedSchemaProvider extends SchemaProvider {
   protected Schema targetSchema;
 
   private List<Object> transformList(List<Object> src) {
-    List<Object> target = new ArrayList<>();
-    src.forEach(obj -> {
+    return src.stream().map(obj -> {
       if (obj instanceof List) {
-        target.add(transformList((List<Object>) obj));
+        return transformList((List<Object>) obj);
       } else if (obj instanceof Map) {
-        target.add(transformMap((Map<String, Object>) obj));
+        return transformMap((Map<String, Object>) obj);
       } else {
-        target.add(obj);
+        return obj;
       }
-    });
-    return target;
+    }).collect(Collectors.toList());
   }
 
   private Map<String, Object> transformMap(Map<String, Object> src) {
-    Map<String, Object> target = new HashMap<>();
-    src.forEach((currKey, currValue) -> {
-      Object modifiedValue;
-      if (currValue instanceof List) {
-        modifiedValue = transformList((List<Object>) currValue);
-      } else if (currValue instanceof Map) {
-        modifiedValue = transformMap((Map<String, Object>) currValue);
-      } else if (currValue instanceof String) {
-        String currentStrValue = (String) currValue;
-        modifiedValue = currentStrValue;
-        if (currKey.equals(AVRO_NAME)) {
-          modifiedValue = HoodieAvroUtils.sanitizeName(currentStrValue);
-        }
-      } else {
-        modifiedValue = currValue;
-      }
-      target.put(currKey, modifiedValue);
-    });
-    return target;
+    return src.entrySet().stream()
+        .map(kv -> {
+          if (kv.getValue() instanceof List) {
+            return Pair.of(kv.getKey(), transformList((List<Object>) kv.getValue()));
+          } else if (kv.getValue() instanceof Map) {
+            return Pair.of(kv.getKey(), transformMap((Map<String, Object>) kv.getValue()));
+          } else if (kv.getValue() instanceof String) {
+            String currentStrValue = (String) kv.getValue();
+            if (kv.getKey().equals(AVRO_NAME)) {
+              return Pair.of(kv.getKey(), HoodieAvroUtils.sanitizeName(currentStrValue));
+            }
+            return Pair.of(kv.getKey(), currentStrValue);
+          } else {
+            return Pair.of(kv.getKey(), kv.getValue());
+          }
+        }).collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
   }
 
   private Schema parseAvroSchemaWithRenaming(String schemaStr) throws IOException {
     ObjectMapper objectMapper = new ObjectMapper();
+    objectMapper.enable(JsonParser.Feature.ALLOW_COMMENTS);
     Map<String, Object> objMap = objectMapper.readValue(schemaStr, Map.class);
     Map<String, Object> modifiedMap = transformMap(objMap);
     return new Schema.Parser().parse(objectMapper.writeValueAsString(modifiedMap));
