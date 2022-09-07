@@ -118,7 +118,6 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.apache.hudi.common.model.HoodieCommitMetadata.SCHEMA_KEY;
-import static org.apache.hudi.config.OnehouseInternalDeltastreamerConfig.MUTLI_WRITER_SOURCE_CHECKPOINT_ID;
 
 /**
  * Abstract Write Client providing functionality for performing commit, index updates and rollback
