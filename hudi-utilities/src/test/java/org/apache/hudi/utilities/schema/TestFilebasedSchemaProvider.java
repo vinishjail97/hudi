@@ -30,7 +30,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Unit tests for {@link FilebasedSchemaProvider}.
@@ -89,13 +89,13 @@ public class TestFilebasedSchemaProvider extends UtilitiesTestBase {
   public void properlyFormattedNestedSchemaTest() throws IOException {
     this.schemaProvider = new FilebasedSchemaProvider(
         Helpers.setupSchemaOnDFS("delta-streamer-config", "file_schema_provider_valid.avsc"), jsc);
-    assertTrue(this.schemaProvider.getSourceSchema().equals(generateProperFormattedSchema()));
+    assertEquals(this.schemaProvider.getSourceSchema(), generateProperFormattedSchema());
   }
 
   @Test
   public void renameBadlyFormattedSchemaTest() throws IOException {
     this.schemaProvider = new FilebasedSchemaProvider(
         Helpers.setupSchemaOnDFS("delta-streamer-config", "file_schema_provider_invalid.avsc"), jsc);
-    assertTrue(this.schemaProvider.getSourceSchema().equals(generateRenamedSchema()));
+    assertEquals(this.schemaProvider.getSourceSchema(), generateRenamedSchema());
   }
 }

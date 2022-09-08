@@ -23,6 +23,7 @@ import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.util.FileIOUtils;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieIOException;
 
@@ -37,9 +38,7 @@ import org.apache.hadoop.io.IOUtils;
 import org.apache.spark.api.java.JavaSparkContext;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -49,7 +48,7 @@ import java.util.stream.Collectors;
  */
 public class FilebasedSchemaProvider extends SchemaProvider {
 
-  private static final String AVRO_NAME = "name";
+  private static final String AVRO_FIELD_NAME_KEY = "name";
 
   /**
    * Configs supported.
@@ -65,7 +64,7 @@ public class FilebasedSchemaProvider extends SchemaProvider {
 
   protected Schema targetSchema;
 
-  private List<Object> transformList(List<Object> src) {
+  private static List<Object> transformList(List<Object> src) {
     return src.stream().map(obj -> {
       if (obj instanceof List) {
         return transformList((List<Object>) obj);
@@ -77,7 +76,7 @@ public class FilebasedSchemaProvider extends SchemaProvider {
     }).collect(Collectors.toList());
   }
 
-  private Map<String, Object> transformMap(Map<String, Object> src) {
+  private static Map<String, Object> transformMap(Map<String, Object> src) {
     return src.entrySet().stream()
         .map(kv -> {
           if (kv.getValue() instanceof List) {
@@ -86,7 +85,7 @@ public class FilebasedSchemaProvider extends SchemaProvider {
             return Pair.of(kv.getKey(), transformMap((Map<String, Object>) kv.getValue()));
           } else if (kv.getValue() instanceof String) {
             String currentStrValue = (String) kv.getValue();
-            if (kv.getKey().equals(AVRO_NAME)) {
+            if (kv.getKey().equals(AVRO_FIELD_NAME_KEY)) {
               return Pair.of(kv.getKey(), HoodieAvroUtils.sanitizeName(currentStrValue));
             }
             return Pair.of(kv.getKey(), currentStrValue);
@@ -96,21 +95,15 @@ public class FilebasedSchemaProvider extends SchemaProvider {
         }).collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
   }
 
-  private Schema parseAvroSchemaWithRenaming(String schemaStr) throws IOException {
-    ObjectMapper objectMapper = new ObjectMapper();
-    objectMapper.enable(JsonParser.Feature.ALLOW_COMMENTS);
-    Map<String, Object> objMap = objectMapper.readValue(schemaStr, Map.class);
-    Map<String, Object> modifiedMap = transformMap(objMap);
-    return new Schema.Parser().parse(objectMapper.writeValueAsString(modifiedMap));
-  }
-
-  private ParseResult parseAvroSchemaWrapper(String schemaStr) {
+  private static Option<Schema> parseSanitizedAvroSchemaNoThrow(String schemaStr) {
     try {
-      Schema avroSchema = parseAvroSchemaWithRenaming(schemaStr);
-      return new ParseResult(avroSchema, false);
+      ObjectMapper objectMapper = new ObjectMapper();
+      objectMapper.enable(JsonParser.Feature.ALLOW_COMMENTS);
+      Map<String, Object> objMap = objectMapper.readValue(schemaStr, Map.class);
+      Map<String, Object> modifiedMap = transformMap(objMap);
+      return Option.of(new Schema.Parser().parse(objectMapper.writeValueAsString(modifiedMap)));
     } catch (Exception ex) {
-      // for any exception, set parsing to failed and return.
-      return new ParseResult(null, true);
+      return Option.empty();
     }
   }
 
@@ -119,30 +112,32 @@ public class FilebasedSchemaProvider extends SchemaProvider {
    * This way we can improve our parsing capabilities without breaking existing functionality.
    * For example we don't yet support multiple named schemas defined in a file.
    */
-  private Schema parseAvroSchema(String schemaStr) {
+  private static Schema parseAvroSchema(String schemaStr) {
     try {
       return new Schema.Parser().parse(schemaStr);
     } catch (SchemaParseException spe) {
       // Rename avro fields and try parsing once again.
-      ParseResult parseResult = parseAvroSchemaWrapper(schemaStr);
-      if (parseResult.isParsingFailed()) {
+      Option<Schema> parseResult = parseSanitizedAvroSchemaNoThrow(schemaStr);
+      if (!parseResult.isPresent()) {
         // throw original exception.
         throw spe;
       }
-      return parseResult.getParsedSchema();
+      return parseResult.get();
     }
   }
 
-  private Schema readAvroSchemaFromFile(String schemaPath) {
+  private static Schema readAvroSchemaFromFile(String schemaPath, FileSystem fs) {
     String schemaStr;
     FSDataInputStream in = null;
     try {
-      in = this.fs.open(new Path(schemaPath));
+      in = fs.open(new Path(schemaPath));
       schemaStr = FileIOUtils.readAsUTFString(in);
     } catch (IOException ioe) {
       throw new HoodieIOException(String.format("Error reading schema from file %s", schemaPath), ioe);
     } finally {
-      IOUtils.closeStream(in);
+      if (in != null) {
+        IOUtils.closeStream(in);
+      }
     }
     return parseAvroSchema(schemaStr);
   }
@@ -152,9 +147,9 @@ public class FilebasedSchemaProvider extends SchemaProvider {
     DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(Config.SOURCE_SCHEMA_FILE_PROP));
     String sourceFile = props.getString(Config.SOURCE_SCHEMA_FILE_PROP);
     this.fs = FSUtils.getFs(sourceFile, jssc.hadoopConfiguration(), true);
-    this.sourceSchema = readAvroSchemaFromFile(sourceFile);
+    this.sourceSchema = readAvroSchemaFromFile(sourceFile, this.fs);
     if (props.containsKey(Config.TARGET_SCHEMA_FILE_PROP)) {
-      this.targetSchema = readAvroSchemaFromFile(props.getString(Config.TARGET_SCHEMA_FILE_PROP));
+      this.targetSchema = readAvroSchemaFromFile(props.getString(Config.TARGET_SCHEMA_FILE_PROP), this.fs);
     }
   }
 
@@ -169,24 +164,6 @@ public class FilebasedSchemaProvider extends SchemaProvider {
       return targetSchema;
     } else {
       return super.getTargetSchema();
-    }
-  }
-
-  private static class ParseResult {
-    private Schema parsedSchema;
-    private boolean parsingFailed;
-
-    public ParseResult(Schema parsedSchema, boolean parsingFailed) {
-      this.parsedSchema = parsedSchema;
-      this.parsingFailed = parsingFailed;
-    }
-
-    public Schema getParsedSchema() {
-      return this.parsedSchema;
-    }
-
-    public boolean isParsingFailed() {
-      return this.parsingFailed;
     }
   }
 }
