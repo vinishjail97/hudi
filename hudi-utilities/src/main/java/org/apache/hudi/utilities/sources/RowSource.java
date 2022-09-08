@@ -38,7 +38,7 @@ public abstract class RowSource extends Source<Dataset<Row>> {
     static final Boolean DEFAULT_SANITIZE_INVALID_COLUMNS = false;
 
     // Replacement/Mask for invalid characters in avro names.
-    public static final String AVRO_FIELD_NAME_INVALID_CHAR_MASK = "hoodie.deltastreamer.source.mask.for.invalid.char";
+    public static final String AVRO_FIELD_NAME_INVALID_CHAR_MASK = "hoodie.deltastreamer.source.sanitize.mask.for.invalid.char";
   }
 
   public RowSource(TypedProperties props, JavaSparkContext sparkContext, SparkSession sparkSession,
