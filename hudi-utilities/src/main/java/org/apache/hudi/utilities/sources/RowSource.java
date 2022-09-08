@@ -32,13 +32,13 @@ import org.apache.spark.sql.SparkSession;
 public abstract class RowSource extends Source<Dataset<Row>> {
 
   public static class Config {
-    // renames invalid columns both in the data read from source and also in the schema provider.
+    // sanitizes invalid columns both in the data read from source and also in the schema provider.
     // invalid definition here goes by avro naming convention (https://avro.apache.org/docs/current/spec.html#names).
-    public static final String RENAME_INVALID_COLUMN_NAMES = "hoodie.deltastreamer.source.rename.invalid.columns";
+    public static final String SANITIZE_AVRO_FIELD_NAMES = "hoodie.deltastreamer.source.sanitize.invalid.column.names";
     static final Boolean DEFAULT_RENAME_INVALID_COLUMNS = false;
 
-    // Replacement for invalid characters in avro names.
-    public static final String REPLACEMENT_FOR_INVALID_CHARACTERS = "hoodie.deltastreamer.source.replacement.for.invalid.char";
+    // Replacement/Mask for invalid characters in avro names.
+    public static final String AVRO_FIELD_NAME_INVALID_CHAR_MASK = "hoodie.deltastreamer.source.mask.for.invalid.char";
   }
 
   public RowSource(TypedProperties props, JavaSparkContext sparkContext, SparkSession sparkSession,
