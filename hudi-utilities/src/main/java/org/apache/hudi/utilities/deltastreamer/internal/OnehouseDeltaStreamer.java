@@ -708,6 +708,7 @@ public class OnehouseDeltaStreamer implements Serializable {
     tableConfig.minSyncIntervalSeconds = onehouseInternalDeltastreamerConfig.getMinSyncIntervalSecs();
     tableConfig.enableMetaSync = onehouseInternalDeltastreamerConfig.isMetaSyncEnabled();
     tableConfig.syncClientToolClassNames = onehouseInternalDeltastreamerConfig.getMetaSyncClasses();
+    tableConfig.skipRddUnpersist = jobType.equals(JobType.MULTI_TABLE_DELTASTREAMER);
 
     tableConfig.checkpoint = onehouseInternalDeltastreamerConfig.getCheckpoint();
     tableConfig.initialCheckpointProvider = onehouseInternalDeltastreamerConfig.getInitialCheckpointProvider();
