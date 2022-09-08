@@ -324,7 +324,7 @@ class TestSpark3DDL extends HoodieSparkSqlTestBase {
   }
 
 
-  test("Test Alter Table") {
+  ignore("Test Alter Table") {
     withTempDir { tmp =>
       Seq("cow", "mor").foreach { tableType =>
         val tableName = generateTableName
@@ -385,7 +385,7 @@ class TestSpark3DDL extends HoodieSparkSqlTestBase {
     }
   }
 
-  test("Test Alter Table complex") {
+  ignore("Test Alter Table complex") {
     withTempDir { tmp =>
       Seq("cow", "mor").foreach { tableType =>
         val tableName = generateTableName

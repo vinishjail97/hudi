@@ -90,6 +90,7 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.rdd.RDD;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -109,6 +110,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import scala.Tuple2;
 import scala.collection.JavaConversions;
 
 import static org.apache.hudi.common.table.HoodieTableConfig.ARCHIVELOG_FOLDER;
@@ -358,8 +360,10 @@ public class DeltaSync implements Serializable, Closeable {
 
     metrics.updateDeltaStreamerSyncMetrics(System.currentTimeMillis());
 
-    // Clear persistent RDDs
-    jssc.getPersistentRDDs().values().forEach(JavaRDD::unpersist);
+    if (!cfg.skipRddUnpersist) {
+      // Clear persistent RDDs
+      jssc.getPersistentRDDs().values().forEach(JavaRDD::unpersist);
+    }
     return result;
   }
 
@@ -455,10 +459,23 @@ public class DeltaSync implements Serializable, Closeable {
         // pass in the schema for the Row-to-Avro conversion
         // to avoid nullability mismatch between Avro schema and Row schema
         avroRDDOptional = transformed
-            .map(t -> HoodieSparkUtils.createRdd(
-                t, HOODIE_RECORD_STRUCT_NAME, HOODIE_RECORD_NAMESPACE, reconcileSchema,
-                Option.of(this.userProvidedSchemaProvider.getTargetSchema())
-            ).toJavaRDD());
+            .map(row ->
+                quarantineTableWriterInterfaceImpl
+                    .map(impl -> {
+                      Tuple2<RDD<GenericRecord>, RDD<String>> safeCreateRDDs = HoodieSparkUtils.safeCreateRDD(row,
+                          HOODIE_RECORD_STRUCT_NAME, HOODIE_RECORD_NAMESPACE, reconcileSchema,
+                          Option.of(this.userProvidedSchemaProvider.getTargetSchema())
+                      );
+                      impl.addErrorEvents(safeCreateRDDs._2().toJavaRDD()
+                          .map(evStr -> new QuarantineJsonEvent(evStr,
+                              QuarantineEvent.QuarantineReason.AVRO_DESERIALIZATION_FAILURE)));
+                      return safeCreateRDDs._1();
+                    })
+                    .orElseGet(() -> HoodieSparkUtils.createRdd(row,
+                      HOODIE_RECORD_STRUCT_NAME, HOODIE_RECORD_NAMESPACE, reconcileSchema,
+                      Option.of(this.userProvidedSchemaProvider.getTargetSchema())
+                    )).toJavaRDD()
+            );
         schemaProvider = this.userProvidedSchemaProvider;
       } else {
         // Use Transformed Row's schema if not overridden. If target schema is not specified
@@ -567,7 +584,7 @@ public class DeltaSync implements Serializable, Closeable {
         HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
             .fromBytes(timeline.getInstantDetails(instant).get(), HoodieCommitMetadata.class);
         if (!StringUtils.isNullOrEmpty(commitMetadata.getMetadata(CHECKPOINT_KEY)) || !StringUtils.isNullOrEmpty(commitMetadata.getMetadata(CHECKPOINT_RESET_KEY))) {
-          return Option.of(Pair.of(instant, commitMetadata));
+          return Option.of(Pair.of(instant.toString(), commitMetadata));
         } else {
           return Option.empty();
         }
