@@ -43,6 +43,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.apache.hudi.utilities.sources.RowSource.Config.AVRO_FIELD_NAME_INVALID_CHAR_MASK;
+import static org.apache.hudi.utilities.sources.RowSource.Config.DEFAULT_INVALID_CHAR_MASK;
+import static org.apache.hudi.utilities.sources.RowSource.Config.DEFAULT_SANITIZE_INVALID_COLUMNS;
+import static org.apache.hudi.utilities.sources.RowSource.Config.SANITIZE_AVRO_FIELD_NAMES;
+
 /**
  * A simple schema provider, that reads off files on DFS.
  */
@@ -64,29 +69,29 @@ public class FilebasedSchemaProvider extends SchemaProvider {
 
   protected Schema targetSchema;
 
-  private static List<Object> transformList(List<Object> src) {
+  private static List<Object> transformList(List<Object> src, String invalidCharMask) {
     return src.stream().map(obj -> {
       if (obj instanceof List) {
-        return transformList((List<Object>) obj);
+        return transformList((List<Object>) obj, invalidCharMask);
       } else if (obj instanceof Map) {
-        return transformMap((Map<String, Object>) obj);
+        return transformMap((Map<String, Object>) obj, invalidCharMask);
       } else {
         return obj;
       }
     }).collect(Collectors.toList());
   }
 
-  private static Map<String, Object> transformMap(Map<String, Object> src) {
+  private static Map<String, Object> transformMap(Map<String, Object> src, String invalidCharMask) {
     return src.entrySet().stream()
         .map(kv -> {
           if (kv.getValue() instanceof List) {
-            return Pair.of(kv.getKey(), transformList((List<Object>) kv.getValue()));
+            return Pair.of(kv.getKey(), transformList((List<Object>) kv.getValue(), invalidCharMask));
           } else if (kv.getValue() instanceof Map) {
-            return Pair.of(kv.getKey(), transformMap((Map<String, Object>) kv.getValue()));
+            return Pair.of(kv.getKey(), transformMap((Map<String, Object>) kv.getValue(), invalidCharMask));
           } else if (kv.getValue() instanceof String) {
             String currentStrValue = (String) kv.getValue();
             if (kv.getKey().equals(AVRO_FIELD_NAME_KEY)) {
-              return Pair.of(kv.getKey(), HoodieAvroUtils.sanitizeName(currentStrValue));
+              return Pair.of(kv.getKey(), HoodieAvroUtils.sanitizeName(currentStrValue, invalidCharMask));
             }
             return Pair.of(kv.getKey(), currentStrValue);
           } else {
@@ -95,12 +100,12 @@ public class FilebasedSchemaProvider extends SchemaProvider {
         }).collect(Collectors.toMap(Pair::getLeft, Pair::getRight));
   }
 
-  private static Option<Schema> parseSanitizedAvroSchemaNoThrow(String schemaStr) {
+  private static Option<Schema> parseSanitizedAvroSchemaNoThrow(String schemaStr, String invalidCharMask) {
     try {
       ObjectMapper objectMapper = new ObjectMapper();
       objectMapper.enable(JsonParser.Feature.ALLOW_COMMENTS);
       Map<String, Object> objMap = objectMapper.readValue(schemaStr, Map.class);
-      Map<String, Object> modifiedMap = transformMap(objMap);
+      Map<String, Object> modifiedMap = transformMap(objMap, invalidCharMask);
       return Option.of(new Schema.Parser().parse(objectMapper.writeValueAsString(modifiedMap)));
     } catch (Exception ex) {
       return Option.empty();
@@ -112,12 +117,16 @@ public class FilebasedSchemaProvider extends SchemaProvider {
    * This way we can improve our parsing capabilities without breaking existing functionality.
    * For example we don't yet support multiple named schemas defined in a file.
    */
-  private static Schema parseAvroSchema(String schemaStr) {
+  private static Schema parseAvroSchema(String schemaStr, boolean sanitizeSchema, String invalidCharMask) {
     try {
       return new Schema.Parser().parse(schemaStr);
     } catch (SchemaParseException spe) {
+      // if sanitizing is not enabled rethrow the exception.
+      if (!sanitizeSchema) {
+        throw spe;
+      }
       // Rename avro fields and try parsing once again.
-      Option<Schema> parseResult = parseSanitizedAvroSchemaNoThrow(schemaStr);
+      Option<Schema> parseResult = parseSanitizedAvroSchemaNoThrow(schemaStr, invalidCharMask);
       if (!parseResult.isPresent()) {
         // throw original exception.
         throw spe;
@@ -126,7 +135,7 @@ public class FilebasedSchemaProvider extends SchemaProvider {
     }
   }
 
-  private static Schema readAvroSchemaFromFile(String schemaPath, FileSystem fs) {
+  private static Schema readAvroSchemaFromFile(String schemaPath, FileSystem fs, boolean sanitizeSchema, String invalidCharMask) {
     String schemaStr;
     FSDataInputStream in = null;
     try {
@@ -139,17 +148,19 @@ public class FilebasedSchemaProvider extends SchemaProvider {
         IOUtils.closeStream(in);
       }
     }
-    return parseAvroSchema(schemaStr);
+    return parseAvroSchema(schemaStr, sanitizeSchema, invalidCharMask);
   }
 
   public FilebasedSchemaProvider(TypedProperties props, JavaSparkContext jssc) {
     super(props, jssc);
     DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(Config.SOURCE_SCHEMA_FILE_PROP));
     String sourceFile = props.getString(Config.SOURCE_SCHEMA_FILE_PROP);
+    boolean sanitizeSchema = props.getBoolean(SANITIZE_AVRO_FIELD_NAMES, DEFAULT_SANITIZE_INVALID_COLUMNS);
+    String invalidCharMask = props.getString(AVRO_FIELD_NAME_INVALID_CHAR_MASK, DEFAULT_INVALID_CHAR_MASK);
     this.fs = FSUtils.getFs(sourceFile, jssc.hadoopConfiguration(), true);
-    this.sourceSchema = readAvroSchemaFromFile(sourceFile, this.fs);
+    this.sourceSchema = readAvroSchemaFromFile(sourceFile, this.fs, sanitizeSchema, invalidCharMask);
     if (props.containsKey(Config.TARGET_SCHEMA_FILE_PROP)) {
-      this.targetSchema = readAvroSchemaFromFile(props.getString(Config.TARGET_SCHEMA_FILE_PROP), this.fs);
+      this.targetSchema = readAvroSchemaFromFile(props.getString(Config.TARGET_SCHEMA_FILE_PROP), this.fs, sanitizeSchema, invalidCharMask);
     }
   }
 

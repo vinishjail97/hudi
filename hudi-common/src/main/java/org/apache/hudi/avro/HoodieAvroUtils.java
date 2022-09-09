@@ -681,6 +681,21 @@ public class HoodieAvroUtils {
   }
 
   /**
+   * Sanitizes Name according to Avro rule for names.
+   * Removes characters other than the ones mentioned in https://avro.apache.org/docs/current/spec.html#names .
+   *
+   * @param name input name
+   * @param invalidCharMask replacement for invalid characters.
+   * @return sanitized name
+   */
+  public static String sanitizeName(String name, String invalidCharMask) {
+    if (INVALID_AVRO_FIRST_CHAR_IN_NAMES_PATTERN.matcher(name.substring(0, 1)).matches()) {
+      name = INVALID_AVRO_FIRST_CHAR_IN_NAMES_PATTERN.matcher(name).replaceFirst(invalidCharMask);
+    }
+    return INVALID_AVRO_CHARS_IN_NAMES_PATTERN.matcher(name).replaceAll(invalidCharMask);
+  }
+
+  /**
    * Gets record column values into one object.
    *
    * @param record  Hoodie record.
