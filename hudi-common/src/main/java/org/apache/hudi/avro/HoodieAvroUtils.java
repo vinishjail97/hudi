@@ -674,10 +674,7 @@ public class HoodieAvroUtils {
    * @return sanitized name
    */
   public static String sanitizeName(String name) {
-    if (INVALID_AVRO_FIRST_CHAR_IN_NAMES_PATTERN.matcher(name.substring(0, 1)).matches()) {
-      name = INVALID_AVRO_FIRST_CHAR_IN_NAMES_PATTERN.matcher(name).replaceFirst(MASK_FOR_INVALID_CHARS_IN_NAMES);
-    }
-    return INVALID_AVRO_CHARS_IN_NAMES_PATTERN.matcher(name).replaceAll(MASK_FOR_INVALID_CHARS_IN_NAMES);
+    return sanitizeName(name, MASK_FOR_INVALID_CHARS_IN_NAMES);
   }
 
   /**
