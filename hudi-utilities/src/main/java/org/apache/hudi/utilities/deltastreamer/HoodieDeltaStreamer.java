@@ -837,7 +837,7 @@ public class HoodieDeltaStreamer implements Serializable {
      * Close all resources.
      */
     public void close() {
-      if (null != deltaSync) {
+      if (deltaSync != null) {
         deltaSync.close();
       }
     }

@@ -75,6 +75,7 @@ public class Metrics {
       registerHoodieCommonMetrics();
       reporter.report();
       if (getReporter() != null) {
+        LOG.info("Closing metrics reporter...");
         getReporter().close();
       }
     } catch (Exception e) {
