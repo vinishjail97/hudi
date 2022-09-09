@@ -123,7 +123,7 @@ public class TestFilebasedSchemaProvider extends UtilitiesTestBase {
     assertThrows(SchemaParseException.class, () -> {
       new FilebasedSchemaProvider(
           Helpers.setupSchemaOnDFS("delta-streamer-config", "file_schema_provider_invalid.avsc"), jsc);
-      });
+    });
   }
 
   @Test
