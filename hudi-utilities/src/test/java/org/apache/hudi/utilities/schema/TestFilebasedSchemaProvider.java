@@ -121,9 +121,9 @@ public class TestFilebasedSchemaProvider extends UtilitiesTestBase {
   @Test
   public void renameBadlyFormattedSchemaWithProperyDisabledTest() {
     assertThrows(SchemaParseException.class, () -> {
-        new FilebasedSchemaProvider(
-              Helpers.setupSchemaOnDFS("delta-streamer-config", "file_schema_provider_invalid.avsc"), jsc);
-        });
+      new FilebasedSchemaProvider(
+          Helpers.setupSchemaOnDFS("delta-streamer-config", "file_schema_provider_invalid.avsc"), jsc);
+      });
   }
 
   @Test
