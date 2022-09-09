@@ -360,6 +360,7 @@ public class DeltaSync implements Serializable, Closeable {
 
     metrics.updateDeltaStreamerSyncMetrics(System.currentTimeMillis());
 
+    // TODO revisit (too early to unpersist)
     if (!cfg.skipRddUnpersist) {
       // Clear persistent RDDs
       jssc.getPersistentRDDs().values().forEach(JavaRDD::unpersist);

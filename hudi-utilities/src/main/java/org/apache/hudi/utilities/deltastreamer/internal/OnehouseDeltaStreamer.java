@@ -530,11 +530,10 @@ public class OnehouseDeltaStreamer implements Serializable {
           }
 
           // If there is data in the source, schedule only if minSyncTimeMs has passed since the last ingest round.
-          return sourceDataAvailability.equals(SourceDataAvailabilityEstimator.SourceDataAvailability.DATA_AVAILABLE)
-              && (currentTimeMs - lastSyncCompletedTimeMs >= minSyncTimeMs);
+          return sourceDataAvailability.equals(SourceDataAvailabilityEstimator.SourceDataAvailability.DATA_AVAILABLE) && checkSyncIntervalDone();
         } catch (Exception exception) {
           LOG.warn("Failed to detect data availability in source, falling back to using time based scheduling ", exception);
-          return (currentTimeMs - lastSyncCompletedTimeMs >= minSyncTimeMs);
+          return checkSyncIntervalDone();
         }
       }
 
@@ -571,6 +570,12 @@ public class OnehouseDeltaStreamer implements Serializable {
       private void onSyncCompleted() {
         isTableSyncActive.compareAndSet(true, false);
         lastSyncCompletedTimeMs = System.currentTimeMillis();
+      }
+
+      // Check if its time to schedule the next ingestion round because minSyncTimeMs has passed since
+      // the start of the last ingestion round
+      private boolean checkSyncIntervalDone() {
+        return startSyncScheduledTimeMs == null || (System.currentTimeMillis() - startSyncScheduledTimeMs >= minSyncTimeMs);
       }
 
       public void updateSourceBytesAvailableForIngest(long sourceBytes) {

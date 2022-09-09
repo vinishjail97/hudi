@@ -27,13 +27,11 @@ import org.apache.hudi.utilities.deltastreamer.internal.QuarantineEvent;
 import org.apache.hudi.utilities.deltastreamer.internal.QuarantineJsonEvent;
 import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
 import org.apache.hudi.utilities.schema.SchemaProvider;
-import org.apache.hudi.utilities.sources.AvroSource;
 import org.apache.hudi.utilities.sources.InputBatch;
-import org.apache.hudi.utilities.sources.JsonSource;
-import org.apache.hudi.utilities.sources.RowSource;
 import org.apache.hudi.utilities.sources.Source;
 import org.apache.hudi.utilities.sources.helpers.AvroConvertor;
 
+import com.google.protobuf.Message;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.spark.api.java.JavaRDD;
@@ -118,14 +116,14 @@ public final class SourceFormatAdapter implements Closeable {
   public InputBatch<JavaRDD<GenericRecord>> fetchNewDataInAvroFormat(Option<String> lastCkptStr, long sourceLimit) {
     switch (source.getSourceType()) {
       case AVRO:
-        return ((AvroSource) source).fetchNext(lastCkptStr, sourceLimit);
+        return ((Source<JavaRDD<GenericRecord>>) source).fetchNext(lastCkptStr, sourceLimit);
       case JSON: {
-        InputBatch<JavaRDD<String>> r = ((JsonSource) source).fetchNext(lastCkptStr, sourceLimit);
+        InputBatch<JavaRDD<String>> r = ((Source<JavaRDD<String>>) source).fetchNext(lastCkptStr, sourceLimit);
         JavaRDD<GenericRecord> eventsRdd = transformJsonToGenericRdd(r);
         return new InputBatch<>(Option.ofNullable(eventsRdd),r.getCheckpointForNextBatch(), r.getSchemaProvider());
       }
       case ROW: {
-        InputBatch<Dataset<Row>> r = ((RowSource) source).fetchNext(lastCkptStr, sourceLimit);
+        InputBatch<Dataset<Row>> r = ((Source<Dataset<Row>>) source).fetchNext(lastCkptStr, sourceLimit);
         return new InputBatch<>(Option.ofNullable(r.getBatch().map(
             rdd -> {
                 SchemaProvider originalProvider = UtilHelpers.getOriginalSchemaProvider(r.getSchemaProvider());
@@ -140,6 +138,12 @@ public final class SourceFormatAdapter implements Closeable {
             })
             .orElse(null)), r.getCheckpointForNextBatch(), r.getSchemaProvider());
       }
+      case PROTO: {
+        InputBatch<JavaRDD<Message>> r = ((Source<JavaRDD<Message>>) source).fetchNext(lastCkptStr, sourceLimit);
+        AvroConvertor convertor = new AvroConvertor(r.getSchemaProvider().getSourceSchema());
+        return new InputBatch<>(Option.ofNullable(r.getBatch().map(rdd -> rdd.map(convertor::fromProtoMessage)).orElse(null)),
+            r.getCheckpointForNextBatch(), r.getSchemaProvider());
+      }
       default:
         throw new IllegalArgumentException("Unknown source type (" + source.getSourceType() + ")");
     }
@@ -151,11 +155,11 @@ public final class SourceFormatAdapter implements Closeable {
   public InputBatch<Dataset<Row>> fetchNewDataInRowFormat(Option<String> lastCkptStr, long sourceLimit) {
     switch (source.getSourceType()) {
       case ROW:
-        InputBatch<Dataset<Row>> datasetInputBatch = ((RowSource) source).fetchNext(lastCkptStr, sourceLimit);
+        InputBatch<Dataset<Row>> datasetInputBatch = ((Source<Dataset<Row>>) source).fetchNext(lastCkptStr, sourceLimit);
         return new InputBatch<>(transformDatasetWithQuarantineEvents(datasetInputBatch.getBatch()),
             datasetInputBatch.getCheckpointForNextBatch(), datasetInputBatch.getSchemaProvider());
       case AVRO: {
-        InputBatch<JavaRDD<GenericRecord>> r = ((AvroSource) source).fetchNext(lastCkptStr, sourceLimit);
+        InputBatch<JavaRDD<GenericRecord>> r = ((Source<JavaRDD<GenericRecord>>) source).fetchNext(lastCkptStr, sourceLimit);
         Schema sourceSchema = r.getSchemaProvider().getSourceSchema();
         return new InputBatch<>(
             Option
@@ -168,7 +172,7 @@ public final class SourceFormatAdapter implements Closeable {
             r.getCheckpointForNextBatch(), r.getSchemaProvider());
       }
       case JSON: {
-        InputBatch<JavaRDD<String>> r = ((JsonSource) source).fetchNext(lastCkptStr, sourceLimit);
+        InputBatch<JavaRDD<String>> r = ((Source<JavaRDD<String>>) source).fetchNext(lastCkptStr, sourceLimit);
         Schema sourceSchema = r.getSchemaProvider().getSourceSchema();
         if (quarantineTableWriterInterface.isPresent()) {
           StructType dataType = AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema)
@@ -187,6 +191,21 @@ public final class SourceFormatAdapter implements Closeable {
                   r.getBatch().map(rdd -> source.getSparkSession().read().schema(dataType).json(rdd)).orElse(null)),
               r.getCheckpointForNextBatch(), r.getSchemaProvider());
         }
+      }
+      case PROTO: {
+        InputBatch<JavaRDD<Message>> r = ((Source<JavaRDD<Message>>) source).fetchNext(lastCkptStr, sourceLimit);
+        Schema sourceSchema = r.getSchemaProvider().getSourceSchema();
+        AvroConvertor convertor = new AvroConvertor(r.getSchemaProvider().getSourceSchema());
+        return new InputBatch<>(
+            Option
+                .ofNullable(
+                    r.getBatch()
+                        .map(rdd -> rdd.map(convertor::fromProtoMessage))
+                        .map(rdd -> AvroConversionUtils.createDataFrame(JavaRDD.toRDD(rdd), sourceSchema.toString(),
+                            source.getSparkSession())
+                        )
+                        .orElse(null)),
+            r.getCheckpointForNextBatch(), r.getSchemaProvider());
       }
       default:
         throw new IllegalArgumentException("Unknown source type (" + source.getSourceType() + ")");

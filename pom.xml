@@ -510,6 +510,7 @@
               <exclude>**/dependency-reduced-pom.xml</exclude>
               <exclude>**/test/resources/*.data</exclude>
               <exclude>**/test/resources/*.commit</exclude>
+              <exclude>**/test/resources/**/*.txt</exclude>
               <exclude>**/target/**</exclude>
               <exclude>**/generated-sources/**</exclude>
               <exclude>.github/**</exclude>
@@ -568,6 +569,42 @@
               </goals>
             </execution>
           </executions>
+        </plugin>
+        <plugin>
+          <groupId>com.github.os72</groupId>
+          <artifactId>protoc-jar-maven-plugin</artifactId>
+          <version>3.11.4</version>
+          <executions>
+            <execution>
+              <id>proto-compile</id>
+              <phase>generate-sources</phase>
+              <goals>
+                <goal>run</goal>
+              </goals>
+              <configuration>
+                <inputDirectories>
+                  <include>src/main/resources</include>
+                </inputDirectories>
+              </configuration>
+            </execution>
+            <execution>
+              <id>proto-test-compile</id>
+              <phase>generate-test-sources</phase>
+              <goals>
+                <goal>run</goal>
+              </goals>
+              <configuration>
+                <addSources>test</addSources>
+                <inputDirectories>
+                  <include>src/test/resources</include>
+                </inputDirectories>
+              </configuration>
+            </execution>
+          </executions>
+          <configuration>
+            <protocVersion>${protoc.version}</protocVersion>
+            <includeStdTypes>true</includeStdTypes>
+          </configuration>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -1302,6 +1339,18 @@
         <version>${zk-curator.version}</version>
       </dependency>
 
+      <!-- Protobuf -->
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java</artifactId>
+        <version>${proto.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.google.protobuf</groupId>
+        <artifactId>protobuf-java-util</artifactId>
+        <version>${proto.version}</version>
+      </dependency>
+
       <!-- Junit 5 -->
       <dependency>
         <groupId>org.junit.jupiter</groupId>
@@ -1776,6 +1825,18 @@
         </plugins>
       </build>
     </profile>
+    <profile>
+      <id>m1-mac</id>
+      <properties>
+        <protoc.version>3.17.3</protoc.version>
+      </properties>
+      <activation>
+        <os>
+          <family>mac</family>
+          <arch>aarch64</arch>
+        </os>
+      </activation>
+    </profile>
     <!-- Exists for backwards compatibility; profile doesn't do anything -->
     <profile>
       <id>scala-2.11</id>
@@ -1881,8 +1942,8 @@
         <fasterxml.version>${fasterxml.spark3.version}</fasterxml.version>
         <fasterxml.jackson.databind.version>${fasterxml.spark3.version}</fasterxml.jackson.databind.version>
         <fasterxml.jackson.module.scala.version>${fasterxml.spark3.version}</fasterxml.jackson.module.scala.version>
-        <fasterxml.jackson.dataformat.yaml.version>${fasterxml.spark3.version}
-        </fasterxml.jackson.dataformat.yaml.version>
+        <fasterxml.jackson.dataformat.yaml.version>${fasterxml.spark3.version}</fasterxml.jackson.dataformat.yaml.version>
+        <pulsar.spark.version>${pulsar.spark.scala12.version}</pulsar.spark.version>
         <skip.hudi-spark2.unit.tests>true</skip.hudi-spark2.unit.tests>
         <skipITs>true</skipITs>
       </properties>
@@ -1913,8 +1974,8 @@
         <fasterxml.version>${fasterxml.spark3.version}</fasterxml.version>
         <fasterxml.jackson.databind.version>${fasterxml.spark3.version}</fasterxml.jackson.databind.version>
         <fasterxml.jackson.module.scala.version>${fasterxml.spark3.version}</fasterxml.jackson.module.scala.version>
-        <fasterxml.jackson.dataformat.yaml.version>${fasterxml.spark3.version}
-        </fasterxml.jackson.dataformat.yaml.version>
+        <fasterxml.jackson.dataformat.yaml.version>${fasterxml.spark3.version}</fasterxml.jackson.dataformat.yaml.version>
+        <pulsar.spark.version>${pulsar.spark.scala12.version}</pulsar.spark.version>
         <skip.hudi-spark2.unit.tests>true</skip.hudi-spark2.unit.tests>
         <skipITs>true</skipITs>
       </properties>
@@ -1948,8 +2009,8 @@
         <fasterxml.version>${fasterxml.spark3.version}</fasterxml.version>
         <fasterxml.jackson.databind.version>${fasterxml.spark3.version}</fasterxml.jackson.databind.version>
         <fasterxml.jackson.module.scala.version>${fasterxml.spark3.version}</fasterxml.jackson.module.scala.version>
-        <fasterxml.jackson.dataformat.yaml.version>${fasterxml.spark3.version}
-        </fasterxml.jackson.dataformat.yaml.version>
+        <fasterxml.jackson.dataformat.yaml.version>${fasterxml.spark3.version}</fasterxml.jackson.dataformat.yaml.version>
+        <pulsar.spark.version>${pulsar.spark.scala12.version}</pulsar.spark.version>
         <skip.hudi-spark2.unit.tests>true</skip.hudi-spark2.unit.tests>
         <skipITs>true</skipITs>
       </properties>
@@ -1984,8 +2045,8 @@
         <fasterxml.version>${fasterxml.spark3.version}</fasterxml.version>
         <fasterxml.jackson.databind.version>${fasterxml.spark3.version}</fasterxml.jackson.databind.version>
         <fasterxml.jackson.module.scala.version>${fasterxml.spark3.version}</fasterxml.jackson.module.scala.version>
-        <fasterxml.jackson.dataformat.yaml.version>${fasterxml.spark3.version}
-        </fasterxml.jackson.dataformat.yaml.version>
+        <fasterxml.jackson.dataformat.yaml.version>${fasterxml.spark3.version}</fasterxml.jackson.dataformat.yaml.version>
+        <pulsar.spark.version>${pulsar.spark.scala12.version}</pulsar.spark.version>
         <skip.hudi-spark2.unit.tests>true</skip.hudi-spark2.unit.tests>
         <skipITs>true</skipITs>
       </properties>
