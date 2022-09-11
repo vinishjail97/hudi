@@ -54,4 +54,8 @@ public class HoodieQuarantineTableConfig {
       .defaultValue(200)
       .withDocumentation("config to set insert shuffle parallelism");
 
+  public static final ConfigProperty<Boolean> QUARANTINE_ENABLE_VALIDATE_TARGET_SCHEMA = ConfigProperty
+      .key("hoodie.deltastreamer.quarantinetable.validate.targetschema.enable")
+      .defaultValue(false)
+      .withDocumentation("Records with schema mismatch with Target Schema are sent to Quarantine Table.");
 }
