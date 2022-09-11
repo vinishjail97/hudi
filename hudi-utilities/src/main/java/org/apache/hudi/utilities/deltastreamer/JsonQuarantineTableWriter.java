@@ -154,11 +154,17 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
   @Override
   public Option<JavaRDD<HoodieAvroRecord>> getErrorEvents(String baseTableInstantTime, Option<String> commitedInstantTime) {
     String commitedInstantTimeStr = commitedInstantTime.isPresent() ? commitedInstantTime.get() : BASE_TABLE_EMPTY_COMMIT;
+    final String commitedInstantTimeStrFormatted;
+    if (commitedInstantTimeStr.startsWith("[") && commitedInstantTimeStr.endsWith("]")) {
+      commitedInstantTimeStrFormatted = commitedInstantTimeStr.substring(1,commitedInstantTimeStr.length() - 1);
+    } else {
+      commitedInstantTimeStrFormatted = commitedInstantTimeStr;
+    }
     return createErrorEventsRdd(errorEventsRdd.stream().map(r -> r.map(ev -> RowFactory.create(ev.dataRecord,
           ev.sourceTableBasePath,
           ev.failureType,
           baseTableInstantTime,
-          commitedInstantTimeStr,
+          commitedInstantTimeStrFormatted,
           JavaConverters.mapAsScalaMapConverter(ev.metadata).asScala()
       ))).reduce((x, y) -> x.union(y)));
   }
