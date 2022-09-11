@@ -50,6 +50,7 @@ import org.apache.hudi.config.HoodieClusteringConfig;
 import org.apache.hudi.config.HoodieCompactionConfig;
 import org.apache.hudi.config.HoodieIndexConfig;
 import org.apache.hudi.config.HoodiePayloadConfig;
+import org.apache.hudi.config.HoodieQuarantineTableConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
@@ -459,9 +460,13 @@ public class DeltaSync implements Serializable, Closeable {
         // If the target schema is specified through Avro schema,
         // pass in the schema for the Row-to-Avro conversion
         // to avoid nullability mismatch between Avro schema and Row schema
+        Option<QuarantineTableWriterInterface> schemaValidationQuarantineWriter =
+            (quarantineTableWriterInterfaceImpl.isPresent()
+                && props.getBoolean(HoodieQuarantineTableConfig.QUARANTINE_ENABLE_VALIDATE_TARGET_SCHEMA.key(), HoodieQuarantineTableConfig.QUARANTINE_ENABLE_VALIDATE_TARGET_SCHEMA.defaultValue()))
+                ? quarantineTableWriterInterfaceImpl : Option.empty();
         avroRDDOptional = transformed
             .map(row ->
-                quarantineTableWriterInterfaceImpl
+                schemaValidationQuarantineWriter
                     .map(impl -> {
                       Tuple2<RDD<GenericRecord>, RDD<String>> safeCreateRDDs = HoodieSparkUtils.safeCreateRDD(row,
                           HOODIE_RECORD_STRUCT_NAME, HOODIE_RECORD_NAMESPACE, reconcileSchema,
