@@ -383,9 +383,6 @@ public class HoodieDeltaStreamer implements Serializable {
     @Parameter(names = {"--retry-on-source-failures"}, description = "Retry on any source failures")
     public Boolean retryOnSourceFailures = false;
 
-    @Parameter(names = {"--disable-compaction"}, description = "Disable compaction")
-    public Boolean disableCompaction = false;
-
     @Parameter(names = {"--retry-interval-seconds"}, description = "the retry interval for source failures if --retry-on-source-failures is enabled")
     public Integer retryIntervalSecs = 30;
 
