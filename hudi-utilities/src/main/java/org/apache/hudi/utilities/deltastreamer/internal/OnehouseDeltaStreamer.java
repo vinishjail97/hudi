@@ -243,6 +243,9 @@ public class OnehouseDeltaStreamer implements Serializable {
     @Parameter(names = {"--retry-interval-seconds"}, description = "the retry interval for source failures if --retry-on-source-failures is enabled")
     public Integer retryIntervalSecs = 30;
 
+    @Parameter(names = {"--retry-last-pending-inline-clustering", "-rc"}, description = "Retry last pending inline clustering plan before writing to sink.")
+    public Boolean retryLastPendingInlineClusteringJob = true;
+
     @Parameter(names = {"--max-retry-count"}, description = "the max retry count if --retry-on-source-failures is enabled")
     public Integer maxRetryCount = 3;
 
@@ -726,6 +729,7 @@ public class OnehouseDeltaStreamer implements Serializable {
 
     // ToDo Move to table level configs??
     tableConfig.retryOnSourceFailures = config.retryOnSourceFailures;
+    tableConfig.retryLastPendingInlineClusteringJob = config.retryLastPendingInlineClusteringJob;
     tableConfig.retryIntervalSecs = config.retryIntervalSecs;
     tableConfig.maxRetryCount = config.maxRetryCount;
 
