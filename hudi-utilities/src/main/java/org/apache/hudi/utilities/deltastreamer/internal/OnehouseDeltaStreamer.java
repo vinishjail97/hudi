@@ -729,6 +729,8 @@ public class OnehouseDeltaStreamer implements Serializable {
 
     // ToDo Move to table level configs??
     tableConfig.retryOnSourceFailures = config.retryOnSourceFailures;
+    tableConfig.forceDisableCompaction = onehouseInternalDeltastreamerConfig.isCompactionDisabled();
+    tableConfig.commitOnErrors = onehouseInternalDeltastreamerConfig.isAllowCommitOnErrors();
     tableConfig.retryLastPendingInlineClusteringJob = config.retryLastPendingInlineClusteringJob;
     tableConfig.retryIntervalSecs = config.retryIntervalSecs;
     tableConfig.maxRetryCount = config.maxRetryCount;
