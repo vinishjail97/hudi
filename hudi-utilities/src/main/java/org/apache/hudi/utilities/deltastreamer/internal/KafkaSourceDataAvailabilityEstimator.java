@@ -20,6 +20,7 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
 import org.apache.hudi.utilities.sources.helpers.KafkaOffsetGen;
 
 import org.apache.kafka.clients.consumer.Consumer;
@@ -131,12 +132,16 @@ public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailability
     }
 
     static synchronized KafkaClusterInfo createOrGetInstance(TypedProperties props) {
+      String sourceId = props.getProperty(OnehouseInternalDeltastreamerConfig.DELTASTREAMER_SOURCE_ID.key());
       String bootstrapServers = props.getProperty(KAFKA_SOURCE_RATE_ESTIMATOR_KEY);
-      if (!CLUSTERS.containsKey(bootstrapServers)) {
+      // Use user-given source identifier if provided otherwise use bootstrapServers for caching offsets.
+      String kafkaClusterIdentifier = sourceId != null ? sourceId : bootstrapServers;
+
+      if (!CLUSTERS.containsKey(kafkaClusterIdentifier)) {
         KafkaClusterInfo clusterInfo = new KafkaClusterInfo(props);
-        CLUSTERS.put(bootstrapServers, clusterInfo);
+        CLUSTERS.put(kafkaClusterIdentifier, clusterInfo);
       }
-      return CLUSTERS.get(bootstrapServers);
+      return CLUSTERS.get(kafkaClusterIdentifier);
     }
 
     synchronized void refreshLatestOffsets() {
