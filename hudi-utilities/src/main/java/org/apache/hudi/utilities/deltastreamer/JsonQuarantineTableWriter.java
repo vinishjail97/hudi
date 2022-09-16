@@ -170,6 +170,11 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
   }
 
   @Override
+  public void cleanErrorEvents() {
+    errorEventsRdd.clear();
+  }
+
+  @Override
   public String startCommit() {
     try {
       if (!fs.exists(new Path(quarantineTableCfg.getBasePath()))) {
@@ -219,15 +224,16 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
 
   @Override
   public boolean upsertAndCommit(String instantTime, String baseTableInstantTime, Option<String> commitedInstantTime) {
-    return getErrorEvents(baseTableInstantTime, commitedInstantTime)
+    boolean result =  getErrorEvents(baseTableInstantTime, commitedInstantTime)
         .map(rdd -> {
           JavaRDD<WriteStatus> writeStatusJavaRDD = quarantineTableWriteClient.insert(rdd, instantTime);
           boolean success = quarantineTableWriteClient.commit(instantTime, writeStatusJavaRDD, Option.empty(),
               HoodieActiveTimeline.COMMIT_ACTION, Collections.emptyMap());
-          errorEventsRdd.clear();
           LOG.info("Error events ingestion Commit " + instantTime + " " + success);
           return success;
         }).orElse(true);
+    cleanErrorEvents();
+    return result;
   }
 
   private void initialiseTable() {

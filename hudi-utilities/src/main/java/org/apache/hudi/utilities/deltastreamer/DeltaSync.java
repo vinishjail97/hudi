@@ -682,7 +682,9 @@ public class DeltaSync implements Serializable, Closeable {
       String commitActionType = CommitUtils.getCommitActionType(cfg.operation, HoodieTableType.valueOf(cfg.tableType));
       if (quarantineTableWriterInterfaceImpl.isPresent()) {
         String qurantineTableStartInstant = quarantineTableWriterInterfaceImpl.get().startCommit();
-        quarantineTableWriterInterfaceImpl.get().addErrorEvents(getErrorEventsForWriteStatus(writeStatusRDD));
+        // Removing writeStatus events from quarantine events, as action on writeStatus can cause base table DAG to reexecute
+        // if original cached dataframe get's unpersisted before this action.
+        //        quarantineTableWriterInterfaceImpl.get().addErrorEvents(getErrorEventsForWriteStatus(writeStatusRDD));
         Option<String> commitedInstantTime = getLatestInstantWithValidCheckpointInfo(commitTimelineOpt);
         boolean quarantineTableSuccess = quarantineTableWriterInterfaceImpl.get().upsertAndCommit(qurantineTableStartInstant, instantTime, commitedInstantTime);
         if (!quarantineTableSuccess) {
@@ -725,6 +727,9 @@ public class DeltaSync implements Serializable, Closeable {
 
     // Send DeltaStreamer Metrics
     metrics.updateDeltaStreamerMetrics(overallTimeMs);
+    if (quarantineTableWriterInterfaceImpl.isPresent()) {
+      quarantineTableWriterInterfaceImpl.get().cleanErrorEvents();
+    }
     return Pair.of(scheduledCompactionInstant, writeStatusRDD);
   }
 
