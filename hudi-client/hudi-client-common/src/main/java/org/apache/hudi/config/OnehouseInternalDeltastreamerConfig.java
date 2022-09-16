@@ -24,8 +24,6 @@ import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.sync.common.HoodieSyncConfig;
 
-import com.beust.jcommander.Parameter;
-
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -123,8 +121,8 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
   public static final ConfigProperty<Boolean> COMMIT_ON_ERRORS = ConfigProperty
       .key("hoodie.deltastreamer.allow.commit.on.errors")
       .defaultValue(false) // 1MB
-      .withDocumentation("allow commits on errors in delta sync," +
-          " should be used along with quarantine enabled");
+      .withDocumentation("allow commits on errors in delta sync,"
+          + " should be used along with quarantine enabled");
 
   private OnehouseInternalDeltastreamerConfig() {
     super();
@@ -190,9 +188,13 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
     return getBooleanOrDefault(DELTASTREAMER_ENABLE_FILTER_DUPES);
   }
 
-  public boolean isAllowCommitOnErrors() { return getBooleanOrDefault(COMMIT_ON_ERRORS); }
+  public boolean isAllowCommitOnErrors() {
+    return getBooleanOrDefault(COMMIT_ON_ERRORS);
+  }
 
-  public boolean isCompactionDisabled() { return getBooleanOrDefault(DISABLE_COMPACTION); }
+  public boolean isCompactionDisabled() {
+    return getBooleanOrDefault(DISABLE_COMPACTION);
+  }
 
   public static OnehouseInternalDeltastreamerConfig.Builder newBuilder() {
     return new OnehouseInternalDeltastreamerConfig.Builder();
