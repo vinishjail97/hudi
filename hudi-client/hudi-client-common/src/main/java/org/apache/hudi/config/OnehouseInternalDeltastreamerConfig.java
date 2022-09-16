@@ -113,6 +113,17 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
       .defaultValue(1000000L) // 1MB
       .withDocumentation("Minimum amount of bytes to schedule an ingestion from a source without delay.");
 
+  public static final ConfigProperty<Boolean> DISABLE_COMPACTION = ConfigProperty
+      .key("hoodie.deltastreamer.disable.compaction")
+      .defaultValue(false) // 1MB
+      .withDocumentation("Disable Compaction");
+
+  public static final ConfigProperty<Boolean> COMMIT_ON_ERRORS = ConfigProperty
+      .key("hoodie.deltastreamer.allow.commit.on.errors")
+      .defaultValue(false) // 1MB
+      .withDocumentation("allow commits on errors in delta sync,"
+          + " should be used along with quarantine enabled");
+
   private OnehouseInternalDeltastreamerConfig() {
     super();
   }
@@ -175,6 +186,14 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
 
   public boolean isFilterDupesEnabled() {
     return getBooleanOrDefault(DELTASTREAMER_ENABLE_FILTER_DUPES);
+  }
+
+  public boolean isAllowCommitOnErrors() {
+    return getBooleanOrDefault(COMMIT_ON_ERRORS);
+  }
+
+  public boolean isCompactionDisabled() {
+    return getBooleanOrDefault(DISABLE_COMPACTION);
   }
 
   public static OnehouseInternalDeltastreamerConfig.Builder newBuilder() {
