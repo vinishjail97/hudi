@@ -154,7 +154,7 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
     // NOTE: We're accessing toRdd here directly to avoid [[InternalRow]] to [[Row]] conversion
 
     if (!sameSchema) {
-      val rdds: RDD[Either[GenericRecord, String]] = df.queryExecution.toRdd.mapPartitions { rows =>
+      val rdds: RDD[Either[GenericRecord, String]] = injectSQLConf(df.queryExecution.toRdd.mapPartitions { rows =>
         if (rows.isEmpty) {
           Iterator.empty
         } else {
@@ -167,18 +167,18 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
           }
           rows.map(transform)
         }
-      }
+      }, SQLConf.get)
       // going to follow up on improving performance of separating out events
       (rdds.filter(_.isLeft).map(_.left.get), rdds.filter(_.isRight).map(_.right.get))
     } else {
-      val rdd = df.queryExecution.toRdd.mapPartitions { rows =>
+      val rdd = injectSQLConf(df.queryExecution.toRdd.mapPartitions { rows =>
         if (rows.isEmpty) {
           Iterator.empty
         } else {
           val convert = AvroConversionUtils.createInternalRowToAvroConverter(writerSchema, writerAvroSchema, nullable = nullable)
           rows.map(convert)
         }
-      }
+      }, SQLConf.get)
       (rdd, df.sparkSession.sparkContext.emptyRDD[String])
     }
   }

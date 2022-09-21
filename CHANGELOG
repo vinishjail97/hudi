@@ -31,3 +31,13 @@ eb9723755 serializable-hadoop-conf needed to be passed in s3Incr source
 5eeef5c1c8 Update README.md
 937458f797 Merge pull request #34 from onehouseinc/support_quarantine_table
 21d578adf5 Quarantine table support for error events
+
+---[2022-09-19 13:19:45] [release-v0.7.4] Adding release tag release-v0.7.4---
+ca2a6b856 Merge pull request #82 from onehouseinc/hotfix/clean_quarantine_events_state
+7ba111d3e 1 .fix cleanup of rdd list state, after batch completion 2 .removing writeStatus error events , as it can possibly triggerbase table DAG , if caching is removed.
+6c0d59d7a Merge pull request #79 from onehouseinc/adding_configs_for_disable_compaction
+28f6141b5 fixing checkStyle issues
+d6324d35b Merge branch 'master' into adding_configs_for_disable_compaction
+2fee785cc Merge branch 'master' into adding_configs_for_disable_compaction
+7618f8c2d reverting changes from HoodieDeltaStreamer.java
+c001b0272 adding configs for disable compaction, allowCommitsOnError
