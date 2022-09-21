@@ -20,6 +20,7 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -67,6 +68,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import org.slf4j.MDC;
 
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_KEY;
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_RESET_KEY;
@@ -297,6 +299,8 @@ public class OnehouseDeltaStreamer implements Serializable {
               sourceTablePropsFilePath,
               JobType.MULTI_TABLE_DELTASTREAMER);
 
+          LogContext.getInstance().withTableName(tableConfig.targetTableName);
+
           FileSystem fs = FSUtils.getFs(tableConfig.targetBasePath, hadoopConfig);
           HoodieDeltaStreamer.DeltaSyncService deltaSync = new HoodieDeltaStreamer.DeltaSyncService(tableConfig,
               jssc,
@@ -307,10 +311,12 @@ public class OnehouseDeltaStreamer implements Serializable {
           JobInfo jobInfo = new JobInfo(
               jssc,
               sourceTablePropsFilePath,
+              tableConfig.targetTableName,
               tableConfig.targetBasePath,
               deltaSync,
               properties,
               multiTableConfigs);
+          LOG.info("Hoodie properties: " + HoodieDeltaStreamer.toSortedTruncatedString(properties).replace("\n", " ; "));
           jobInfoMap.put(sourceTablePropsFilePath, jobInfo);
 
           Option<String> resumeCheckpointStr = getLastCommittedOffsets(fs, tableConfig.targetBasePath, tableConfig.payloadClassName);
@@ -319,7 +325,11 @@ public class OnehouseDeltaStreamer implements Serializable {
                 new HoodieMultiTableCommitStatsManager.TableCommitStats(resumeCheckpointStr, Option.empty()));
           }
         } catch (IOException exception) {
+          String stackTrace = ExceptionUtils.getStackTrace(exception);
+          LOG.error("Reading table config files failed: " + stackTrace);
           throw new HoodieException("Reading table config files failed ", exception);
+        } finally {
+          LogContext.clear();
         }
       });
 
@@ -344,27 +354,33 @@ public class OnehouseDeltaStreamer implements Serializable {
               selectedJobs.forEach(jobInfo -> {
                 jobInfo.onSyncScheduled();
                 CompletableFuture.supplyAsync(() -> {
+                  LogContext.getInstance().withTableName(jobInfo.targetTableName);
                   try {
                     jobInfo.onSyncStarted();
                     HoodieDeltaStreamer.DeltaSyncService syncService = jobInfo.deltaSync;
                     syncService.getDeltaSync().syncOnce();
                   } catch (IOException e) {
                     throw new HoodieIOException(e.getMessage(), e);
+                  } finally {
+                    LogContext.clear();
                   }
                   return null;
                 }, multiTableStreamThreadPool)
                     .whenCompleteAsync((response, throwable) -> {
+                      LogContext.getInstance().withTableName(jobInfo.targetTableName);
                       if (throwable != null) {
                         jobInfo.onSyncFailure();
                         LOG.error("Failed to run job for table: " + jobInfo.getSourceTablePath(), throwable.getCause());
+                        LOG.error("StackTrace: " + ExceptionUtils.getStackTrace(throwable));
                       } else {
                         jobInfo.onSyncSuccess();
                         LOG.info("Successfully ran job for table: " + jobInfo.getSourceTablePath());
                       }
+                      LogContext.clear();
                     });
               });
 
-              LOG.info("Sleeping for " + INGESTION_SCHEDULING_FREQUENCY_MS + " secs before checking the source topics for ingestion.");
+              LOG.info("Sleeping for " + INGESTION_SCHEDULING_FREQUENCY_MS + " ms before checking the source topics for ingestion.");
               Thread.sleep(INGESTION_SCHEDULING_FREQUENCY_MS);
 
               // Update metrics
@@ -399,6 +415,10 @@ public class OnehouseDeltaStreamer implements Serializable {
        * Source specific path for the job
        */
       private final String sourceTablePath;
+      /**
+       * Name of target hoodie table.
+       */
+      private final String targetTableName;
       /**
        * Target Table Path.
        */
@@ -465,8 +485,10 @@ public class OnehouseDeltaStreamer implements Serializable {
       private Integer minSyncTimeMs;
       private Long readSourceLimit;
 
-      public JobInfo(JavaSparkContext jssc, String sourceTablePath, String basePath, HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs) {
+      public JobInfo(JavaSparkContext jssc, String sourceTablePath, String targetTableName, String basePath,
+                     HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs) {
         this.sourceTablePath = sourceTablePath;
+        this.targetTableName = targetTableName;
         this.basePath = basePath;
         this.deltaSync = deltaSync;
         this.props = props;
@@ -486,7 +508,6 @@ public class OnehouseDeltaStreamer implements Serializable {
             OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue()) * 1000;
         this.readSourceLimit = props.getLong(OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.key(),
             OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.defaultValue());
-        LOG.info(HoodieDeltaStreamer.toSortedTruncatedString(props));
       }
 
       String getSourceTablePath() {
@@ -742,5 +763,31 @@ public class OnehouseDeltaStreamer implements Serializable {
   private enum JobType {
     SINGLE_TABLE_DELTASTREAMER,
     MULTI_TABLE_DELTASTREAMER
+  }
+
+  private static class LogContext {
+    private static String TABLE_NAME_CONTEXT_KEY = "table";
+
+    private LogContext() {
+    }
+
+    public static LogContext getInstance() {
+      return new LogContext();
+    }
+
+    public LogContext withTableName(String tableName) {
+      if (!StringUtils.isNullOrEmpty(tableName)) {
+        MDC.put(TABLE_NAME_CONTEXT_KEY, kvString(TABLE_NAME_CONTEXT_KEY, tableName));
+      }
+      return this;
+    }
+
+    public static void clear() {
+      MDC.clear();
+    }
+
+    private static String kvString(String key, String value) {
+      return "{" + key + "=" + value + "}";
+    }
   }
 }
