@@ -177,8 +177,11 @@ public final class SourceFormatAdapter implements Closeable {
         if (quarantineTableWriterInterface.isPresent()) {
           StructType dataType = AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema)
               .add(new StructField(QUARANTINE_TABLE_CURRUPT_RECORD_COL_NAME, DataTypes.StringType, true, Metadata.empty()));
+          StructType nullableStruct = dataType.asNullable();
           Option<Dataset<Row>> dataset = r.getBatch().map(rdd -> source.getSparkSession().read()
-              .option("mode", "PERMISSIVE").option("columnNameOfCorruptRecord", QUARANTINE_TABLE_CURRUPT_RECORD_COL_NAME).schema(dataType)
+              .schema(nullableStruct)
+              .option("mode", "PERMISSIVE")
+              .option("columnNameOfCorruptRecord", QUARANTINE_TABLE_CURRUPT_RECORD_COL_NAME)
               .json(rdd));
           Option<Dataset<Row>> eventsDataset = transformDatasetWithQuarantineEvents(dataset, QuarantineEvent.QuarantineReason.JSON_ROW_DESERIALIZATION_FAILURE);
           return new InputBatch<>(

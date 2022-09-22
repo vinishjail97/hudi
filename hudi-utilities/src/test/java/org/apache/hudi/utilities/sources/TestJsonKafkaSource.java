@@ -246,6 +246,7 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     props.put(QUARANTINE_TABLE_BASE_PATH.key(),"/tmp/qurantine_table_test/json_kafka_row_events");
     props.put(QUARANTINE_TARGET_TABLE.key(),"json_kafka_row_events");
     props.put("hoodie.base.path","/tmp/json_kafka_row_events");
+    props.put("hoodie.deltastreamer.quarantinetable.validate.targetschema.enable", "true");
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
     Option<QuarantineTableWriterInterface> quarantineTableWriterInterface = Option.of(new JsonQuarantineTableWriter(new HoodieDeltaStreamer.Config(),
         spark(),props,jsc(),fs()));
