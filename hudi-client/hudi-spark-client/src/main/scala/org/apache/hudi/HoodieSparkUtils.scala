@@ -27,6 +27,7 @@ import org.apache.spark.SPARK_VERSION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.execution.SQLConfInjectingRDD
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -160,10 +161,11 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
         } else {
           val writerAvroSchema = new Schema.Parser().parse(writerAvroSchemaStr)
           val convert = AvroConversionUtils.createInternalRowToAvroConverter(writerSchema, writerAvroSchema, nullable = nullable)
+          val rowDeserializer = RowEncoder(writerSchema).resolveAndBind().createDeserializer()
           val transform: InternalRow => Either[GenericRecord, String] = internalRow => try {
             Left(HoodieAvroUtils.rewriteRecordDeep(convert(internalRow), readerAvroSchema, true))
           } catch {
-            case _: Throwable => Right(internalRow.toSeq(writerSchema).mkString(","))
+            case _: Throwable => Right(rowDeserializer.apply(internalRow).json)
           }
           rows.map(transform)
         }
