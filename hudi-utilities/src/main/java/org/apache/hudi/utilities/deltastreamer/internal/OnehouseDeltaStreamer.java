@@ -20,7 +20,6 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
-import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -53,6 +52,7 @@ import org.apache.hudi.utilities.exception.HoodieDeltaStreamerException;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.apache.pulsar.shade.org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.spark.api.java.JavaSparkContext;
 
 import java.io.IOException;
