@@ -766,13 +766,15 @@ public class OnehouseDeltaStreamer implements Serializable {
   }
 
   private static class LogContext {
-    private static String TABLE_NAME_CONTEXT_KEY = "table";
+    private static final String TABLE_NAME_CONTEXT_KEY = "table";
+
+    private static final LogContext LOG_CONTEXT = new LogContext();
 
     private LogContext() {
     }
 
     public static LogContext getInstance() {
-      return new LogContext();
+      return LOG_CONTEXT;
     }
 
     public LogContext withTableName(String tableName) {
