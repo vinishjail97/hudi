@@ -108,6 +108,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.Set;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -229,6 +230,7 @@ public class DeltaSync implements Serializable, Closeable {
   private transient HoodieDeltaStreamerMetrics metrics;
 
   private transient HoodieMetrics hoodieMetrics;
+  private final String jobGroupId;
 
   public DeltaSync(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession, TypedProperties props,
                    JavaSparkContext jssc, FileSystem fs, Configuration conf,
@@ -267,6 +269,7 @@ public class DeltaSync implements Serializable, Closeable {
     this.formatAdapter = new SourceFormatAdapter(
         UtilHelpers.createSource(cfg.sourceClassName, props, jssc, sparkSession, schemaProvider, metrics),
         this.quarantineTableWriterInterfaceImpl);
+    this.jobGroupId = "OnehouseDeltaStreamer-" + UUID.randomUUID();
   }
 
   /**
@@ -318,6 +321,8 @@ public class DeltaSync implements Serializable, Closeable {
    * Run one round of delta sync and return new compaction instant if one got scheduled.
    */
   public Pair<Option<String>, JavaRDD<WriteStatus>> syncOnce() throws IOException {
+    // set the jobGroup for easy cancellation
+    jssc.setJobGroup(jobGroupId, String.format("Sync for target table: %s", cfg.targetTableName), true);
     Pair<Option<String>, JavaRDD<WriteStatus>> result = null;
     Timer.Context overallTimerContext = metrics.getOverallTimerContext();
 
@@ -522,7 +527,6 @@ public class DeltaSync implements Serializable, Closeable {
       return null;
     }
 
-    jssc.setJobGroup(this.getClass().getSimpleName(), "Checking if input is empty");
     if ((!avroRDDOptional.isPresent()) || (avroRDDOptional.get().isEmpty())) {
       LOG.info("No new data, perform empty commit.");
       return Pair.of(schemaProvider, Pair.of(checkpointStr, jssc.emptyRDD()));
@@ -1007,6 +1011,7 @@ public class DeltaSync implements Serializable, Closeable {
     if (embeddedTimelineService.isPresent()) {
       embeddedTimelineService.get().stop();
     }
+    jssc.cancelJobGroup(jobGroupId);
   }
 
   public FileSystem getFs() {
