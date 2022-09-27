@@ -410,6 +410,9 @@ public class HoodieDeltaStreamer implements Serializable {
     @Parameter(names = {"--post-write-termination-strategy-class"}, description = "Post writer termination strategy class to gracefully shutdown deltastreamer in continuous mode")
     public String postWriteTerminationStrategyClass = "";
 
+    @Parameter(names = {"--skip-rdd-unpersist"}, description = "Skips the unpersist step at the end of the sync. Should always be set to true for multi table ingestion")
+    public Boolean skipRddUnpersist = false;
+
     public boolean isAsyncCompactionEnabled() {
       return continuousMode && !forceDisableCompaction
           && HoodieTableType.MERGE_ON_READ.equals(HoodieTableType.valueOf(tableType));
@@ -463,7 +466,8 @@ public class HoodieDeltaStreamer implements Serializable {
               && Objects.equals(forceDisableCompaction, config.forceDisableCompaction)
               && Objects.equals(checkpoint, config.checkpoint)
               && Objects.equals(initialCheckpointProvider, config.initialCheckpointProvider)
-              && Objects.equals(help, config.help);
+              && Objects.equals(help, config.help)
+              && Objects.equals(skipRddUnpersist, config.skipRddUnpersist);
     }
 
     @Override
@@ -476,7 +480,7 @@ public class HoodieDeltaStreamer implements Serializable {
               continuousMode, minSyncIntervalSeconds, sparkMaster, commitOnErrors,
               deltaSyncSchedulingWeight, compactSchedulingWeight, clusterSchedulingWeight, deltaSyncSchedulingMinShare,
               compactSchedulingMinShare, clusterSchedulingMinShare, forceDisableCompaction, checkpoint,
-              initialCheckpointProvider, help);
+              initialCheckpointProvider, help, skipRddUnpersist);
     }
 
     @Override
@@ -516,6 +520,7 @@ public class HoodieDeltaStreamer implements Serializable {
               + ", checkpoint='" + checkpoint + '\''
               + ", initialCheckpointProvider='" + initialCheckpointProvider + '\''
               + ", help=" + help
+              + ", skipRddUnpersist=" + skipRddUnpersist
               + '}';
     }
   }
@@ -689,6 +694,8 @@ public class HoodieDeltaStreamer implements Serializable {
           while (!isShutdownRequested()) {
             try {
               long start = System.currentTimeMillis();
+              // Send a heartbeat metrics event to track the active ingestion job for this table.
+              deltaSync.getMetrics().updateDeltaStreamerHeartbeatTimestamp(start);
               Option<Pair<Option<String>, JavaRDD<WriteStatus>>> scheduledCompactionInstantAndRDD = Option.ofNullable(deltaSync.syncOnce());
               if (scheduledCompactionInstantAndRDD.isPresent() && scheduledCompactionInstantAndRDD.get().getLeft().isPresent()) {
                 LOG.info("Enqueuing new pending compaction instant (" + scheduledCompactionInstantAndRDD.get().getLeft() + ")");
@@ -832,7 +839,7 @@ public class HoodieDeltaStreamer implements Serializable {
      * Close all resources.
      */
     public void close() {
-      if (null != deltaSync) {
+      if (deltaSync != null) {
         deltaSync.close();
       }
     }

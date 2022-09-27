@@ -48,6 +48,11 @@ public interface QuarantineTableWriterInterface<T extends QuarantineEvent> {
    */
   Option<JavaRDD<HoodieAvroRecord>> getErrorEvents(String basetableInstantTime, Option<String> commitedInstantTime);
 
+  /***
+   * implement this to clean error events state to be executed after error events committed .
+   */
+  void cleanErrorEvents();
+
   String startCommit();
 
   /***

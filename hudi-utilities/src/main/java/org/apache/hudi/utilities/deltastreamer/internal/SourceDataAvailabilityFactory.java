@@ -19,14 +19,12 @@
 package org.apache.hudi.utilities.deltastreamer.internal;
 
 import org.apache.hudi.common.config.TypedProperties;
-import org.apache.hudi.utilities.sources.S3EventsHoodieIncrSource;
+import org.apache.hudi.common.util.ReflectionUtils;
+import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
-
-import static org.apache.hudi.config.OnehouseInternalDeltastreamerConfig.DELTASTREAMER_SOURCE_CLASS_NAME;
-import static org.apache.hudi.utilities.deltastreamer.internal.KafkaSourceDataAvailabilityEstimator.KafkaClusterInfo.KAFKA_SOURCE_RATE_ESTIMATOR_KEY;
 
 public class SourceDataAvailabilityFactory {
 
@@ -45,13 +43,12 @@ public class SourceDataAvailabilityFactory {
       return defaultEstimator;
     }
 
-    if (S3EventsHoodieIncrSource.class.getName().equals(properties.getString(DELTASTREAMER_SOURCE_CLASS_NAME.key(),null))) {
-      return new S3IncrDataAvailabilityEstimator(jssc, properties);
-    } else if (properties.containsKey(KAFKA_SOURCE_RATE_ESTIMATOR_KEY)) {
-      return new KafkaSourceDataAvailabilityEstimator(jssc, properties);
+    String sourceEstimatorTypeClass = properties.getProperty(OnehouseInternalDeltastreamerConfig.DELTASTREAMER_SOURCE_ESTIMATOR_TYPE.key());
+    try {
+      return (SourceDataAvailabilityEstimator) ReflectionUtils.loadClass(sourceEstimatorTypeClass, properties, jssc);
+    } catch (Exception e) {
+      LOG.warn("Error in loading estimator class " + sourceEstimatorTypeClass + " using default estimator");
+      return defaultEstimator;
     }
-
-    LOG.warn("Source rate availability estimator is not supported for this source " + basePath);
-    return defaultEstimator;
   }
 }

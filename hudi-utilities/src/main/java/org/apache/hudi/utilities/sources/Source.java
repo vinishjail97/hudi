@@ -48,7 +48,7 @@ public abstract class Source<T> implements SourceCommitCallback, Serializable {
   private static final  ObjectMapper OM = new ObjectMapper();
 
   public enum SourceType {
-    JSON, AVRO, ROW
+    JSON, AVRO, ROW, PROTO
   }
 
   protected transient TypedProperties props;

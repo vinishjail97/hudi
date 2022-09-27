@@ -42,6 +42,19 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
           + "Built-in options: org.apache.hudi.utilities.sources.{JsonDFSSource (default), AvroDFSSource, "
           + "JsonKafkaSource, AvroKafkaSource, HiveIncrPullSource}");
 
+  public static final ConfigProperty<String> DELTASTREAMER_SOURCE_ID = ConfigProperty
+      .key("hoodie.deltastreamer.source.id")
+      .noDefaultValue()
+      .withDocumentation("A unique identifier for the deltastreamer source class provided above"
+      + "For Onehouse users, this would be sourceUUID present in the org");
+
+  public static final ConfigProperty<String> DELTASTREAMER_SOURCE_ESTIMATOR_TYPE = ConfigProperty
+      .key("hoodie.deltastreamer.source.estimator.class")
+      .defaultValue("org.apache.hudi.utilities.deltastreamer.internal.DefaultSourceDataAvailabilityEstimator")
+      .withDocumentation("Subclass of org.apache.hudi.utilities.deltastreamer.internal.SourceDataAvailabilityEstimator "
+          + "which compute the data available in hoodie.deltastreamer.source.class.name property and used by DeltaSync "
+          + "to decide whether to go-ahead with the write operation");
+
   public static final ConfigProperty<Long> READ_SOURCE_LIMIT = ConfigProperty
       .key("hoodie.deltastreamer.read.source.limit")
       .defaultValue(Long.MAX_VALUE)
@@ -103,6 +116,17 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
       .key("hoodie.deltastreamer.multiwriter.source.checkpoint.id")
       .noDefaultValue()
       .withDocumentation("Define Unique Id for source to be used in commit checkpoint");
+
+  public static final ConfigProperty<Boolean> DISABLE_COMPACTION = ConfigProperty
+      .key("hoodie.deltastreamer.disable.compaction")
+      .defaultValue(false) // 1MB
+      .withDocumentation("Disable Compaction");
+
+  public static final ConfigProperty<Boolean> COMMIT_ON_ERRORS = ConfigProperty
+      .key("hoodie.deltastreamer.allow.commit.on.errors")
+      .defaultValue(false) // 1MB
+      .withDocumentation("allow commits on errors in delta sync,"
+          + " should be used along with quarantine enabled");
 
   private OnehouseInternalDeltastreamerConfig() {
     super();
@@ -166,6 +190,14 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
 
   public boolean isFilterDupesEnabled() {
     return getBooleanOrDefault(DELTASTREAMER_ENABLE_FILTER_DUPES);
+  }
+
+  public boolean isAllowCommitOnErrors() {
+    return getBooleanOrDefault(COMMIT_ON_ERRORS);
+  }
+
+  public boolean isCompactionDisabled() {
+    return getBooleanOrDefault(DISABLE_COMPACTION);
   }
 
   public static OnehouseInternalDeltastreamerConfig.Builder newBuilder() {

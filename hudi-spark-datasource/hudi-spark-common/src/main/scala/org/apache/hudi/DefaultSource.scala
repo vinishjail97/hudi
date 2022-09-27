@@ -182,6 +182,7 @@ class DefaultSource extends RelationProvider
     } else {
       HoodieSparkSqlWriter.write(sqlContext, mode, optParams, dfWithoutMetaCols)
     }
+
     new HoodieEmptyRelation(sqlContext, dfWithoutMetaCols.schema)
   }
 
