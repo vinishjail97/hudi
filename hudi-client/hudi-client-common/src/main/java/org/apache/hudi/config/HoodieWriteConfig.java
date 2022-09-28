@@ -1935,7 +1935,7 @@ public class HoodieWriteConfig extends HoodieConfig {
   }
 
   public String getCallbackMultiWriterClass() {
-    return getString(HoodieWriteCommitCallbackConfig.CALLBACK_CLASS_NAME);
+    return getString(HoodieWriteCommitCallbackConfig.CALLBACK_MUTLI_WRITER_CLASS_NAME);
   }
 
   public String getBootstrapSourceBasePath() {

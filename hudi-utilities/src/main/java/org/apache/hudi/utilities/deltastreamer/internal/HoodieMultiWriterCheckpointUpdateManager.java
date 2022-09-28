@@ -44,6 +44,9 @@ public class HoodieMultiWriterCheckpointUpdateManager implements HoodieWriteComm
 
   private static final ObjectMapper OM = new ObjectMapper();
 
+  public HoodieMultiWriterCheckpointUpdateManager(HoodieWriteConfig config) {
+  }
+
   private void updateCheckPointConfigs(Map<String, String> extraMetadata, String checkpointStr) {
     extraMetadata.put(HoodieWriteConfig.DELTASTREAMER_CHECKPOINT_KEY, checkpointStr);
   }
