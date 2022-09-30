@@ -54,7 +54,7 @@ public class HoodieWriteCommitCallbackConfig extends HoodieConfig {
   public static final ConfigProperty<String> CALLBACK_MUTLI_WRITER_CLASS_NAME = ConfigProperty
       .key(CALLBACK_PREFIX + "multiWriter.class")
       .defaultValue("org.apache.hudi.utilities.deltastreamer.internal.HoodieMultiWriterCheckpointUpdateManager")
-      .sinceVersion("0.6.0")
+      .sinceVersion("0.12.0")
       .withDocumentation("Full path of callback class and must be a subclass of HoodieWriteCommitCallback class, "
           + "org.apache.hudi.utilities.deltastreamer.internal.HoodieMultiWriterCheckpointUpdateManager");
 
