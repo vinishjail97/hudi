@@ -18,17 +18,12 @@
 
 package org.apache.hudi.utilities.deltastreamer.internal;
 
-import com.beust.jcommander.JCommander;
-import com.beust.jcommander.Parameter;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-
 import org.apache.hudi.DataSourceWriteOptions;
 import org.apache.hudi.async.HoodieAsyncService;
 import org.apache.hudi.common.config.HoodieConfig;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
+import org.apache.hudi.common.function.SerializableBiFunction;
 import org.apache.hudi.common.model.HoodieCommitMetadata;
 import org.apache.hudi.common.model.WriteOperationType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
@@ -36,7 +31,6 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
-import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.HoodieClusteringConfig;
 import org.apache.hudi.config.HoodieWriteCommitCallbackConfig;
@@ -50,25 +44,35 @@ import org.apache.hudi.utilities.checkpointing.InitialCheckPointProvider;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer;
 import org.apache.hudi.utilities.exception.HoodieDeltaStreamerException;
 
+import com.beust.jcommander.JCommander;
+import com.beust.jcommander.Parameter;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.pulsar.shade.org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
-import org.slf4j.MDC;
 
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_KEY;
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_RESET_KEY;
@@ -76,10 +80,10 @@ import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKP
 /**
  * The deltastreamer ingestion job that supports the ingestion of one or more tables from one or more sources,
  * such as Kafka, S3 etc.
- *
+ * <p>
  * If ingesting a single table, {@link OnehouseDeltaStreamer} leverages {@link HoodieDeltaStreamer}, and when
  * ingesting multiple tables, it leverages an instance of {@link org.apache.hudi.utilities.deltastreamer.DeltaSync} per table.
- *
+ * <p>
  * RFC: https://app.clickup.com/18029943/v/dc/h67bq-7724/h67bq-15908
  */
 public class OnehouseDeltaStreamer implements Serializable {
@@ -88,32 +92,12 @@ public class OnehouseDeltaStreamer implements Serializable {
   private static final Logger LOG = LogManager.getLogger(OnehouseDeltaStreamer.class);
 
   protected final transient Config cfg;
-  protected transient Option<HoodieAsyncService> syncService;
+  protected transient Option<MultiTableSyncService> syncService;
 
   public OnehouseDeltaStreamer(Config cfg, JavaSparkContext jssc) throws IOException {
     this.cfg = cfg;
-    List<String> sourceTablePropertiesFiles = cfg.sourceTablePropsPaths;
-
-    ValidationUtils.checkArgument(!sourceTablePropertiesFiles.isEmpty(), "At least configure 1 source for 1 table for ingestion.");
-    ValidationUtils.checkArgument(((sourceTablePropertiesFiles.size() > 1 && cfg.syncOnce.equals(false))
-            || sourceTablePropertiesFiles.size() == 1),
-        "Sync once mode not supported for multiple table ingestion");
-
     Configuration hadoopConf = jssc.hadoopConfiguration();
-
-    if (isSingleTableIngestion()) {
-      String tablePropsRelativePath = (sourceTablePropertiesFiles.get(0).endsWith(".properties")) ? sourceTablePropertiesFiles.get(0) : sourceTablePropertiesFiles.get(0).concat(".properties");
-      String tablePropsFilePath = String.format("%s/%s", cfg.propsDirRoot, tablePropsRelativePath);
-      TypedProperties properties = combineProperties(tablePropsFilePath, cfg, hadoopConf);
-      HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(cfg, hadoopConf, properties, tablePropsFilePath, JobType.SINGLE_TABLE_DELTASTREAMER);
-      this.syncService = Option.ofNullable(new HoodieDeltaStreamer.DeltaSyncService(tableConfig,
-          jssc,
-          FSUtils.getFs(tableConfig.targetBasePath, hadoopConf),
-          hadoopConf,
-          Option.of(properties)));
-    } else {
-      this.syncService = Option.ofNullable(new MultiTableSyncService(cfg, jssc, hadoopConf));
-    }
+    this.syncService = Option.ofNullable(new MultiTableSyncService(cfg, jssc, hadoopConf));
   }
 
   public static OnehouseDeltaStreamer.Config getConfig(String[] args) {
@@ -151,13 +135,13 @@ public class OnehouseDeltaStreamer implements Serializable {
     } else {
       LOG.info("Delta Streamer running only single round");
       try {
-        syncService.ifPresent(ds -> {
+        syncService.ifPresent(ds -> ds.jobManager.getActiveJobs().forEach(jobInfo -> {
           try {
-            ((HoodieDeltaStreamer.DeltaSyncService) ds).getDeltaSync().syncOnce();
-          } catch (IOException e) {
-            throw new HoodieIOException(e.getMessage(), e);
+            jobInfo.deltaSync.getDeltaSync().syncOnce();
+          } catch (IOException ex) {
+            throw new HoodieIOException(ex.getMessage(), ex);
           }
-        });
+        }));
       } catch (Exception ex) {
         LOG.error("Got error running delta sync once. Shutting down", ex);
         throw ex;
@@ -168,19 +152,9 @@ public class OnehouseDeltaStreamer implements Serializable {
     }
   }
 
-  private boolean isSingleTableIngestion() {
-    return (cfg.sourceTablePropsPaths.size() == 1);
-  }
-
   private boolean onDeltaSyncShutdown(boolean error) {
     LOG.info("DeltaSync shutdown. Closing write client. Error?" + error);
-    syncService.ifPresent(ds -> {
-      if (isSingleTableIngestion()) {
-        ((HoodieDeltaStreamer.DeltaSyncService) syncService.get()).close();
-      } else {
-        ((MultiTableSyncService) syncService.get()).close();
-      }
-    });
+    syncService.ifPresent(MultiTableSyncService::close);
     return true;
   }
 
@@ -189,8 +163,7 @@ public class OnehouseDeltaStreamer implements Serializable {
 
     // Currently we run the table service inline (and not async) and hence
     // do not set the spark scheduler configs.
-    JavaSparkContext jssc =
-        UtilHelpers.buildSparkContext("onehouse-delta-streamer-" + cfg.jobUuid, cfg.sparkMaster);
+    JavaSparkContext jssc = UtilHelpers.buildSparkContext("onehouse-delta-streamer-" + cfg.jobUuid, cfg.sparkMaster);
 
     try {
       new OnehouseDeltaStreamer(cfg, jssc).sync();
@@ -200,8 +173,7 @@ public class OnehouseDeltaStreamer implements Serializable {
   }
 
   public static class Config implements Serializable {
-    public static final String DEFAULT_DFS_PROPS_ROOT = "file://" + System.getProperty("user.dir")
-        + "/src/test/resources/delta-streamer-config/";
+    public static final String DEFAULT_DFS_PROPS_ROOT = "file://" + System.getProperty("user.dir") + "/src/test/resources/delta-streamer-config/";
     private static final Long DEFAULT_MIN_SYNC_INTERVAL_AFTER_FAILURES_SECONDS = 300L; // 5mins
     private static final int MIN_SYNC_THREAD_POOL = 5;
     private static final int UNINITIALIZED = -1;
@@ -209,31 +181,22 @@ public class OnehouseDeltaStreamer implements Serializable {
     @Parameter(names = {"--job-uuid"}, description = "The UUID for the multi table deltastreamer spark job.")
     public String jobUuid = "";
 
-    @Parameter(names = {"--props-root"}, description = "root path to properties file on localfs or dfs, with configurations for "
-        + "hoodie client, schema provider, key generator and data source for all individual tables. "
-        + " Properties in this file can be overridden by \"--hoodie-conf\"")
-    public String propsDirRoot = DEFAULT_DFS_PROPS_ROOT;
+    @Parameter(names = {"--table-props-file"}, description = "Full pathname of the config file that contains "
+        + "the list of the pathname of the root configurations for each table that needs to be ingested. ")
+    public String tablePropsFile = DEFAULT_DFS_PROPS_ROOT;
 
-    @Parameter(names = {"--props-tables-source"}, description = "relative paths to the root path "
-        + "of the table's source's properties file", splitter = IdentitySplitter.class)
-    public List<String> sourceTablePropsPaths = new ArrayList<>();
-
-    @Parameter(names = {"--min-sync-interval-post-failures-seconds"},
-        description = "the min sync interval after a failed sync for a specific table")
+    @Parameter(names = {"--min-sync-interval-post-failures-seconds"}, description = "the min sync interval after a failed sync for a specific table")
     public Long minSyncIntervalPostFailuresSeconds = DEFAULT_MIN_SYNC_INTERVAL_AFTER_FAILURES_SECONDS;
 
-    @Parameter(names = {"--sync-jobs-thread-pool"},
-        description = "The size of the thread pool that runs the individual Ingestion jobs")
+    @Parameter(names = {"--sync-jobs-thread-pool"}, description = "The size of the thread pool that runs the individual Ingestion jobs")
     public int syncJobsThreadPool = UNINITIALIZED;
 
     @Parameter(names = {"--hoodie-conf"}, description = "Any configuration that can be set in the properties file "
-        + "(using the CLI parameter \"--props\") can also be passed command line using this parameter. This can be repeated",
-        splitter = IdentitySplitter.class)
+        + "(using the CLI parameter \"--props\") can also be passed command line using this parameter. This can be repeated", splitter = IdentitySplitter.class)
     public List<String> configs = new ArrayList<>();
 
     @Parameter(names = {"--sync-once"}, description = "By default, the Delta Streamer runs in continuous mode. This flag will make it run "
-        + "only once when ingesting a single table. Sync once is not supported when ingesting multiple tables."
-        + " source-fetch -> Transform -> Hudi Write in loop.")
+        + "only once when ingesting a single table. Sync once is not supported when ingesting multiple tables." + " source-fetch -> Transform -> Hudi Write in loop.")
     public Boolean syncOnce = false;
 
     @Parameter(names = {"--spark-master"}, description = "spark master to use.")
@@ -257,83 +220,54 @@ public class OnehouseDeltaStreamer implements Serializable {
 
   public static class MultiTableSyncService extends HoodieAsyncService {
 
-    private static final String PROPERTIES_FILE_EXTENSION = ".properties";
     private static final Integer INGESTION_SCHEDULING_FREQUENCY_MS = 15 * 1000; // 15 secs
     private static final Long MIN_TIME_EMIT_METRICS_MS = 5 * 60 * 1000L; // 5 mins
 
-    private final transient Map<String, JobInfo> jobInfoMap;
+    private final transient JobManager jobManager;
     private final transient ExecutorService multiTableStreamThreadPool;
-
-    /**
-     * Multitable DeltaSync Config.
-     */
-    private final transient Config multiTableConfigs;
-    private final transient JavaSparkContext jssc;
     private transient long lastTimeMetricsReportedMs;
 
     public MultiTableSyncService(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig) throws IOException {
       int totalExecutorResources = Integer.parseInt(jssc.getConf().get("spark.executor.cores", "0"))
-          * Math.max(Integer.parseInt(jssc.getConf().get("spark.executor.instances", "0")),
-          Integer.parseInt(jssc.getConf().get("spark.dynamicAllocation.maxExecutors", "0")));
-      int numThreads = (multiTableConfigs.syncJobsThreadPool != Config.UNINITIALIZED) ? multiTableConfigs.syncJobsThreadPool
-          : Math.max(totalExecutorResources, Config.MIN_SYNC_THREAD_POOL);
+          * Math.max(Integer.parseInt(jssc.getConf().get("spark.executor.instances", "0")), Integer.parseInt(jssc.getConf().get("spark.dynamicAllocation.maxExecutors", "0")));
+      int numThreads = (multiTableConfigs.syncJobsThreadPool != Config.UNINITIALIZED) ? multiTableConfigs.syncJobsThreadPool : Math.max(totalExecutorResources, Config.MIN_SYNC_THREAD_POOL);
       LOG.info("The sync jobs will be scheduled concurrently across a thread pool of size " + numThreads);
       multiTableStreamThreadPool = Executors.newFixedThreadPool(numThreads);
 
-      this.jobInfoMap = new HashMap<>();
-      this.multiTableConfigs = multiTableConfigs;
-      this.jssc = jssc;
       this.lastTimeMetricsReportedMs = 0L;
 
       Map<String, HoodieMultiTableCommitStatsManager.TableCommitStats> initialTableCommitStatsMap = new HashMap<>();
-      multiTableConfigs.sourceTablePropsPaths.forEach(sourceTablePropsPath -> {
-        sourceTablePropsPath = (sourceTablePropsPath.endsWith(PROPERTIES_FILE_EXTENSION)) ? sourceTablePropsPath : sourceTablePropsPath.concat(PROPERTIES_FILE_EXTENSION);
-
-        String sourceTablePropsFilePath = String.format("%s/%s", multiTableConfigs.propsDirRoot, sourceTablePropsPath);
-        try {
-          final TypedProperties properties = buildProperties(sourceTablePropsFilePath, hadoopConfig);
-
-          HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(multiTableConfigs,
-              hadoopConfig,
-              properties,
-              sourceTablePropsFilePath,
-              JobType.MULTI_TABLE_DELTASTREAMER);
-
-          LogContext.getInstance().withTableName(tableConfig.targetTableName);
-
-          FileSystem fs = FSUtils.getFs(tableConfig.targetBasePath, hadoopConfig);
-          HoodieDeltaStreamer.DeltaSyncService deltaSync = new HoodieDeltaStreamer.DeltaSyncService(tableConfig,
-              jssc,
-              fs,
-              hadoopConfig,
-              Option.of(properties));
-
-          JobInfo jobInfo = new JobInfo(
-              jssc,
-              sourceTablePropsFilePath,
-              tableConfig.targetTableName,
-              tableConfig.targetBasePath,
-              deltaSync,
-              properties,
-              multiTableConfigs);
-          LOG.info("Hoodie properties: " + HoodieDeltaStreamer.toSortedTruncatedString(properties).replace("\n", " ; "));
-          jobInfoMap.put(sourceTablePropsFilePath, jobInfo);
-
-          Option<String> resumeCheckpointStr = getLastCommittedOffsets(fs, tableConfig.targetBasePath, tableConfig.payloadClassName);
-          if (resumeCheckpointStr.isPresent()) {
-            initialTableCommitStatsMap.put(jobInfo.getBasePath(),
-                new HoodieMultiTableCommitStatsManager.TableCommitStats(resumeCheckpointStr, Option.empty()));
-          }
-        } catch (IOException exception) {
-          String stackTrace = ExceptionUtils.getStackTrace(exception);
-          LOG.error("Reading table config files failed: " + stackTrace);
-          throw new HoodieException("Reading table config files failed ", exception);
-        } finally {
-          LogContext.clear();
-        }
-      });
-
+      jobManager = new JobManager(multiTableConfigs.tablePropsFile, hadoopConfig,
+          (sourceTablePropsPath, jobManagerInstance) -> createJobInfo(multiTableConfigs, jssc, hadoopConfig, initialTableCommitStatsMap, sourceTablePropsPath, jobManagerInstance));
       HoodieMultiTableCommitStatsManager.initializeCommitStatsMap(initialTableCommitStatsMap);
+    }
+
+    private JobInfo createJobInfo(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig,
+                                  Map<String, HoodieMultiTableCommitStatsManager.TableCommitStats> initialTableCommitStatsMap, String sourceTablePropsFilePath, JobManager jobManager) {
+      try {
+        final TypedProperties properties = buildProperties(sourceTablePropsFilePath, multiTableConfigs, hadoopConfig);
+
+        HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(multiTableConfigs, hadoopConfig, properties, sourceTablePropsFilePath, JobType.MULTI_TABLE_DELTASTREAMER);
+
+        LogContext.getInstance().withTableBasePath(tableConfig.targetBasePath);
+
+        FileSystem fs = FSUtils.getFs(tableConfig.targetBasePath, hadoopConfig);
+        HoodieDeltaStreamer.DeltaSyncService deltaSync = new HoodieDeltaStreamer.DeltaSyncService(tableConfig, jssc, fs, hadoopConfig, Option.of(properties));
+
+        JobInfo jobInfo = new JobInfo(jssc, hadoopConfig, sourceTablePropsFilePath, tableConfig.targetBasePath, deltaSync, properties, multiTableConfigs, jobManager);
+
+        Option<String> resumeCheckpointStr = getLastCommittedOffsets(fs, tableConfig.targetBasePath, tableConfig.payloadClassName);
+        if (resumeCheckpointStr.isPresent()) {
+          initialTableCommitStatsMap.put(jobInfo.getBasePath(), new HoodieMultiTableCommitStatsManager.TableCommitStats(resumeCheckpointStr, Option.empty()));
+        }
+        return jobInfo;
+      } catch (IOException exception) {
+        String stackTrace = ExceptionUtils.getStackTrace(exception);
+        LOG.error("Reading table config files failed: " + stackTrace);
+        throw new HoodieException("Reading table config files failed ", exception);
+      } finally {
+        LogContext.clear();
+      }
     }
 
     @Override
@@ -345,48 +279,46 @@ public class OnehouseDeltaStreamer implements Serializable {
             try {
               // Mark eligible jobs for scheduling
               long currentTimeMs = System.currentTimeMillis();
-              List<JobInfo> selectedJobs = jobInfoMap.values().stream()
-                  .filter(jobInfo -> jobInfo.canSchedule(currentTimeMs))
-                  .collect(Collectors.toList());
+              List<JobInfo> selectedJobs = jobManager.getActiveJobs().stream().filter(jobInfo -> jobInfo.canSchedule(currentTimeMs)).collect(Collectors.toList());
 
               LOG.info("Based on source data rates selected the following tables " + selectedJobs.stream().map(JobInfo::getSourceTablePath).collect(Collectors.toList()));
 
               selectedJobs.forEach(jobInfo -> {
                 jobInfo.onSyncScheduled();
                 CompletableFuture.supplyAsync(() -> {
-                  LogContext.getInstance().withTableName(jobInfo.targetTableName);
-                  try {
-                    jobInfo.onSyncStarted();
-                    HoodieDeltaStreamer.DeltaSyncService syncService = jobInfo.deltaSync;
-                    syncService.getDeltaSync().syncOnce();
-                  } catch (IOException e) {
-                    throw new HoodieIOException(e.getMessage(), e);
-                  } finally {
-                    LogContext.clear();
+                  LogContext.getInstance().withTableBasePath(jobInfo.basePath);
+                  if (jobInfo.canStart()) {
+                    try {
+                      jobInfo.onSyncStarted();
+                      HoodieDeltaStreamer.DeltaSyncService syncService = jobInfo.deltaSync;
+                      syncService.getDeltaSync().syncOnce();
+                    } catch (IOException e) {
+                      throw new HoodieIOException(e.getMessage(), e);
+                    } finally {
+                      LogContext.clear();
+                    }
                   }
                   return null;
-                }, multiTableStreamThreadPool)
-                    .whenCompleteAsync((response, throwable) -> {
-                      LogContext.getInstance().withTableName(jobInfo.targetTableName);
-                      if (throwable != null) {
-                        jobInfo.onSyncFailure();
-                        LOG.error("Failed to run job for table: " + jobInfo.getSourceTablePath(), throwable.getCause());
-                        LOG.error("StackTrace: " + ExceptionUtils.getStackTrace(throwable));
-                      } else {
-                        jobInfo.onSyncSuccess();
-                        LOG.info("Successfully ran job for table: " + jobInfo.getSourceTablePath());
-                      }
-                      LogContext.clear();
-                    });
+                }, multiTableStreamThreadPool).whenCompleteAsync((response, throwable) -> {
+                  LogContext.getInstance().withTableBasePath(jobInfo.basePath);
+                  if (throwable != null) {
+                    jobInfo.onSyncFailure();
+                    LOG.error("Failed to run job for table: " + jobInfo.getSourceTablePath(), throwable.getCause());
+                    LOG.error("StackTrace: " + ExceptionUtils.getStackTrace(throwable));
+                  } else {
+                    jobInfo.onSyncSuccess();
+                    LOG.info("Successfully ran job for table: " + jobInfo.getSourceTablePath());
+                  }
+                  LogContext.clear();
+                });
               });
 
-              LOG.info("Sleeping for " + INGESTION_SCHEDULING_FREQUENCY_MS + " ms before checking the source topics for ingestion.");
+              LOG.info("Sleeping for " + INGESTION_SCHEDULING_FREQUENCY_MS + " milliseconds before checking the source topics for ingestion.");
               Thread.sleep(INGESTION_SCHEDULING_FREQUENCY_MS);
 
               // Update metrics
-              if (lastTimeMetricsReportedMs == 0L
-                  || (System.currentTimeMillis() - lastTimeMetricsReportedMs) > MIN_TIME_EMIT_METRICS_MS) {
-                jobInfoMap.values().forEach(JobInfo::reportMetrics);
+              if (lastTimeMetricsReportedMs == 0L || (System.currentTimeMillis() - lastTimeMetricsReportedMs) > MIN_TIME_EMIT_METRICS_MS) {
+                jobManager.getActiveJobs().forEach(JobInfo::reportMetrics);
                 lastTimeMetricsReportedMs = System.currentTimeMillis();
               }
             } catch (Exception e) {
@@ -402,23 +334,105 @@ public class OnehouseDeltaStreamer implements Serializable {
       }, executor), executor);
     }
 
+    private enum JobStatus {
+      RUNNING, PAUSED, STOPPED;
+    }
+
+    private static class JobManager implements Serializable {
+      private static final long JOB_MANAGER_REFRESH_INTERVAL = 1000;
+      private final String configPath;
+      private final Configuration hadoopConf;
+      private final transient Timer timer;
+      private Map<String, JobStatus> desiredJobStatuses;
+      private final Map<String, JobStatus> currentJobStatuses;
+      private final Map<String, JobInfo> jobInfoMap;
+      private final SerializableBiFunction<String, JobManager, JobInfo> jobInfoCreator;
+
+      JobManager(final String configPath, final Configuration hadoopConf, final SerializableBiFunction<String, JobManager, JobInfo> jobInfoCreator) {
+        this.configPath = configPath;
+        this.hadoopConf = hadoopConf;
+        this.currentJobStatuses = new ConcurrentHashMap<>();
+        this.jobInfoMap = new ConcurrentHashMap<>();
+        this.jobInfoCreator = jobInfoCreator;
+        resolve();
+        timer = new Timer();
+        timer.schedule(new TimerTask() {
+          @Override
+          public void run() {
+            resolve();
+          }
+        }, JOB_MANAGER_REFRESH_INTERVAL, JOB_MANAGER_REFRESH_INTERVAL);
+      }
+
+      private synchronized void resolve() {
+        desiredJobStatuses = UtilHelpers.readConfig(hadoopConf, new Path(configPath), Collections.emptyList()).getProps().entrySet().stream()
+            .collect(Collectors.toMap(entry -> entry.getKey().toString(), entry -> JobStatus.valueOf(entry.getValue().toString().toUpperCase())));
+        // stop jobs that were removed form the desiredJobStatuses
+        List<String> removed = currentJobStatuses.keySet().stream().filter(jobIdentifier -> {
+          if (!desiredJobStatuses.containsKey(jobIdentifier)) {
+            LOG.info("JobManager removing: " + jobIdentifier);
+            JobInfo jobToStop = jobInfoMap.remove(jobIdentifier);
+            if (jobToStop != null) {
+              jobToStop.deltaSync.close();
+              return true;
+            }
+          }
+          return false;
+        }).collect(Collectors.toList());
+        // remove the stopped jobs from the current job statuses
+        removed.forEach(currentJobStatuses::remove);
+
+        for (Map.Entry<String, JobStatus> desiredJobStatusEntry : desiredJobStatuses.entrySet()) {
+          String jobIdentifier = desiredJobStatusEntry.getKey();
+          JobStatus currentJobStatus = currentJobStatuses.get(jobIdentifier);
+          // any job not in the desiredJobStatuses but not the currentJobStatuses should be created
+          if (currentJobStatus == null) {
+            LOG.info("JobManager adding: " + jobIdentifier);
+            jobInfoMap.computeIfAbsent(jobIdentifier, key -> jobInfoCreator.apply(key, this));
+            setCurrentJobStatus(jobIdentifier, desiredJobStatusEntry.getValue());
+          } else if (desiredJobStatusEntry.getValue() == JobStatus.PAUSED && !jobInfoMap.get(jobIdentifier).isRunning()) {
+            // see which jobs need to be paused and whether they can be paused now
+            setCurrentJobStatus(jobIdentifier, JobStatus.PAUSED);
+          } else if (desiredJobStatusEntry.getValue() == JobStatus.RUNNING && currentJobStatus == JobStatus.PAUSED) {
+            // make sure properties are updated when un-pausing a stream
+            jobInfoMap.get(jobIdentifier).markPropertiesAsUpdated();
+          }
+        }
+      }
+
+      public JobStatus getDesiredStatusForJob(String jobName) {
+        return desiredJobStatuses.getOrDefault(jobName, JobStatus.STOPPED);
+      }
+
+      public void setCurrentJobStatus(String jobName, JobStatus jobStatus) {
+        currentJobStatuses.put(jobName, jobStatus);
+      }
+
+      public Collection<JobInfo> getActiveJobs() {
+        return jobInfoMap.values();
+      }
+
+      public void close() {
+        jobInfoMap.values().forEach(JobInfo::close);
+        timer.cancel();
+      }
+    }
+
     /**
      * Close all resources.
      */
     public void close() {
-      jobInfoMap.values().forEach(value -> value.deltaSync.close());
+      jobManager.close();
     }
 
     public static class JobInfo {
+      private final JavaSparkContext jssc;
+      private final Configuration hadoopConfig;
 
       /**
        * Source specific path for the job
        */
       private final String sourceTablePath;
-      /**
-       * Name of target hoodie table.
-       */
-      private final String targetTableName;
       /**
        * Target Table Path.
        */
@@ -427,12 +441,12 @@ public class OnehouseDeltaStreamer implements Serializable {
       /**
        * Bag of properties with source, hoodie client, key generator etc.
        */
-      private final TypedProperties props;
+      private TypedProperties props;
 
       /**
        * Delta Sync.
        */
-      private final HoodieDeltaStreamer.DeltaSyncService deltaSync;
+      private HoodieDeltaStreamer.DeltaSyncService deltaSync;
 
       /**
        * Passed in configs
@@ -453,6 +467,10 @@ public class OnehouseDeltaStreamer implements Serializable {
        * Number of consecutive failures of the ingest sync since the last successful sync.
        */
       private final AtomicInteger numberConsecutiveFailures;
+      /**
+       * Fetches the desired status for the job so we can stop scheduling ingest for individual tables instead of cancelling the whole job.
+       */
+      private final JobManager jobManager;
 
       /**
        * Time in future that is the minimum time at which the sync should be scheduled due to sync failures.
@@ -471,6 +489,16 @@ public class OnehouseDeltaStreamer implements Serializable {
       private AtomicLong sourceBytesAvailableForIngest;
 
       /**
+       * Time in millis when the properties where last updated.
+       */
+      private final AtomicLong propertiesUpdated;
+
+      /**
+       * Time in millis when the delta sync service was last updated.
+       */
+      private final AtomicLong deltaServiceUpdated;
+
+      /**
        * Tracks the (1) total time to sync one batch (round) of ingest data for a table after being scheduled and
        * (2) the actual time to sync once the thread was available from the pool.
        */
@@ -485,29 +513,39 @@ public class OnehouseDeltaStreamer implements Serializable {
       private Integer minSyncTimeMs;
       private Long readSourceLimit;
 
-      public JobInfo(JavaSparkContext jssc, String sourceTablePath, String targetTableName, String basePath,
-                     HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs) {
+      public JobInfo(JavaSparkContext jssc, Configuration hadoopConfig, String sourceTablePath, String basePath, HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs,
+                     JobManager jobManager) {
+        this.jssc = jssc;
+        this.hadoopConfig = hadoopConfig;
+        long currentMillis = System.currentTimeMillis();
+        this.propertiesUpdated = new AtomicLong(currentMillis);
+        this.deltaServiceUpdated = new AtomicLong(currentMillis);
         this.sourceTablePath = sourceTablePath;
-        this.targetTableName = targetTableName;
         this.basePath = basePath;
         this.deltaSync = deltaSync;
         this.props = props;
         this.configs = configs;
-        this.sourceDataAvailabilityEstimator = SourceDataAvailabilityFactory.createInstance(
-            jssc,
-            basePath,
-            props
-        );
+        this.sourceDataAvailabilityEstimator = SourceDataAvailabilityFactory.createInstance(jssc, basePath, props);
         this.isTableSyncActive = new AtomicBoolean(false);
         this.numberConsecutiveFailures = new AtomicInteger(0);
         this.numberSyncSuccesses = new AtomicInteger(0);
         this.numberSyncFailures = new AtomicInteger(0);
         this.sourceBytesAvailableForIngest = new AtomicLong(0);
         this.lastSyncCompletedTimeMs = 0L;
-        this.minSyncTimeMs = props.getInteger(OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.key(),
-            OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue()) * 1000;
-        this.readSourceLimit = props.getLong(OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.key(),
-            OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.defaultValue());
+        this.minSyncTimeMs = props.getInteger(OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.key(), OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue()) * 1000;
+        this.readSourceLimit = props.getLong(OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.key(), OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.defaultValue());
+        this.jobManager = jobManager;
+        LOG.info(HoodieDeltaStreamer.toSortedTruncatedString(props));
+      }
+
+      private void checkAndSetPropertyUpdates() {
+        final long refreshTime = System.currentTimeMillis();
+        final TypedProperties properties = buildProperties(sourceTablePath, configs, hadoopConfig);
+        if (!this.props.equals(properties)) {
+          LOG.info("Updating properties for: " + sourceTablePath);
+          this.props = properties;
+          propertiesUpdated.set(refreshTime);
+        }
       }
 
       String getSourceTablePath() {
@@ -522,7 +560,14 @@ public class OnehouseDeltaStreamer implements Serializable {
         return props;
       }
 
+      JobStatus getDesiredJobStatus() {
+        return jobManager.getDesiredStatusForJob(sourceTablePath);
+      }
+
       boolean canSchedule(long currentTimeMs) {
+        if (getDesiredJobStatus() != JobStatus.RUNNING) {
+          return false;
+        }
         // Send a heartbeat metrics event to track the active ingestion job for this table.
         deltaSync.getDeltaSync().getMetrics().updateDeltaStreamerHeartbeatTimestamp(currentTimeMs);
 
@@ -533,8 +578,8 @@ public class OnehouseDeltaStreamer implements Serializable {
 
         // If the ingestion job has been failing, schedule based on linear backoff.
         if (numberConsecutiveFailures.get() >= 1) {
-          LOG.info("After " + numberConsecutiveFailures.get() + " consecutive failures, the table " + basePath
-              + " will get scheduled at: " + nextTimeScheduleMsecs + " currentTimeMs " + currentTimeMs);
+          LOG.info(
+              "After " + numberConsecutiveFailures.get() + " consecutive failures, the table " + basePath + " will get scheduled at: " + nextTimeScheduleMsecs + " currentTimeMs " + currentTimeMs);
           if (currentTimeMs <= nextTimeScheduleMsecs) {
             return false;
           }
@@ -542,10 +587,9 @@ public class OnehouseDeltaStreamer implements Serializable {
 
         try {
           HoodieMultiTableCommitStatsManager.TableCommitStats commitStats = HoodieMultiTableCommitStatsManager.getCommitStatsMap().get(basePath);
-          SourceDataAvailabilityEstimator.SourceDataAvailability sourceDataAvailability = sourceDataAvailabilityEstimator.getDataAvailability(
-              (commitStats != null) ? commitStats.getLastCommittedCheckpoint() : Option.empty(),
-              (commitStats != null) ? commitStats.getAvgRecordSizes() : Option.empty(),
-              readSourceLimit);
+          SourceDataAvailabilityEstimator.SourceDataAvailability sourceDataAvailability = sourceDataAvailabilityEstimator
+              .getDataAvailability((commitStats != null) ? commitStats.getLastCommittedCheckpoint() : Option.empty(), (commitStats != null) ? commitStats.getAvgRecordSizes() : Option.empty(),
+                  readSourceLimit);
 
           // If number of bytes available in source exceeds {@link OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP},
           // schedule right away.
@@ -561,12 +605,39 @@ public class OnehouseDeltaStreamer implements Serializable {
         }
       }
 
+      boolean canStart() {
+        return getDesiredJobStatus() == JobStatus.RUNNING;
+      }
+
+      boolean isRunning() {
+        return isTableSyncActive.get();
+      }
+
       void onSyncScheduled() {
         isTableSyncActive.compareAndSet(false, true);
         startSyncScheduledTimeMs = System.currentTimeMillis();
       }
 
+      void markPropertiesAsUpdated() {
+        propertiesUpdated.set(System.currentTimeMillis());
+      }
+
       void onSyncStarted() {
+        // check if the delta sync settings/conf need to be refreshed
+        jobManager.setCurrentJobStatus(sourceTablePath, JobStatus.RUNNING);
+        if (propertiesUpdated.get() > deltaServiceUpdated.get()) {
+          deltaSync.close();
+          deltaServiceUpdated.set(System.currentTimeMillis());
+          try {
+            HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(configs, hadoopConfig, props, sourceTablePath, JobType.MULTI_TABLE_DELTASTREAMER);
+
+            FileSystem fs = FSUtils.getFs(tableConfig.targetBasePath, hadoopConfig);
+            LOG.info("Creating new delta sync due to properties update for : " + sourceTablePath);
+            this.deltaSync = new HoodieDeltaStreamer.DeltaSyncService(tableConfig, jssc, fs, hadoopConfig, Option.of(props));
+          } catch (IOException exception) {
+            throw new HoodieException("Reading table config files failed ", exception);
+          }
+        }
         startSyncTimeMs = System.currentTimeMillis();
         deltaSync.getDeltaSync().getMetrics().updateIsActivelyIngesting(1);
       }
@@ -584,8 +655,7 @@ public class OnehouseDeltaStreamer implements Serializable {
 
       void onSyncFailure() {
         numberSyncFailures.incrementAndGet();
-        nextTimeScheduleMsecs = System.currentTimeMillis()
-            + (numberConsecutiveFailures.incrementAndGet() * configs.minSyncIntervalPostFailuresSeconds * 1000);
+        nextTimeScheduleMsecs = System.currentTimeMillis() + (numberConsecutiveFailures.incrementAndGet() * configs.minSyncIntervalPostFailuresSeconds * 1000);
         onSyncCompleted();
         // update metrics
         deltaSync.getDeltaSync().getMetrics().updateIsActivelyIngesting(0);
@@ -594,6 +664,9 @@ public class OnehouseDeltaStreamer implements Serializable {
       private void onSyncCompleted() {
         isTableSyncActive.compareAndSet(true, false);
         lastSyncCompletedTimeMs = System.currentTimeMillis();
+        if (getDesiredJobStatus() == JobStatus.PAUSED) {
+          jobManager.setCurrentJobStatus(sourceTablePath, JobStatus.PAUSED);
+        }
       }
 
       // Check if its time to schedule the next ingestion round because minSyncTimeMs has passed since
@@ -611,6 +684,10 @@ public class OnehouseDeltaStreamer implements Serializable {
         deltaSync.getDeltaSync().getMetrics().updateNumFailedSyncs(numberSyncFailures.getAndSet(0));
         deltaSync.getDeltaSync().getMetrics().updateNumConsecutiveFailures(numberConsecutiveFailures.get());
         deltaSync.getDeltaSync().getMetrics().updateTotalSourceBytesAvailableForIngest(sourceBytesAvailableForIngest.get());
+      }
+
+      public void close() {
+        deltaSync.close();
       }
     }
 
@@ -639,13 +716,10 @@ public class OnehouseDeltaStreamer implements Serializable {
             if (!StringUtils.isNullOrEmpty(commitMetadata.getMetadata(CHECKPOINT_KEY))) {
               //if previous checkpoint is an empty string, skip resume use Option.empty()
               resumeCheckpointStr = Option.of(commitMetadata.getMetadata(CHECKPOINT_KEY));
-            } else if (HoodieTimeline.compareTimestamps(HoodieTimeline.FULL_BOOTSTRAP_INSTANT_TS,
-                HoodieTimeline.LESSER_THAN, lastCommit.get().getTimestamp())) {
+            } else if (HoodieTimeline.compareTimestamps(HoodieTimeline.FULL_BOOTSTRAP_INSTANT_TS, HoodieTimeline.LESSER_THAN, lastCommit.get().getTimestamp())) {
               throw new HoodieDeltaStreamerException(
-                  "Unable to find previous checkpoint. Please double check if this table "
-                      + "was indeed built via delta streamer. Last Commit :" + lastCommit + ", Instants :"
-                      + commitTimelineOpt.getInstants().collect(Collectors.toList()) + ", CommitMetadata="
-                      + commitMetadata.toJsonString());
+                  "Unable to find previous checkpoint. Please double check if this table " + "was indeed built via delta streamer. Last Commit :" + lastCommit + ", Instants :"
+                      + commitTimelineOpt.getInstants().collect(Collectors.toList()) + ", CommitMetadata=" + commitMetadata.toJsonString());
             } else {
               LOG.warn("Unable to get latest commit offset for table " + targetBasePath);
             }
@@ -656,7 +730,7 @@ public class OnehouseDeltaStreamer implements Serializable {
       return Option.empty();
     }
 
-    private TypedProperties buildProperties(String sourceTablePropsFilePath, Configuration hadoopConfig) {
+    private static TypedProperties buildProperties(String sourceTablePropsFilePath, OnehouseDeltaStreamer.Config multiTableConfigs, Configuration hadoopConfig) {
       TypedProperties properties = combineProperties(sourceTablePropsFilePath, multiTableConfigs, hadoopConfig);
       // Configure the write commit callback that updates the checkpoints
       properties.setProperty(HoodieWriteCommitCallbackConfig.TURN_CALLBACK_ON.key(), String.valueOf(true));
@@ -672,8 +746,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         properties.remove(HoodieClusteringConfig.ASYNC_CLUSTERING_ENABLE.key());
         properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING.key(), "true");
         if (properties.containsKey(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS)) {
-          properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING_MAX_COMMITS.key(),
-              properties.getProperty(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key()));
+          properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING_MAX_COMMITS.key(), properties.getProperty(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key()));
           properties.remove(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key());
         }
       }
@@ -684,8 +757,7 @@ public class OnehouseDeltaStreamer implements Serializable {
     private Option<HoodieCommitMetadata> getLatestCommitMetadataWithValidCheckpointInfo(HoodieTimeline timeline) {
       return (Option<HoodieCommitMetadata>) timeline.getReverseOrderedInstants().map(instant -> {
         try {
-          HoodieCommitMetadata commitMetadata = HoodieCommitMetadata
-              .fromBytes(timeline.getInstantDetails(instant).get(), HoodieCommitMetadata.class);
+          HoodieCommitMetadata commitMetadata = HoodieCommitMetadata.fromBytes(timeline.getInstantDetails(instant).get(), HoodieCommitMetadata.class);
           if (!StringUtils.isNullOrEmpty(commitMetadata.getMetadata(CHECKPOINT_KEY)) || !StringUtils.isNullOrEmpty(commitMetadata.getMetadata(CHECKPOINT_RESET_KEY))) {
             return Option.of(commitMetadata);
           } else {
@@ -706,19 +778,11 @@ public class OnehouseDeltaStreamer implements Serializable {
     return hoodieConfig.getProps(true);
   }
 
-  private static HoodieDeltaStreamer.Config composeTableConfigs(
-      Config config,
-      Configuration hadoopConf,
-      TypedProperties properties,
-      String sourceTablePropsFilePath,
-      JobType jobType) throws IOException {
+  private static HoodieDeltaStreamer.Config composeTableConfigs(Config config, Configuration hadoopConf, TypedProperties properties, String sourceTablePropsFilePath, JobType jobType)
+      throws IOException {
     // Compile the Config for HoodieDeltaStreamer using the properties
-    HoodieWriteConfig configuredWriteConfig = HoodieWriteConfig.newBuilder()
-        .withProps(properties)
-        .build();
-    OnehouseInternalDeltastreamerConfig onehouseInternalDeltastreamerConfig = OnehouseInternalDeltastreamerConfig.newBuilder()
-        .withProps(properties)
-        .build();
+    HoodieWriteConfig configuredWriteConfig = HoodieWriteConfig.newBuilder().withProps(properties).build();
+    OnehouseInternalDeltastreamerConfig onehouseInternalDeltastreamerConfig = OnehouseInternalDeltastreamerConfig.newBuilder().withProps(properties).build();
 
     HoodieDeltaStreamer.Config tableConfig = new HoodieDeltaStreamer.Config();
     tableConfig.targetBasePath = configuredWriteConfig.getBasePath();
@@ -732,8 +796,7 @@ public class OnehouseDeltaStreamer implements Serializable {
     tableConfig.payloadClassName = configuredWriteConfig.getWritePayloadClass();
     tableConfig.schemaProviderClassName = onehouseInternalDeltastreamerConfig.getSchemaProviderClassName();
     tableConfig.transformerClassNames = onehouseInternalDeltastreamerConfig.getTransformerClassName();
-    tableConfig.operation = WriteOperationType.valueOf(configuredWriteConfig.getStringOrDefault(
-        DataSourceWriteOptions.OPERATION(), DataSourceWriteOptions.OPERATION().defaultValue()).toUpperCase());
+    tableConfig.operation = WriteOperationType.valueOf(configuredWriteConfig.getStringOrDefault(DataSourceWriteOptions.OPERATION(), DataSourceWriteOptions.OPERATION().defaultValue()).toUpperCase());
     tableConfig.filterDupes = onehouseInternalDeltastreamerConfig.isFilterDupesEnabled();
     // currently multi table job runs in sync once mode and uses inline services
     tableConfig.continuousMode = !jobType.equals(JobType.MULTI_TABLE_DELTASTREAMER) && !config.syncOnce;
@@ -745,8 +808,7 @@ public class OnehouseDeltaStreamer implements Serializable {
     tableConfig.checkpoint = onehouseInternalDeltastreamerConfig.getCheckpoint();
     tableConfig.initialCheckpointProvider = onehouseInternalDeltastreamerConfig.getInitialCheckpointProvider();
     if (tableConfig.initialCheckpointProvider != null && tableConfig.checkpoint == null) {
-      InitialCheckPointProvider checkPointProvider =
-          UtilHelpers.createInitialCheckpointProvider(tableConfig.initialCheckpointProvider, properties);
+      InitialCheckPointProvider checkPointProvider = UtilHelpers.createInitialCheckpointProvider(tableConfig.initialCheckpointProvider, properties);
       checkPointProvider.init(hadoopConf);
       tableConfig.checkpoint = checkPointProvider.getCheckpoint();
     }
@@ -764,12 +826,11 @@ public class OnehouseDeltaStreamer implements Serializable {
   }
 
   private enum JobType {
-    SINGLE_TABLE_DELTASTREAMER,
-    MULTI_TABLE_DELTASTREAMER
+    SINGLE_TABLE_DELTASTREAMER, MULTI_TABLE_DELTASTREAMER
   }
 
   private static class LogContext {
-    private static final String TABLE_NAME_CONTEXT_KEY = "table";
+    private static final String TABLE_BASEPATH_CONTEXT_KEY = "basepath";
 
     private static final LogContext LOG_CONTEXT = new LogContext();
 
@@ -780,9 +841,9 @@ public class OnehouseDeltaStreamer implements Serializable {
       return LOG_CONTEXT;
     }
 
-    public LogContext withTableName(String tableName) {
-      if (!StringUtils.isNullOrEmpty(tableName)) {
-        MDC.put(TABLE_NAME_CONTEXT_KEY, kvString(TABLE_NAME_CONTEXT_KEY, tableName));
+    public LogContext withTableBasePath(String basePath) {
+      if (!StringUtils.isNullOrEmpty(basePath)) {
+        MDC.put(TABLE_BASEPATH_CONTEXT_KEY, kvString(TABLE_BASEPATH_CONTEXT_KEY, basePath));
       }
       return this;
     }
