@@ -48,7 +48,6 @@ import org.apache.hudi.common.model.HoodieKey;
 import org.apache.hudi.common.model.HoodieRecordPayload;
 import org.apache.hudi.common.model.HoodieWriteStat;
 import org.apache.hudi.common.model.TableServiceType;
-import org.apache.hudi.common.model.WriteConcurrencyMode;
 import org.apache.hudi.common.model.WriteOperationType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.HoodieTableVersion;
@@ -61,6 +60,7 @@ import org.apache.hudi.common.util.CleanerUtils;
 import org.apache.hudi.common.util.ClusteringUtils;
 import org.apache.hudi.common.util.CommitUtils;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.HoodieArchivalConfig;
@@ -233,7 +233,7 @@ public abstract class BaseHoodieWriteClient<T extends HoodieRecordPayload, I, K,
     this.txnManager.beginTransaction(Option.of(inflightInstant),
         lastCompletedTxnAndMetadata.isPresent() ? Option.of(lastCompletedTxnAndMetadata.get().getLeft()) : Option.empty());
     try {
-      if (config.getWriteConcurrencyMode() == WriteConcurrencyMode.OPTIMISTIC_CONCURRENCY_CONTROL) {
+      if (!StringUtils.isNullOrEmpty(config.getCallbackMultiWriterClass())) {
         //synchronized checkpoint update for multi writers
         HoodieWriteCommitCallbackMultiWriter hoodieWriteCommitCallbackMultiWriter = new HoodieWriteCommitCallbackMultiWriter(instantTime,
             config.getTableName(), config.getBasePath(), stats, Option.of(commitActionType),
