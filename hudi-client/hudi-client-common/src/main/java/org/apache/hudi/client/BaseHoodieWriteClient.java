@@ -238,7 +238,7 @@ public abstract class BaseHoodieWriteClient<T extends HoodieRecordPayload, I, K,
         HoodieWriteCommitCallbackMultiWriter hoodieWriteCommitCallbackMultiWriter = new HoodieWriteCommitCallbackMultiWriter(instantTime,
             config.getTableName(), config.getBasePath(), stats, Option.of(commitActionType),
             extraMetadata,lastCompletedTxnAndMetadata, metadata, this.config.getProps());
-        HoodieCommitCallbackFactory.create(config,config.getCallbackMultiWriterClass()).call(hoodieWriteCommitCallbackMultiWriter);
+        HoodieCommitCallbackFactory.create(config, config.getCallbackMultiWriterClass()).call(hoodieWriteCommitCallbackMultiWriter);
       }
       preCommit(inflightInstant, metadata);
       commit(table, commitActionType, instantTime, metadata, stats);
