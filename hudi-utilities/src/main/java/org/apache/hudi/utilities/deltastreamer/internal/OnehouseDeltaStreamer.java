@@ -735,6 +735,9 @@ public class OnehouseDeltaStreamer implements Serializable {
       // Configure the write commit callback that updates the checkpoints
       properties.setProperty(HoodieWriteCommitCallbackConfig.TURN_CALLBACK_ON.key(), String.valueOf(true));
       properties.setProperty(HoodieWriteCommitCallbackConfig.CALLBACK_CLASS_NAME.key(), HoodieMultiTableCommitStatsManager.class.getName());
+      if (!StringUtils.isNullOrEmpty(properties.getProperty(OnehouseInternalDeltastreamerConfig.MUTLI_WRITER_SOURCE_CHECKPOINT_ID.key()))) {
+        properties.setProperty(HoodieWriteCommitCallbackConfig.CALLBACK_MUTLI_WRITER_CLASS_NAME.key(), HoodieMultiWriterCheckpointUpdateManager.class.getName());
+      }
 
       // ToDo Currently multi table deltastreamer only supports inline table services (including clustering)
       // This will be fixed once we support async services for multi table
