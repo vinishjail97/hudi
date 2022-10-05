@@ -51,7 +51,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
-import org.apache.pulsar.shade.org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.slf4j.MDC;
 
@@ -262,8 +261,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         }
         return jobInfo;
       } catch (IOException exception) {
-        String stackTrace = ExceptionUtils.getStackTrace(exception);
-        LOG.error("Reading table config files failed: " + stackTrace);
+        LOG.error("Reading table config files failed: ", exception);
         throw new HoodieException("Reading table config files failed ", exception);
       } finally {
         LogContext.clear();
@@ -304,7 +302,7 @@ public class OnehouseDeltaStreamer implements Serializable {
                   if (throwable != null) {
                     jobInfo.onSyncFailure();
                     LOG.error("Failed to run job for table: " + jobInfo.getSourceTablePath(), throwable.getCause());
-                    LOG.error("StackTrace: " + ExceptionUtils.getStackTrace(throwable));
+                    LOG.error("StackTrace: ", throwable);
                   } else {
                     jobInfo.onSyncSuccess();
                     LOG.info("Successfully ran job for table: " + jobInfo.getSourceTablePath());
