@@ -250,7 +250,7 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
     Option<QuarantineTableWriterInterface> quarantineTableWriterInterface = Option.of(new JsonQuarantineTableWriter(new HoodieDeltaStreamer.Config(),
         spark(),props,jsc(),fs()));
-    SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource,quarantineTableWriterInterface);
+    SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource, quarantineTableWriterInterface, Option.of(props));
     String instantTime =  quarantineTableWriterInterface.get().startCommit();
     assertEquals(1000, kafkaSource.fetchNewDataInRowFormat(Option.empty(),Long.MAX_VALUE).getBatch().get().count());
     assertEquals(2,((JavaRDD)quarantineTableWriterInterface.get().getErrorEvents(instantTime, Option.empty()).get()).count());
@@ -281,7 +281,7 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
     Option<QuarantineTableWriterInterface> quarantineTableWriterInterface = Option.of(new JsonQuarantineTableWriter(new HoodieDeltaStreamer.Config(),
         spark(),props,jsc(),fs()));
-    SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource,quarantineTableWriterInterface);
+    SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource, quarantineTableWriterInterface, Option.of(props));
     InputBatch<JavaRDD<GenericRecord>> fetch1 = kafkaSource.fetchNewDataInAvroFormat(Option.empty(),Long.MAX_VALUE);
     assertEquals(1000,fetch1.getBatch().get().count());
     String instantTime =  quarantineTableWriterInterface.get().startCommit();
