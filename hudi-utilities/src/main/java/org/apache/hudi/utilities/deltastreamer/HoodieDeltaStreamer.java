@@ -74,6 +74,7 @@ import org.apache.spark.sql.SparkSession;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +96,15 @@ public class HoodieDeltaStreamer implements Serializable {
 
   private static final long serialVersionUID = 1L;
   private static final Logger LOG = LogManager.getLogger(HoodieDeltaStreamer.class);
+  private static final String ADDITIONAL_SENSITIVE_CONFIG_KEYS = "hoodie.sensitive.config.keys";
+  private static final List<String> DEFAULT_SENSITIVE_CONFIG_KEYS = Arrays.asList(
+      "ssl",
+      "tls",
+      "sasl",
+      "auth",
+      "credentials"
+  );
+  private static final String SENSITIVE_VALUES_MASKED = "SENSITIVE_INFO_MASKED";
 
   public static final String CHECKPOINT_KEY = HoodieWriteConfig.DELTASTREAMER_CHECKPOINT_KEY;
   public static final String CHECKPOINT_RESET_KEY = "deltastreamer.checkpoint.reset_key";
@@ -538,6 +548,14 @@ public class HoodieDeltaStreamer implements Serializable {
       if (value.length() > 255 && !LOG.isDebugEnabled()) {
         value = value.substring(0, 128) + "[...]";
       }
+
+      // Mask values for security/ credentials and other sensitive configs
+      List<String> sensitiveConfigKeys = props.getStringList(ADDITIONAL_SENSITIVE_CONFIG_KEYS, ",", Collections.emptyList());
+      sensitiveConfigKeys.addAll(DEFAULT_SENSITIVE_CONFIG_KEYS);
+      if (sensitiveConfigKeys.stream().anyMatch(key::contains)) {
+        value = SENSITIVE_VALUES_MASKED;
+      }
+
       propsLog.append(key).append(": ").append(value).append("\n");
     }
     return propsLog.toString();

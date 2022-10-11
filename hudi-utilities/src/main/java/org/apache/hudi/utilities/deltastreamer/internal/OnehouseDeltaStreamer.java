@@ -533,7 +533,6 @@ public class OnehouseDeltaStreamer implements Serializable {
         this.minSyncTimeMs = props.getInteger(OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.key(), OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue()) * 1000;
         this.readSourceLimit = props.getLong(OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.key(), OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.defaultValue());
         this.jobManager = jobManager;
-        LOG.info(HoodieDeltaStreamer.toSortedTruncatedString(props));
       }
 
       private void checkAndSetPropertyUpdates() {
