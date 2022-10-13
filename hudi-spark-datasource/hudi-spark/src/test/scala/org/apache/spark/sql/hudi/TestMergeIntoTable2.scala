@@ -636,4 +636,119 @@ class TestMergeIntoTable2 extends HoodieSparkSqlTestBase {
     }
   }
 
+  test("Test Merge Into For Source Table With Different Column Order") {
+    withTempDir { tmp =>
+      val tableName = generateTableName
+      // Create a mor partitioned table.
+      spark.sql(
+        s"""
+           | create table $tableName (
+           |  id int,
+           |  name string,
+           |  price double,
+           |  ts long,
+           |  dt string
+           | ) using hudi
+           | tblproperties (
+           |  type = 'mor',
+           |  primaryKey = 'id',
+           |  preCombineField = 'ts'
+           | )
+           | partitioned by(dt)
+           | location '${tmp.getCanonicalPath}'
+         """.stripMargin)
+      // Insert data which matched insert-condition.
+      spark.sql(
+        s"""
+           | merge into $tableName as t0
+           | using (
+           |  select 'a1' as name, 1 as id, 10 as price, 1000 as ts, '2021-03-21' as dt
+           | ) as s0
+           | on t0.id = s0.id
+           | when not matched and s0.id % 2 = 1 then insert *
+         """.stripMargin
+      )
+      checkAnswer(s"select id,name,price,dt from $tableName")(
+        Seq(1, "a1", 10, "2021-03-21")
+      )
+    }
+  }
+
+  test("Test Merge into with String cast to Double") {
+    withTempDir { tmp =>
+      val tableName = generateTableName
+      // Create a cow partitioned table.
+      spark.sql(
+        s"""
+           | create table $tableName (
+           |  id int,
+           |  name string,
+           |  price double,
+           |  ts long,
+           |  dt string
+           | ) using hudi
+           | tblproperties (
+           |  type = 'cow',
+           |  primaryKey = 'id',
+           |  preCombineField = 'ts'
+           | )
+           | partitioned by(dt)
+           | location '${tmp.getCanonicalPath}'
+         """.stripMargin)
+      // Insert data
+      spark.sql(s"insert into $tableName select 1, 'a1', cast(10.0 as double), 999, '2021-03-21'")
+      spark.sql(
+        s"""
+           | merge into $tableName as t0
+           | using (
+           |  select 'a1' as name, 1 as id, '10.1' as price, 1000 as ts, '2021-03-21' as dt
+           | ) as s0
+           | on t0.id = s0.id
+           | when matched then update set t0.price = s0.price, t0.ts = s0.ts
+           | when not matched then insert *
+         """.stripMargin
+      )
+      checkAnswer(s"select id,name,price,dt from $tableName")(
+        Seq(1, "a1", 10.1, "2021-03-21")
+      )
+    }
+  }
+
+  test("Test Merge into where manually set DefaultHoodieRecordPayload") {
+    withTempDir { tmp =>
+      val tableName = generateTableName
+      // Create a cow table with default payload class, check whether it will be overwritten by ExpressionPayload.
+      // if not, this ut cannot pass since DefaultHoodieRecordPayload can not promotion int to long when insert a ts with Integer value
+      spark.sql(
+        s"""
+           | create table $tableName (
+           |  id int,
+           |  name string,
+           |  ts long
+           | ) using hudi
+           | tblproperties (
+           |  type = 'cow',
+           |  primaryKey = 'id',
+           |  preCombineField = 'ts',
+           |  hoodie.datasource.write.payload.class = 'org.apache.hudi.common.model.DefaultHoodieRecordPayload'
+           | ) location '${tmp.getCanonicalPath}'
+         """.stripMargin)
+      // Insert data
+      spark.sql(s"insert into $tableName select 1, 'a1', 999")
+      spark.sql(
+        s"""
+           | merge into $tableName as t0
+           | using (
+           |  select 'a2' as name, 1 as id, 1000 as ts
+           | ) as s0
+           | on t0.id = s0.id
+           | when matched then update set t0.name = s0.name, t0.ts = s0.ts
+           | when not matched then insert *
+         """.stripMargin
+      )
+      checkAnswer(s"select id,name,ts from $tableName")(
+        Seq(1, "a2", 1000)
+      )
+    }
+  }
 }

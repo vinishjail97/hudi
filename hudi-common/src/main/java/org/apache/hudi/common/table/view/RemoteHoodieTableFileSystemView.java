@@ -18,11 +18,6 @@
 
 package org.apache.hudi.common.table.view;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.http.client.fluent.Request;
-import org.apache.http.client.fluent.Response;
-import org.apache.http.client.utils.URIBuilder;
 import org.apache.hudi.common.model.CompactionOperation;
 import org.apache.hudi.common.model.FileSlice;
 import org.apache.hudi.common.model.HoodieBaseFile;
@@ -44,6 +39,13 @@ import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieRemoteException;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.Consts;
+import org.apache.http.client.fluent.Request;
+import org.apache.http.client.fluent.Response;
+import org.apache.http.client.utils.URIBuilder;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
@@ -72,6 +74,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
       String.format("%s/%s", BASE_URL, "slices/beforeoron/latest/");
 
   public static final String PENDING_COMPACTION_OPS = String.format("%s/%s", BASE_URL, "compactions/pending/");
+  public static final String PENDING_LOG_COMPACTION_OPS = String.format("%s/%s", BASE_URL, "logcompactions/pending/");
 
   public static final String LATEST_PARTITION_DATA_FILES_URL =
       String.format("%s/%s", BASE_URL, "datafiles/latest/partition");
@@ -117,7 +120,6 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
   public static final String FILEID_PARAM = "fileid";
   public static final String LAST_INSTANT_TS = "lastinstantts";
   public static final String TIMELINE_HASH = "timelinehash";
-  public static final String NUM_INSTANTS = "numinstants";
   public static final String REFRESH_OFF = "refreshoff";
   public static final String INCLUDE_FILES_IN_PENDING_COMPACTION_PARAM = "includependingcompaction";
 
@@ -174,12 +176,11 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     // Adding mandatory parameters - Last instants affecting file-slice
     timeline.lastInstant().ifPresent(instant -> builder.addParameter(LAST_INSTANT_TS, instant.getTimestamp()));
     builder.addParameter(TIMELINE_HASH, timeline.getTimelineHash());
-    builder.addParameter(NUM_INSTANTS, timeline.countInstants() + "");
 
     String url = builder.toString();
     LOG.info("Sending request : (" + url + ")");
     Response response = retryHelper != null ? retryHelper.start(() -> get(timeoutMs, url, method)) : get(timeoutMs, url, method);
-    String content = response.returnContent().asString();
+    String content = response.returnContent().asString(Consts.UTF_8);
     return (T) mapper.readValue(content, reference);
   }
 
@@ -429,6 +430,18 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParams();
     try {
       List<CompactionOpDTO> dtos = executeRequest(PENDING_COMPACTION_OPS, paramsMap,
+          new TypeReference<List<CompactionOpDTO>>() {}, RequestMethod.GET);
+      return dtos.stream().map(CompactionOpDTO::toCompactionOperation);
+    } catch (IOException e) {
+      throw new HoodieRemoteException(e);
+    }
+  }
+
+  @Override
+  public Stream<Pair<String, CompactionOperation>> getPendingLogCompactionOperations() {
+    Map<String, String> paramsMap = getParams();
+    try {
+      List<CompactionOpDTO> dtos = executeRequest(PENDING_LOG_COMPACTION_OPS, paramsMap,
           new TypeReference<List<CompactionOpDTO>>() {}, RequestMethod.GET);
       return dtos.stream().map(CompactionOpDTO::toCompactionOperation);
     } catch (IOException e) {

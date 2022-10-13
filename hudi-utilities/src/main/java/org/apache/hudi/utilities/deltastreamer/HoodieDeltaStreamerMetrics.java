@@ -154,6 +154,12 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
     }
   }
 
+  public void updateDeltaStreamerKafkaMessageInCount(long totalNewMsgCount) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "kafkaMessageInCount"), totalNewMsgCount);
+    }
+  }
+
   public long getDurationInMs(long ctxDuration) {
     return ctxDuration / 1000000;
   }

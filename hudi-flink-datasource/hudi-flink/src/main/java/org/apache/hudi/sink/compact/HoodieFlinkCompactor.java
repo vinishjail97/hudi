@@ -18,7 +18,6 @@
 
 package org.apache.hudi.sink.compact;
 
-import org.apache.flink.client.deployment.application.ApplicationExecutionException;
 import org.apache.hudi.async.HoodieAsyncTableService;
 import org.apache.hudi.avro.model.HoodieCompactionPlan;
 import org.apache.hudi.client.HoodieFlinkWriteClient;
@@ -38,13 +37,13 @@ import org.apache.hudi.util.StreamerUtil;
 import com.beust.jcommander.JCommander;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.client.deployment.application.ApplicationExecutionException;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.operators.ProcessOperator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -264,7 +263,7 @@ public class HoodieFlinkCompactor {
           .map(timestamp -> {
             try {
               return Pair.of(timestamp, CompactionUtils.getCompactionPlan(table.getMetaClient(), timestamp));
-            } catch (IOException e) {
+            } catch (Exception e) {
               throw new HoodieException("Get compaction plan at instant " + timestamp + " error", e);
             }
           })

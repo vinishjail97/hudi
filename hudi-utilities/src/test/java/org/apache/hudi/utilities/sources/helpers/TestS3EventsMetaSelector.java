@@ -110,20 +110,6 @@ public class TestS3EventsMetaSelector extends HoodieClientTestHarness {
     assertEquals("1627376736755", eventFromQueue.getRight());
   }
 
-  @ParameterizedTest
-  @ValueSource(classes = {S3EventsMetaSelector.class})
-  public void testEventsFromQueueNoMessages(Class<?> clazz) {
-    S3EventsMetaSelector selector = (S3EventsMetaSelector) ReflectionUtils.loadClass(clazz.getName(), props);
-    List<Message> processed = new ArrayList<>();
-
-    Pair<List<String>, String> eventFromQueue =
-        selector.getNextEventsFromQueue(sqs, Option.empty(), processed);
-
-    assertEquals(0, eventFromQueue.getLeft().size());
-    assertEquals(0, processed.size());
-    assertNull(eventFromQueue.getRight());
-  }
-
   @Test
   public void testEventsFromQueueNoMessages() {
     S3EventsMetaSelector selector = new S3EventsMetaSelector(props);

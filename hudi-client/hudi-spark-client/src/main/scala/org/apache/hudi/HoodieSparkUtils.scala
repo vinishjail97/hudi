@@ -50,6 +50,7 @@ private[hudi] trait SparkVersionsSupport {
   def gteqSpark3_1_3: Boolean = getSparkVersion >= "3.1.3"
   def gteqSpark3_2: Boolean = getSparkVersion >= "3.2"
   def gteqSpark3_2_1: Boolean = getSparkVersion >= "3.2.1"
+  def gteqSpark3_2_2: Boolean = getSparkVersion >= "3.2.2"
   def gteqSpark3_3: Boolean = getSparkVersion >= "3.3"
 }
 
@@ -68,7 +69,7 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
    */
   def createRdd(df: DataFrame, structName: String, recordNamespace: String, reconcileToLatestSchema: Boolean,
                 latestTableSchema: org.apache.hudi.common.util.Option[Schema] = org.apache.hudi.common.util.Option.empty()): RDD[GenericRecord] = {
-    var latestTableSchemaConverted : Option[Schema] = None
+    var latestTableSchemaConverted: Option[Schema] = None
 
     if (latestTableSchema.isPresent && reconcileToLatestSchema) {
       latestTableSchemaConverted = Some(latestTableSchema.get())
@@ -120,6 +121,10 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
     }, SQLConf.get)
   }
 
+  def getCatalystRowSerDe(structType: StructType) : SparkRowSerDe = {
+    sparkAdapter.createSparkRowSerDe(structType)
+  }
+
   private def injectSQLConf[T: ClassTag](rdd: RDD[T], conf: SQLConf): RDD[T] =
     new SQLConfInjectingRDD(rdd, conf)
 
@@ -163,7 +168,7 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
           val convert = AvroConversionUtils.createInternalRowToAvroConverter(writerSchema, writerAvroSchema, nullable = nullable)
           val rowDeserializer = RowEncoder(writerSchema).resolveAndBind().createDeserializer()
           val transform: InternalRow => Either[GenericRecord, String] = internalRow => try {
-            Left(HoodieAvroUtils.rewriteRecordDeep(convert(internalRow), readerAvroSchema, true))
+            Left(HoodieAvroUtils.rewriteRecordDeep(convert(internalRow), readerAvroSchema))
           } catch {
             case _: Throwable => Right(rowDeserializer.apply(internalRow).json)
           }
@@ -183,9 +188,5 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
       }, SQLConf.get)
       (rdd, df.sparkSession.sparkContext.emptyRDD[String])
     }
-  }
-
-  def getCatalystRowSerDe(structType: StructType): SparkRowSerDe = {
-    sparkAdapter.createSparkRowSerDe(structType)
   }
 }

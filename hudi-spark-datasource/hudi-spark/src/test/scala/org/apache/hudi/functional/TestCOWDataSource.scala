@@ -309,6 +309,10 @@ class TestCOWDataSource extends HoodieClientTestBase {
       .option(DataSourceWriteOptions.OPERATION.key, DataSourceWriteOptions.INSERT_OPERATION_OPT_VAL)
       .mode(SaveMode.Append)
       .save(basePath)
+    val metaClient = HoodieTableMetaClient.builder().setConf(spark.sparkContext.hadoopConfiguration).setBasePath(basePath)
+      .setLoadActiveTimelineOnLoad(true).build()
+
+    val instantTime = metaClient.getActiveTimeline.filterCompletedInstants().getInstants.findFirst().get().getTimestamp
 
     val record1FilePaths = fs.listStatus(new Path(basePath, dataGen.getPartitionPaths.head))
       .filter(!_.getPath.getName.contains("hoodie_partition_metadata"))
@@ -320,12 +324,20 @@ class TestCOWDataSource extends HoodieClientTestBase {
     val inputDF2 = spark.read.json(spark.sparkContext.parallelize(recordsToStrings(records2), 2))
     inputDF2.write.format("org.apache.hudi")
       .options(commonOpts)
+      .option(DataSourceWriteOptions.OPERATION.key, DataSourceWriteOptions.INSERT_OPERATION_OPT_VAL)
+      .mode(SaveMode.Append)
+      .save(basePath)
+
+    val inputDF3 = spark.read.json(spark.sparkContext.parallelize(recordsToStrings(records2), 2))
+    inputDF3.write.format("org.apache.hudi")
+      .options(commonOpts)
       // Use bulk insert here to make sure the files have different file groups.
       .option(DataSourceWriteOptions.OPERATION.key, DataSourceWriteOptions.BULK_INSERT_OPERATION_OPT_VAL)
       .mode(SaveMode.Append)
       .save(basePath)
 
     val hudiReadPathDF = spark.read.format("org.apache.hudi")
+      .option(DataSourceReadOptions.TIME_TRAVEL_AS_OF_INSTANT.key(), instantTime)
       .option(DataSourceReadOptions.READ_PATHS.key, record1FilePaths)
       .load()
 
@@ -741,6 +753,7 @@ class TestCOWDataSource extends HoodieClientTestBase {
       .option(DataSourceReadOptions.BEGIN_INSTANTTIME.key, commitInstantTime1)
       .load(basePath)
     assertEquals(N + 1, hoodieIncViewDF1.count())
+    assertEquals(false, Metrics.isInitialized)
   }
 
   @Test def testSchemaEvolution(): Unit = {
@@ -1047,5 +1060,6 @@ class TestCOWDataSource extends HoodieClientTestBase {
       .save(basePath)
 
     assertTrue(HoodieDataSourceHelpers.hasNewCommits(fs, basePath, "000"))
+    assertEquals(false, Metrics.isInitialized, "Metrics should be shutdown")
   }
 }

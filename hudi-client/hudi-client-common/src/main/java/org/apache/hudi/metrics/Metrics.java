@@ -26,8 +26,9 @@ import com.codahale.metrics.MetricRegistry;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
-import java.io.Closeable;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -40,10 +41,11 @@ public class Metrics {
   private static final Map<String, Metrics> METRICS_INSTANCE_PER_BASEPATH = new HashMap<>();
 
   private final MetricRegistry registry;
-  private MetricsReporter reporter;
+  private final MetricsReporter reporter;
   private final String commonMetricPrefix;
+  private final String basePath;
 
-  public Metrics(HoodieWriteConfig metricConfig) {
+  private Metrics(HoodieWriteConfig metricConfig) {
     registry = new MetricRegistry();
     commonMetricPrefix = metricConfig.getMetricReporterMetricsNamePrefix();
     reporter = MetricsReporterFactory.createReporter(metricConfig, registry);
@@ -51,6 +53,7 @@ public class Metrics {
       throw new RuntimeException("Cannot initialize Reporter.");
     }
     reporter.start();
+    basePath = metricConfig.getBasePath();
 
     Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
   }
@@ -74,12 +77,11 @@ public class Metrics {
     try {
       registerHoodieCommonMetrics();
       reporter.report();
-      if (getReporter() != null) {
-        LOG.info("Closing metrics reporter...");
-        getReporter().close();
-      }
+      LOG.info("Stopping the metrics reporter for base path: " + basePath);
+      reporter.stop();
+      METRICS_INSTANCE_PER_BASEPATH.remove(basePath);
     } catch (Exception e) {
-      LOG.warn("Error while closing reporter", e);
+      LOG.warn("Error while closing reporter for base path: " + basePath, e);
     }
   }
 
@@ -114,7 +116,12 @@ public class Metrics {
     return registry;
   }
 
-  public Closeable getReporter() {
-    return reporter.getReporter();
+  public static boolean isInitialized() {
+    return !METRICS_INSTANCE_PER_BASEPATH.isEmpty();
+  }
+
+  public static void shutdownAll() {
+    List<Metrics> activeMetricsInstances = new ArrayList<>(METRICS_INSTANCE_PER_BASEPATH.values());
+    activeMetricsInstances.forEach(Metrics::shutdown);
   }
 }
