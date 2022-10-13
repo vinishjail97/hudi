@@ -554,7 +554,7 @@ public class HoodieDeltaStreamer implements Serializable {
       }
 
       // Mask values for security/ credentials and other sensitive configs
-      List<String> sensitiveConfigKeys = props.getStringList(ADDITIONAL_SENSITIVE_CONFIG_KEYS, ",", Collections.emptyList());
+      List<String> sensitiveConfigKeys = props.getStringList(ADDITIONAL_SENSITIVE_CONFIG_KEYS, ",", new ArrayList<>());
       sensitiveConfigKeys.addAll(DEFAULT_SENSITIVE_CONFIG_KEYS);
       if (sensitiveConfigKeys.stream().anyMatch(key::contains)) {
         value = SENSITIVE_VALUES_MASKED;
