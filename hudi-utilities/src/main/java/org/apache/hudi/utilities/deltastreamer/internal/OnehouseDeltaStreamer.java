@@ -279,7 +279,7 @@ public class OnehouseDeltaStreamer implements Serializable {
               long currentTimeMs = System.currentTimeMillis();
               List<JobInfo> selectedJobs = jobManager.getActiveJobs().stream().filter(jobInfo -> jobInfo.canSchedule(currentTimeMs)).collect(Collectors.toList());
 
-              LOG.info("Based on source data rates selected the following tables " + selectedJobs.stream().map(JobInfo::getSourceTablePath).collect(Collectors.toList()));
+              LOG.info("In this round, scheduling ingestion for the following tables " + selectedJobs.stream().map(JobInfo::getSourceTablePath).collect(Collectors.toList()));
 
               selectedJobs.forEach(jobInfo -> {
                 jobInfo.onSyncScheduled();
@@ -575,9 +575,9 @@ public class OnehouseDeltaStreamer implements Serializable {
 
         // If the ingestion job has been failing, schedule based on linear backoff.
         if (numberConsecutiveFailures.get() >= 1) {
-          LOG.info(
-              "After " + numberConsecutiveFailures.get() + " consecutive failures, the table " + basePath + " will get scheduled at: " + nextTimeScheduleMsecs + " currentTimeMs " + currentTimeMs);
           if (currentTimeMs <= nextTimeScheduleMsecs) {
+            LOG.info(
+                "After " + numberConsecutiveFailures.get() + " consecutive failures, the table " + basePath + " will be scheduled at: " + nextTimeScheduleMsecs + " currentTimeMs " + currentTimeMs);
             return false;
           }
         }
