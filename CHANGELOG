@@ -41,3 +41,26 @@ d6324d35b Merge branch 'master' into adding_configs_for_disable_compaction
 2fee785cc Merge branch 'master' into adding_configs_for_disable_compaction
 7618f8c2d reverting changes from HoodieDeltaStreamer.java
 c001b0272 adding configs for disable compaction, allowCommitsOnError
+
+---[2022-10-13 15:42:21] [release-v0.8.0] Update with latest OSS changes---
+3fb324f733 Fix logging for retries during consecutive failures in ingestion (#103)
+3397748a95 Fix issue with array list (#104)
+ad7f9d1f85 Merge OSS as of 10-12-22 (#102)
+78840af2f1 [ONHS-3567] Mask auth and credentials when printing hudi configs (#97)
+5f1470d88a All utilities that does the renaming and associated tests (#60)
+ce3fa3e8ab Change dep for ExceptionUtils (#96)
+0e02486db4 Merge pull request #51 from onehouseinc/support_multi_writer_checkpoint_with_callback
+2170346918 CR
+dfdbec0a29 fixing failing tests due to default value set for configs
+8290def9c2 CR
+7fa6fa9b91 CR
+be8a33f93f Merge branch 'master' of github.com:onehouseinc/hudi-internal into support_multi_writer_checkpoint_with_callback
+390d056ec1 Resolve comments
+8cfe61b074 Add null check for Kafka source
+e01a029514 CR
+afc35d0fee CR
+052f3461ab Merge commit '2f27cac06a30fa4cc78270cd1821a999a511faa4' into support_multi_writer_checkpoint_with_callback
+a5df37c704 Merge remote-tracking branch 'origin/master' into support_multi_writer_checkpoint_with_callback
+944f7a4131 more checkstyle
+760d00ecd2 checkstyle fixes
+b42cff544a adding checkpoint as a state of multiple delta streamer consumer/sources (writing many sources to single target table) adding support for multi writer checkpoint using callback
