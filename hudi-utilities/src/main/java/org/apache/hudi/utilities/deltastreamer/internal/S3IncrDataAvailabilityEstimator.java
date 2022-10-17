@@ -58,17 +58,17 @@ public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstim
   }
 
   @Override
-  public SourceDataAvailability getDataAvailability(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+  public Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     S3MetadataTableInfo s3MetadataTableInfo = S3MetadataTableInfo.createOrGetInstance(jssc, properties);
     Long aggrBytesPerIncrJob = s3MetadataTableInfo.getAggrBytesPerIncrJob(lastCommittedCheckpointStr, s3KeyPrefix);
 
     if (aggrBytesPerIncrJob >= minSourceBytesIngestion) {
-      return SourceDataAvailability.MIN_INGEST_DATA_AVAILABLE;
+      return Pair.of(SourceDataAvailabilityStatus.MIN_INGEST_DATA_AVAILABLE, aggrBytesPerIncrJob);
     } else if (aggrBytesPerIncrJob > 0) {
-      return SourceDataAvailability.DATA_AVAILABLE;
+      return Pair.of(SourceDataAvailabilityStatus.DATA_AVAILABLE, aggrBytesPerIncrJob);
     }
 
-    return SourceDataAvailability.NO_DATA;
+    return Pair.of(SourceDataAvailabilityStatus.NO_DATA, 0L);
   }
 
   static class S3MetadataTableInfo {

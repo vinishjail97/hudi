@@ -20,6 +20,7 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
 
 import org.apache.spark.api.java.JavaSparkContext;
@@ -57,15 +58,25 @@ public abstract class SourceDataAvailabilityEstimator {
    * @param sourceLimit Max data that will be ingested in every round.
    * @return
    */
-  abstract SourceDataAvailability getDataAvailability(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit);
+  abstract Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit);
 
   /** Source Data Availability Status */
-  public enum SourceDataAvailability {
-    // There is sufficient data available to schedule ingest immediately.
-    MIN_INGEST_DATA_AVAILABLE,
-    // There is data available in the source, only schedule ingest if min sync time has passed since last ingestion.
-    DATA_AVAILABLE,
+  public enum SourceDataAvailabilityStatus {
+    UNKNOWN(-1),
     // There is no data available in the source.
-    NO_DATA
+    NO_DATA(0),
+    // There is data available in the source, only schedule ingest if min sync time has passed since last ingestion.
+    DATA_AVAILABLE(1),
+    // There is sufficient data available to schedule ingest immediately.
+    MIN_INGEST_DATA_AVAILABLE(2);
+
+    private final int value;
+    SourceDataAvailabilityStatus(int value) {
+      this.value = value;
+    }
+
+    public int getValue() {
+      return value;
+    }
   }
 }

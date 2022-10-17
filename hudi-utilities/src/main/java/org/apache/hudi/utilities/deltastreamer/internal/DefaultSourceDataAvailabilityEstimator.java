@@ -20,6 +20,7 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.collection.Pair;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -37,7 +38,7 @@ public class DefaultSourceDataAvailabilityEstimator extends SourceDataAvailabili
   }
 
   @Override
-  SourceDataAvailability getDataAvailability(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
-    return SourceDataAvailability.DATA_AVAILABLE;
+  Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+    return Pair.of(SourceDataAvailabilityStatus.DATA_AVAILABLE, 0L);
   }
 }

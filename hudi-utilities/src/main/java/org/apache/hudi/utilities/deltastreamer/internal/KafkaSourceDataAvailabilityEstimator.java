@@ -20,6 +20,7 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
 import org.apache.hudi.utilities.sources.helpers.KafkaOffsetGen;
 
@@ -58,18 +59,19 @@ public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailability
   }
 
   @Override
-  SourceDataAvailability getDataAvailability(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+  Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     long recordSizeBytes = (averageRecordSizeInBytes.isPresent() && averageRecordSizeInBytes.get() > 0L) ? averageRecordSizeInBytes.get() : DEFAULT_RECORD_SIZE;
     Long totalEventsAvailable = new KafkaTopicInfo(properties, lastCommittedCheckpointStr, recordSizeBytes, sourceLimit).eventsAvailableForTopic();
 
     // Either the aggr size of available kafka events is at least minSourceBytesIngestion
     // or if the number of events exceeds the max number of events per ingestion batch.
-    if ((totalEventsAvailable * recordSizeBytes) >= minSourceBytesIngestion || totalEventsAvailable > Math.min(sourceLimit, maxBatchEvents)) {
-      return SourceDataAvailability.MIN_INGEST_DATA_AVAILABLE;
+    Long estimatedBytesAvailableForIngestion = (totalEventsAvailable * recordSizeBytes);
+    if (estimatedBytesAvailableForIngestion >= minSourceBytesIngestion || totalEventsAvailable > Math.min(sourceLimit, maxBatchEvents)) {
+      return Pair.of(SourceDataAvailabilityStatus.MIN_INGEST_DATA_AVAILABLE, estimatedBytesAvailableForIngestion);
     } else if (totalEventsAvailable > 0) {
-      return SourceDataAvailability.DATA_AVAILABLE;
+      return Pair.of(SourceDataAvailabilityStatus.DATA_AVAILABLE, estimatedBytesAvailableForIngestion);
     }
-    return SourceDataAvailability.NO_DATA;
+    return Pair.of(SourceDataAvailabilityStatus.NO_DATA, 0L);
   }
 
   static class KafkaTopicInfo {
