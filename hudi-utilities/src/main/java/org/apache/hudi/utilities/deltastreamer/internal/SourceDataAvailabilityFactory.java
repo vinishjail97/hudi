@@ -45,7 +45,7 @@ public class SourceDataAvailabilityFactory {
 
     String sourceEstimatorTypeClass = properties.getProperty(OnehouseInternalDeltastreamerConfig.DELTASTREAMER_SOURCE_ESTIMATOR_TYPE.key());
     try {
-      return (SourceDataAvailabilityEstimator) ReflectionUtils.loadClass(sourceEstimatorTypeClass, properties, jssc);
+      return (SourceDataAvailabilityEstimator) ReflectionUtils.loadClass(sourceEstimatorTypeClass, jssc, properties);
     } catch (Exception e) {
       LOG.warn("Error in loading estimator class " + sourceEstimatorTypeClass + " using default estimator");
       return defaultEstimator;
