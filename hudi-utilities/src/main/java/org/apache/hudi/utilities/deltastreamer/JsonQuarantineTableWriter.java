@@ -171,6 +171,7 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
 
   @Override
   public void cleanErrorEvents() {
+    LOG.info("Clearing out old quarantine events for table " + this.quarantineTableCfg.getBasePath());
     errorEventsRdd.clear();
   }
 
@@ -253,7 +254,7 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
   public Option<JavaRDD<HoodieAvroRecord>> createErrorEventsRdd(Optional<JavaRDD<Row>> errorEventsRdd) {
     LOG.info("processing createErrorEventsRdd");
     if (!errorEventsRdd.isPresent() || errorEventsRdd.get().isEmpty()) {
-      LOG.info("Returning emtpy ErrorEventsRdd");
+      LOG.info("Returning empty ErrorEventsRdd");
       return Option.empty();
     }
     JavaRDD<Row> rowJavaRDD = errorEventsRdd.get();
