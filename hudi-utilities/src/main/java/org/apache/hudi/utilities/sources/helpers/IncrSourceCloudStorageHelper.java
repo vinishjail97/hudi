@@ -21,7 +21,9 @@ package org.apache.hudi.utilities.sources.helpers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.exception.HoodieException;
+
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.sql.DataFrameReader;
@@ -29,10 +31,14 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import static org.apache.hudi.common.util.StringUtils.isNullOrEmpty;
+import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.PATH_BASED_PARTITION_FIELDS;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.SPARK_DATASOURCE_OPTIONS;
+import static org.apache.spark.sql.functions.input_file_name;
+import static org.apache.spark.sql.functions.split;
 
 /**
  * Helper methods for when the incremental source is fetching from Cloud Storage, like AWS S3 buckets or GCS.
@@ -78,4 +84,17 @@ public class IncrSourceCloudStorageHelper {
     return dataFrameReader.options(sparkOptionsMap);
   }
 
+  public static Dataset addPartitionColumn(Dataset ds, TypedProperties props) {
+    if (!StringUtils.isNullOrEmpty(props.getString(PATH_BASED_PARTITION_FIELDS))) {
+      List<String> partitionKeysToAdd = Arrays.asList(props.getString(PATH_BASED_PARTITION_FIELDS).split(","));
+
+      // Add partition column for all path-based partition keys
+      for (String partitionKey : partitionKeysToAdd) {
+        String partitionPathPattern = String.format("%s=", partitionKey);
+        LOG.info(String.format("Adding column %s to dataset", partitionKey));
+        ds = ds.withColumn(partitionKey, split(split(input_file_name(), partitionPathPattern).getItem(1), "/").getItem(0));
+      }
+    }
+    return ds;
+  }
 }

@@ -29,8 +29,8 @@ import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
-import org.apache.hudi.keygen.constant.KeyGeneratorOptions;
 import org.apache.hudi.utilities.schema.SchemaProvider;
+import org.apache.hudi.utilities.sources.helpers.IncrSourceCloudStorageHelper;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 
 import com.esotericsoftware.minlog.Log;
@@ -47,14 +47,11 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import static org.apache.spark.sql.functions.input_file_name;
-import static org.apache.spark.sql.functions.split;
 
 import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -96,9 +93,6 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
 
     // ToDo make it a list of extensions
     static final String S3_ACTUAL_FILE_EXTENSIONS = "hoodie.deltastreamer.source.s3incr.file.extensions";
-
-    static final String ATTACH_SOURCE_PARTITION_COLUMN = "hoodie.deltastreamer.source.s3incr.source.partition.exists";
-    static final Boolean DEFAULT_ATTACH_SOURCE_PARTITION_COLUMN = false;
   }
 
   public S3EventsHoodieIncrSource(
@@ -123,26 +117,6 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       dataFrameReader = dataFrameReader.options(sparkOptionsMap);
     }
     return dataFrameReader;
-  }
-
-  private Dataset addPartitionColumn(Dataset ds, List<String> cloudFiles) {
-    if (props.getBoolean(Config.ATTACH_SOURCE_PARTITION_COLUMN, Config.DEFAULT_ATTACH_SOURCE_PARTITION_COLUMN)
-        && !StringUtils.isNullOrEmpty(props.getString(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key(), null))) {
-      String partitionKey = props.getString(KeyGeneratorOptions.PARTITIONPATH_FIELD_NAME.key()).split(":")[0];
-      String partitionPathPattern = String.format("%s=",partitionKey);
-      String filePath = cloudFiles.get(0);
-      List<String> nestedPartition = Arrays.stream(filePath.split("/"))
-          .filter(level -> level.contains(partitionPathPattern)).collect(Collectors.toList());
-      if (nestedPartition.size() > 1) {
-        throw new HoodieException(String.format("More than one level of partitioning exists in the files and one such file is %s", filePath));
-      }
-      if (nestedPartition.size() == 1) {
-        LOG.info(String.format("adding column name = %s to dataset", partitionKey));
-        ds = ds.withColumn(partitionKey, split(split(input_file_name(),
-            partitionPathPattern).getItem(1), "/").getItem(0));
-      }
-    }
-    return ds;
   }
 
   @Override
@@ -251,7 +225,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     Option<Dataset<Row>> dataset = Option.empty();
     if (!cloudFiles.isEmpty()) {
       DataFrameReader dataFrameReader = getDataFrameReader(fileFormat);
-      Dataset ds = addPartitionColumn(dataFrameReader.load(cloudFiles.toArray(new String[0])), cloudFiles);
+      Dataset ds = IncrSourceCloudStorageHelper.addPartitionColumn(dataFrameReader.load(cloudFiles.toArray(new String[0])), props);
       dataset = Option.of(ds);
     }
     LOG.debug("Extracted distinct files " + cloudFiles.size()
