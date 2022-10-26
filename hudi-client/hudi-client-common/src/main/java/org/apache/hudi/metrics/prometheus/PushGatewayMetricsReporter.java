@@ -24,6 +24,7 @@ import org.apache.hudi.metrics.MetricsReporter;
 import com.codahale.metrics.MetricFilter;
 import com.codahale.metrics.MetricRegistry;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
@@ -31,6 +32,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class PushGatewayMetricsReporter extends MetricsReporter {
+  private static final Pattern LABEL_PATTERN = Pattern.compile("\\s*,\\s*");
 
   private final PushGatewayReporter pushGatewayReporter;
   private final int periodSeconds;
@@ -85,7 +87,10 @@ public class PushGatewayMetricsReporter extends MetricsReporter {
   }
 
   private static Map<String, String> parseLabels(String labels) {
-    return Pattern.compile("\\s*,\\s*").splitAsStream(labels.trim()).map(s -> s.split(":", 2))
+    if (labels == null) {
+      return Collections.emptyMap();
+    }
+    return LABEL_PATTERN.splitAsStream(labels.trim()).map(s -> s.split(":", 2))
        .collect(Collectors.toMap(a -> a[0], a -> (a.length > 1) ? a[1] : ""));
   }
 }

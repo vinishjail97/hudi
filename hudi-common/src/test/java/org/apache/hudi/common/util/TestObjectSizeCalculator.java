@@ -73,7 +73,7 @@ public class TestObjectSizeCalculator {
     assertEquals(32, getObjectSize(emptyClass));
     assertEquals(40, getObjectSize(stringClass));
     assertEquals(40, getObjectSize(payloadClass));
-    assertEquals(1240, getObjectSize(Schema.create(Schema.Type.STRING)));
+    assertEquals(1320, getObjectSize(Schema.create(Schema.Type.STRING)));
     assertEquals(104, getObjectSize(person));
   }
 

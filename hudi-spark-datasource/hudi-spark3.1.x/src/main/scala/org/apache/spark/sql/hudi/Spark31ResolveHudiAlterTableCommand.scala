@@ -17,12 +17,6 @@
 package org.apache.spark.sql.hudi
 
 import org.apache.hudi.common.config.HoodieCommonConfig
-<<<<<<<< HEAD:hudi-spark-datasource/hudi-spark3.1.x/src/main/scala/org/apache/spark/sql/hudi/Spark312ResolveHudiAlterTableCommand.scala
-
-import java.util.Locale
-import org.apache.hudi.config.HoodieWriteConfig
-========
->>>>>>>> upstream/master:hudi-spark-datasource/hudi-spark3.1.x/src/main/scala/org/apache/spark/sql/hudi/Spark31ResolveHudiAlterTableCommand.scala
 import org.apache.hudi.internal.schema.action.TableChange.ColumnChangeID
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
@@ -43,11 +37,7 @@ import scala.collection.mutable
   * for alter table column commands.
   * TODO: we should remove this file when we support datasourceV2 for hoodie on spark3.1x
   */
-<<<<<<<< HEAD:hudi-spark-datasource/hudi-spark3.1.x/src/main/scala/org/apache/spark/sql/hudi/Spark312ResolveHudiAlterTableCommand.scala
-case class Spark312ResolveHudiAlterTableCommand(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-========
 case class Spark31ResolveHudiAlterTableCommand(sparkSession: SparkSession) extends Rule[LogicalPlan] {
->>>>>>>> upstream/master:hudi-spark-datasource/hudi-spark3.1.x/src/main/scala/org/apache/spark/sql/hudi/Spark31ResolveHudiAlterTableCommand.scala
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
   def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case add @ HoodieAlterTableAddColumnsStatement(asTable(table), cols) =>

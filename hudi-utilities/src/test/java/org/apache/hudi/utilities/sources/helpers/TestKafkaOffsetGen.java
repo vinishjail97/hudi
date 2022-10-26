@@ -23,19 +23,22 @@ import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.exception.HoodieNotSupportedException;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamerMetrics;
-import org.apache.hudi.utilities.testutils.UtilitiesTestBase.Helpers;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.spark.streaming.kafka010.KafkaTestUtils;
 import org.apache.spark.streaming.kafka010.OffsetRange;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
 
+import scala.Tuple2;
+
+import static org.apache.hudi.utilities.testutils.UtilitiesTestBase.Helpers.jsonifyRecords;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -46,8 +49,9 @@ import static org.mockito.Mockito.mock;
  * Tests against {@link KafkaOffsetGen}.
  */
 public class TestKafkaOffsetGen {
+  private static final HoodieTestDataGenerator DATA_GENERATOR = new HoodieTestDataGenerator(1L);
 
-  private static String TEST_TOPIC_NAME = "hoodie_test";
+  private static final String TEST_TOPIC_NAME = "hoodie_test";
   private KafkaTestUtils testUtils;
   private HoodieDeltaStreamerMetrics metrics = mock(HoodieDeltaStreamerMetrics.class);
 
@@ -60,6 +64,11 @@ public class TestKafkaOffsetGen {
   @AfterEach
   public void teardown() throws Exception {
     testUtils.teardown();
+  }
+
+  @AfterAll
+  public static void cleanup() {
+    DATA_GENERATOR.close();
   }
 
   private TypedProperties getConsumerConfigs(String autoOffsetReset, String kafkaCheckpointType) {
@@ -76,9 +85,8 @@ public class TestKafkaOffsetGen {
 
   @Test
   public void testGetNextOffsetRangesFromEarliest() {
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     testUtils.createTopic(TEST_TOPIC_NAME, 1);
-    testUtils.sendMessages(TEST_TOPIC_NAME, Helpers.jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(1000, 1);
 
     KafkaOffsetGen kafkaOffsetGen = new KafkaOffsetGen(getConsumerConfigs("earliest", "string"));
     OffsetRange[] nextOffsetRanges = kafkaOffsetGen.getNextOffsetRanges(Option.empty(), 500, metrics);
@@ -94,9 +102,8 @@ public class TestKafkaOffsetGen {
 
   @Test
   public void testGetNextOffsetRangesFromLatest() {
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     testUtils.createTopic(TEST_TOPIC_NAME, 1);
-    testUtils.sendMessages(TEST_TOPIC_NAME, Helpers.jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(1000, 1);
     KafkaOffsetGen kafkaOffsetGen = new KafkaOffsetGen(getConsumerConfigs("latest", "string"));
     OffsetRange[] nextOffsetRanges = kafkaOffsetGen.getNextOffsetRanges(Option.empty(), 500, metrics);
     assertEquals(1, nextOffsetRanges.length);
@@ -107,9 +114,8 @@ public class TestKafkaOffsetGen {
   @Test
   public void testGetNextOffsetRangesFromCheckpoint() {
     String lastCheckpointString = TEST_TOPIC_NAME + ",0:250";
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     testUtils.createTopic(TEST_TOPIC_NAME, 1);
-    testUtils.sendMessages(TEST_TOPIC_NAME, Helpers.jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(1000, 1);
     KafkaOffsetGen kafkaOffsetGen = new KafkaOffsetGen(getConsumerConfigs("latest", "string"));
 
     OffsetRange[] nextOffsetRanges = kafkaOffsetGen.getNextOffsetRanges(Option.of(lastCheckpointString), 500, metrics);
@@ -120,9 +126,8 @@ public class TestKafkaOffsetGen {
 
   @Test
   public void testGetNextOffsetRangesFromTimestampCheckpointType() {
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     testUtils.createTopic(TEST_TOPIC_NAME, 1);
-    testUtils.sendMessages(TEST_TOPIC_NAME, Helpers.jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(1000, 1);
 
     KafkaOffsetGen kafkaOffsetGen = new KafkaOffsetGen(getConsumerConfigs("latest", "timestamp"));
 
@@ -134,9 +139,8 @@ public class TestKafkaOffsetGen {
 
   @Test
   public void testGetNextOffsetRangesFromMultiplePartitions() {
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     testUtils.createTopic(TEST_TOPIC_NAME, 2);
-    testUtils.sendMessages(TEST_TOPIC_NAME, Helpers.jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(1000, 2);
     KafkaOffsetGen kafkaOffsetGen = new KafkaOffsetGen(getConsumerConfigs("earliest", "string"));
     OffsetRange[] nextOffsetRanges = kafkaOffsetGen.getNextOffsetRanges(Option.empty(), 499, metrics);
     assertEquals(2, nextOffsetRanges.length);
@@ -148,9 +152,8 @@ public class TestKafkaOffsetGen {
 
   @Test
   public void testGetNextOffsetRangesFromGroup() {
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     testUtils.createTopic(TEST_TOPIC_NAME, 2);
-    testUtils.sendMessages(TEST_TOPIC_NAME, Helpers.jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(1000, 2);
     KafkaOffsetGen kafkaOffsetGen = new KafkaOffsetGen(getConsumerConfigs("group", "string"));
     String lastCheckpointString = TEST_TOPIC_NAME + ",0:250,1:249";
     kafkaOffsetGen.commitOffsetToKafka(lastCheckpointString);
@@ -186,5 +189,14 @@ public class TestKafkaOffsetGen {
   @Test
   public void testTopicNameNotPresentInProps() {
     assertThrows(HoodieNotSupportedException.class, () -> new KafkaOffsetGen(new TypedProperties()));
+  }
+
+  private void sendMessagesToKafka(int count, int numPartitions) {
+    Tuple2<String, String>[] keyValues = new Tuple2[count];
+    String[] records = jsonifyRecords(DATA_GENERATOR.generateInserts("000", count));
+    for (int i = 0; i < count; i++) {
+      keyValues[i] = new Tuple2<>(Integer.toString(i % numPartitions), records[i]);
+    }
+    testUtils.sendMessages(TEST_TOPIC_NAME, keyValues);
   }
 }

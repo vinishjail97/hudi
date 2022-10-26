@@ -29,13 +29,16 @@ import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 
@@ -51,10 +54,12 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+@Disabled
 public class TestHiveIncrementalPuller {
 
   private HiveIncrementalPuller.Config config;
   private String targetBasePath = null;
+  @TempDir protected Path tmpDir;
 
   @BeforeEach
   public void setup() throws HiveException, IOException, InterruptedException, MetaException {
@@ -80,7 +85,7 @@ public class TestHiveIncrementalPuller {
     config.hiveJDBCUrl = hiveSyncProps.getString(HIVE_URL.key());
     config.hiveUsername = hiveSyncProps.getString(HIVE_USER.key());
     config.hivePassword = hiveSyncProps.getString(HIVE_PASS.key());
-    config.hoodieTmpDir = Files.createTempDirectory("hivePullerTest").toUri().toString();
+    config.hoodieTmpDir = tmpDir.resolve("hivePullerTest").toUri().toString();
     config.sourceDb = hiveSyncProps.getString(META_SYNC_DATABASE_NAME.key());
     config.sourceTable = hiveSyncProps.getString(META_SYNC_TABLE_NAME.key());
     config.targetDb = "tgtdb";

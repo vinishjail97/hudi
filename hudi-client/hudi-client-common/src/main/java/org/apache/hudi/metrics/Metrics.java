@@ -116,8 +116,8 @@ public class Metrics {
     return registry;
   }
 
-  public static boolean isInitialized() {
-    return !METRICS_INSTANCE_PER_BASEPATH.isEmpty();
+  public static boolean isInitialized(String basePath) {
+    return METRICS_INSTANCE_PER_BASEPATH.containsKey(basePath);
   }
 
   public static void shutdownAll() {

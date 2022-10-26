@@ -60,6 +60,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -95,6 +96,7 @@ import static org.mockito.Mockito.when;
  */
 @TestMethodOrder(MethodOrderer.Alphanumeric.class)
 @Tag("functional")
+@Disabled
 public class TestSparkHoodieHBaseIndex extends SparkClientFunctionalTestHarness {
 
   private static final String TABLE_NAME = "test_table";

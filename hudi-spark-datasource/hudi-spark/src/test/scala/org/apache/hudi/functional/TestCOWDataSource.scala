@@ -753,7 +753,7 @@ class TestCOWDataSource extends HoodieClientTestBase {
       .option(DataSourceReadOptions.BEGIN_INSTANTTIME.key, commitInstantTime1)
       .load(basePath)
     assertEquals(N + 1, hoodieIncViewDF1.count())
-    assertEquals(false, Metrics.isInitialized)
+    assertEquals(false, Metrics.isInitialized(basePath))
   }
 
   @Test def testSchemaEvolution(): Unit = {
@@ -1060,6 +1060,6 @@ class TestCOWDataSource extends HoodieClientTestBase {
       .save(basePath)
 
     assertTrue(HoodieDataSourceHelpers.hasNewCommits(fs, basePath, "000"))
-    assertEquals(false, Metrics.isInitialized, "Metrics should be shutdown")
+    assertEquals(false, Metrics.isInitialized(basePath), "Metrics should be shutdown")
   }
 }

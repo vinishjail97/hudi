@@ -97,7 +97,7 @@
     <fasterxml.jackson.dataformat.yaml.version>2.7.4</fasterxml.jackson.dataformat.yaml.version>
     <fasterxml.spark3.version>2.10.0</fasterxml.spark3.version>
     <kafka.version>2.0.0</kafka.version>
-    <kafka.spark3.version>2.4.1</kafka.spark3.version>
+    <kafka.spark3.version>2.8.2</kafka.spark3.version>
     <pulsar.version>2.8.1</pulsar.version>
     <pulsar.spark.version>${pulsar.spark.scala11.version}</pulsar.spark.version>
     <pulsar.spark.scala11.version>2.4.5</pulsar.spark.scala11.version>
@@ -167,8 +167,10 @@
     <scalatest.version>3.0.1</scalatest.version>
     <scalatest.spark3.version>3.1.0</scalatest.spark3.version>
     <surefire-log4j.file>log4j2-surefire.properties</surefire-log4j.file>
+    <redirectLogsToFile>false</redirectLogsToFile>
     <thrift.version>0.12.0</thrift.version>
     <jetty.version>9.4.15.v20190215</jetty.version>
+    <netty.version>4.1.68.Final</netty.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <hbase.version>2.4.9</hbase.version>
     <codehaus-jackson.version>1.9.13</codehaus-jackson.version>
@@ -178,6 +180,7 @@
     <skipUTs>${skipTests}</skipUTs>
     <skipFTs>${skipTests}</skipFTs>
     <skipITs>${skipTests}</skipITs>
+    <skipSparkClientUTs>${skipUTs}</skipSparkClientUTs>
     <skip.hudi-spark2.unit.tests>${skipTests}</skip.hudi-spark2.unit.tests>
     <skip.hudi-spark3.unit.tests>${skipTests}</skip.hudi-spark3.unit.tests>
     <skipDocker>${skipTests}</skipDocker>
@@ -474,6 +477,7 @@
               <log4j.configurationFile>${surefire-log4j.file}</log4j.configurationFile>
             </systemPropertyVariables>
             <useSystemClassLoader>false</useSystemClassLoader>
+            <redirectTestOutputToFile>${redirectLogsToFile}</redirectTestOutputToFile>
           </configuration>
         </plugin>
         <plugin>
@@ -1431,6 +1435,11 @@
 
       <!-- Zookeeper -->
       <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper</artifactId>
+        <version>${zookeeper.version}</version>
+      </dependency>
+      <dependency>
         <groupId>org.apache.curator</groupId>
         <artifactId>curator-framework</artifactId>
         <version>${zk-curator.version}</version>
@@ -1468,6 +1477,12 @@
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java-util</artifactId>
         <version>${proto.version}</version>
+      </dependency>
+
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-lang3</artifactId>
+        <version>3.12.0</version>
       </dependency>
 
       <!-- Junit 5 -->
@@ -1678,6 +1693,12 @@
       </properties>
     </profile>
     <profile>
+      <id>ci-log</id>
+      <properties>
+        <redirectLogsToFile>true</redirectLogsToFile>
+      </properties>
+    </profile>
+    <profile>
       <id>unit-tests</id>
       <properties>
         <skipUTs>false</skipUTs>
@@ -1699,6 +1720,7 @@
                 <exclude>**/IT*.java</exclude>
                 <exclude>**/testsuite/**/Test*.java</exclude>
               </excludes>
+              <redirectTestOutputToFile>${redirectLogsToFile}</redirectTestOutputToFile>
             </configuration>
           </plugin>
           <plugin>
@@ -1752,6 +1774,7 @@
               <includes>
                 <include>**/*FunctionalTestSuite.java</include>
               </includes>
+              <redirectTestOutputToFile>${redirectLogsToFile}</redirectTestOutputToFile>
             </configuration>
           </plugin>
           <plugin>
@@ -1805,6 +1828,7 @@
             <configuration combine.self="override">
               <skip>${skipUTs}</skip>
               <useSystemClassLoader>false</useSystemClassLoader>
+              <redirectTestOutputToFile>${redirectLogsToFile}</redirectTestOutputToFile>
             </configuration>
           </plugin>
           <plugin>

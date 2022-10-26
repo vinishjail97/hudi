@@ -25,39 +25,44 @@ import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer;
 import org.apache.hudi.utilities.deltastreamer.JsonQuarantineTableWriter;
 import org.apache.hudi.utilities.deltastreamer.QuarantineTableWriterInterface;
 import org.apache.hudi.utilities.deltastreamer.SourceFormatAdapter;
-import org.apache.hudi.utilities.exception.HoodieDeltaStreamerException;
 import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.KafkaOffsetGen.Config;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.common.TopicPartition;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.file.Path;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Properties;
 import java.util.UUID;
+
+import scala.Tuple2;
 
 import static org.apache.hudi.config.HoodieQuarantineTableConfig.QUARANTINE_TABLE_BASE_PATH;
 import static org.apache.hudi.config.HoodieQuarantineTableConfig.QUARANTINE_TARGET_TABLE;
 import static org.apache.hudi.utilities.sources.helpers.KafkaOffsetGen.Config.ENABLE_KAFKA_COMMIT_OFFSET;
 import static org.apache.hudi.utilities.testutils.UtilitiesTestBase.Helpers.jsonifyRecords;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Tests against {@link JsonKafkaSource}.
  */
 public class TestJsonKafkaSource extends BaseTestKafkaSource {
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final HoodieTestDataGenerator DATA_GENERATOR = new HoodieTestDataGenerator(1L);
   static final URL SCHEMA_FILE_URL = TestJsonKafkaSource.class.getClassLoader().getResource("delta-streamer-config/source.avsc");
+
+  @TempDir protected Path tmpDir;
 
   @BeforeEach
   public void init() throws Exception {
@@ -65,6 +70,11 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     TypedProperties props = new TypedProperties();
     props.put("hoodie.deltastreamer.schemaprovider.source.schema.file", schemaFilePath);
     schemaProvider = new FilebasedSchemaProvider(props, jsc());
+  }
+
+  @AfterAll
+  public static void teardown() {
+    DATA_GENERATOR.close();
   }
 
   @Override
@@ -96,7 +106,6 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     // topic setup.
     final String topic = TEST_TOPIC_PREFIX + "testJsonKafkaSourceFilterNullMsg";
     testUtils.createTopic(topic, 2);
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     TypedProperties props = createPropsForKafkaSource(topic, null, "earliest");
 
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
@@ -105,7 +114,7 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     // 1. Extract without any checkpoint => get all the data, respecting sourceLimit
     assertEquals(Option.empty(), kafkaSource.fetchNewDataInAvroFormat(Option.empty(), Long.MAX_VALUE).getBatch());
     // Send  1000 non-null messages to Kafka
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(topic, 1000, 2);
     // Send  100 null messages to Kafka
     testUtils.sendMessages(topic, new String[100]);
     InputBatch<JavaRDD<GenericRecord>> fetch1 = kafkaSource.fetchNewDataInAvroFormat(Option.empty(), Long.MAX_VALUE);
@@ -118,7 +127,6 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     // topic setup.
     final String topic = TEST_TOPIC_PREFIX + "testJsonKafkaSourceWithDefaultUpperCap";
     testUtils.createTopic(topic, 2);
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     TypedProperties props = createPropsForKafkaSource(topic, Long.MAX_VALUE, "earliest");
 
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
@@ -128,12 +136,12 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     1. Extract without any checkpoint => get all the data, respecting default upper cap since both sourceLimit and
     maxEventsFromKafkaSourceProp are set to Long.MAX_VALUE
      */
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(topic, 1000, 2);
     InputBatch<JavaRDD<GenericRecord>> fetch1 = kafkaSource.fetchNewDataInAvroFormat(Option.empty(), Long.MAX_VALUE);
     assertEquals(1000, fetch1.getBatch().get().count());
 
     // 2. Produce new data, extract new data based on sourceLimit
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("001", 1000)));
+    sendMessagesToKafka(topic, 1000, 2);
     InputBatch<Dataset<Row>> fetch2 =
         kafkaSource.fetchNewDataInRowFormat(Option.of(fetch1.getCheckpointForNextBatch()), 1500);
     assertEquals(1000, fetch2.getBatch().get().count());
@@ -144,19 +152,18 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     // topic setup.
     final String topic = TEST_TOPIC_PREFIX + "testJsonKafkaSourceWithConfigurableUpperCap";
     testUtils.createTopic(topic, 2);
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
     TypedProperties props = createPropsForKafkaSource(topic, 500L, "earliest");
 
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
     SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource);
 
     // 1. Extract without any checkpoint => get all the data, respecting sourceLimit
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(topic, 1000, 2);
     InputBatch<JavaRDD<GenericRecord>> fetch1 = kafkaSource.fetchNewDataInAvroFormat(Option.empty(), 900);
     assertEquals(900, fetch1.getBatch().get().count());
 
     // 2. Produce new data, extract new data based on upper cap
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("001", 1000)));
+    sendMessagesToKafka(topic, 1000, 2);
     InputBatch<Dataset<Row>> fetch2 =
         kafkaSource.fetchNewDataInRowFormat(Option.of(fetch1.getCheckpointForNextBatch()), Long.MAX_VALUE);
     assertEquals(500, fetch2.getBatch().get().count());
@@ -185,67 +192,50 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
 
   @Override
   void sendMessagesToKafka(String topic, int count, int numPartitions) {
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("000", count)));
+    try {
+      Tuple2<String, String>[] keyValues = new Tuple2[count];
+      String[] records = jsonifyRecords(DATA_GENERATOR.generateInserts("000", count));
+      for (int i = 0; i < count; i++) {
+        keyValues[i] = new Tuple2<>(Integer.toString(i % numPartitions), records[i]);
+      }
+      testUtils.sendMessages(topic, keyValues);
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
+    }
+  }
+
+  void sendJsonSafeMessagesToKafka(String topic, int count, int numPartitions) {
+    try {
+      Tuple2<String, String>[] keyValues = new Tuple2[count];
+      String[] records = jsonifyRecords(DATA_GENERATOR.generateInserts("000", count));
+      for (int i = 0; i < count; i++) {
+        // Drop fields that don't translate to json properly
+        Map node = OBJECT_MAPPER.readValue(records[i], Map.class);
+        node.remove("height");
+        node.remove("current_date");
+        node.remove("nation");
+        keyValues[i] = new Tuple2<>(Integer.toString(i % numPartitions), OBJECT_MAPPER.writeValueAsString(node));
+      }
+      testUtils.sendMessages(topic, keyValues);
+    } catch (Exception ex) {
+      throw new RuntimeException(ex);
+    }
   }
 
   @Test
-  public void testFailOnDataLoss() throws Exception {
-    // create a topic with very short retention
-    final String topic = TEST_TOPIC_PREFIX + "testFailOnDataLoss";
-    Properties topicConfig = new Properties();
-    topicConfig.setProperty("retention.ms", "10000");
-    testUtils.createTopic(topic, 1, topicConfig);
-
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
-    TypedProperties failOnDataLossProps = createPropsForKafkaSource(topic, null, "earliest");
-    failOnDataLossProps.setProperty(Config.ENABLE_FAIL_ON_DATA_LOSS.key(), Boolean.toString(true));
-
-    Source jsonSource = new JsonKafkaSource(failOnDataLossProps, jsc(), spark(), schemaProvider, metrics);
-    SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource);
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("000", 10)));
-    // send 10 records, extract 2 records to generate a checkpoint
-    InputBatch<JavaRDD<GenericRecord>> fetch1 = kafkaSource.fetchNewDataInAvroFormat(Option.empty(), 2);
-    assertEquals(2, fetch1.getBatch().get().count());
-
-    // wait for the checkpoint to expire
-    Thread.sleep(10001);
-    Throwable t = assertThrows(HoodieDeltaStreamerException.class, () -> {
-      kafkaSource.fetchNewDataInAvroFormat(Option.of(fetch1.getCheckpointForNextBatch()), Long.MAX_VALUE);
-    });
-    assertEquals(
-        "Some data may have been lost because they are not available in Kafka any more;"
-            + " either the data was aged out by Kafka or the topic may have been deleted before all the data in the topic was processed.",
-        t.getMessage());
-    t = assertThrows(HoodieDeltaStreamerException.class, () -> {
-      kafkaSource.fetchNewDataInRowFormat(Option.of(fetch1.getCheckpointForNextBatch()), Long.MAX_VALUE);
-    });
-    assertEquals(
-        "Some data may have been lost because they are not available in Kafka any more;"
-            + " either the data was aged out by Kafka or the topic may have been deleted before all the data in the topic was processed.",
-        t.getMessage());
-  }
-
-  @Test
-  public void testErorEventsForDataInRowForamt() throws IOException {
+  public void testErrorEventsForDataInRowFormat() throws IOException {
     // topic setup.
-    final String topic = TEST_TOPIC_PREFIX + "testErrorEvents";
+    final String topic = TEST_TOPIC_PREFIX + "testErrorEventsRow";
 
     testUtils.createTopic(topic, 2);
-    List<TopicPartition> topicPartitions = new ArrayList<>();
-    TopicPartition topicPartition0 = new TopicPartition(topic, 0);
-    topicPartitions.add(topicPartition0);
-    TopicPartition topicPartition1 = new TopicPartition(topic, 1);
-    topicPartitions.add(topicPartition1);
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendJsonSafeMessagesToKafka(topic, 1000, 2);
     testUtils.sendMessages(topic, new String[]{"error_event1", "error_event2"});
 
     TypedProperties props = createPropsForKafkaSource(topic, null, "earliest");
     props.put(ENABLE_KAFKA_COMMIT_OFFSET.key(), "true");
-    props.put(QUARANTINE_TABLE_BASE_PATH.key(),"/tmp/qurantine_table_test/json_kafka_row_events");
-    props.put(QUARANTINE_TARGET_TABLE.key(),"json_kafka_row_events");
-    props.put("hoodie.base.path","/tmp/json_kafka_row_events");
+    props.put(QUARANTINE_TABLE_BASE_PATH.key(), tmpDir.toString() + "/qurantine_table_test/json_kafka_row_events");
+    props.put(QUARANTINE_TARGET_TABLE.key(), "json_kafka_row_events");
+    props.put("hoodie.base.path", tmpDir.toString() + "/json_kafka_row_events");
     props.put("hoodie.deltastreamer.quarantinetable.validate.targetschema.enable", "true");
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
     Option<QuarantineTableWriterInterface> quarantineTableWriterInterface = Option.of(new JsonQuarantineTableWriter(new HoodieDeltaStreamer.Config(),
@@ -257,44 +247,39 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
   }
 
   @Test
-  public void testErorEventsForDataInAvroFormat() throws IOException {
-
+  public void testErrorEventsForDataInAvroFormat() throws IOException {
     // topic setup.
-    final String topic = TEST_TOPIC_PREFIX + "testErrorEvents";
+    final String topic = TEST_TOPIC_PREFIX + "testErrorEventsAvro";
 
     testUtils.createTopic(topic, 2);
-    List<TopicPartition> topicPartitions = new ArrayList<>();
-    TopicPartition topicPartition0 = new TopicPartition(topic, 0);
-    topicPartitions.add(topicPartition0);
-    TopicPartition topicPartition1 = new TopicPartition(topic, 1);
-    topicPartitions.add(topicPartition1);
-    HoodieTestDataGenerator dataGenerator = new HoodieTestDataGenerator();
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(topic, 1000, 2);
     testUtils.sendMessages(topic, new String[]{"error_event1", "error_event2"});
 
     TypedProperties props = createPropsForKafkaSource(topic, null, "earliest");
     props.put(ENABLE_KAFKA_COMMIT_OFFSET.key(), "true");
-    props.put(QUARANTINE_TABLE_BASE_PATH.key(),"/tmp/qurantine_table_test/json_kafka_events");
-    props.put(QUARANTINE_TARGET_TABLE.key(),"json_kafka_events");
-    props.put("hoodie.base.path","/tmp/json_kafka_events");
+    props.put(QUARANTINE_TABLE_BASE_PATH.key(), tmpDir.toString() + "/qurantine_table_test/json_kafka_events");
+    props.put(QUARANTINE_TARGET_TABLE.key(), "json_kafka_events");
+    props.put("hoodie.base.path", "/tmp/json_kafka_events");
 
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
     Option<QuarantineTableWriterInterface> quarantineTableWriterInterface = Option.of(new JsonQuarantineTableWriter(new HoodieDeltaStreamer.Config(),
-        spark(),props,jsc(),fs()));
+        spark(), props, jsc(), fs()));
     SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource, quarantineTableWriterInterface, Option.of(props));
-    InputBatch<JavaRDD<GenericRecord>> fetch1 = kafkaSource.fetchNewDataInAvroFormat(Option.empty(),Long.MAX_VALUE);
-    assertEquals(1000,fetch1.getBatch().get().count());
+    InputBatch<JavaRDD<GenericRecord>> fetch1 = kafkaSource.fetchNewDataInAvroFormat(Option.empty(), Long.MAX_VALUE);
+    assertEquals(1000, fetch1.getBatch().get().count());
     String instantTime =  quarantineTableWriterInterface.get().startCommit();
-    assertEquals(2, ((JavaRDD)quarantineTableWriterInterface.get().getErrorEvents(instantTime,Option.empty()).get()).count());
+    assertEquals(2, ((JavaRDD) quarantineTableWriterInterface.get().getErrorEvents(instantTime,Option.empty()).get()).count());
     quarantineTableWriterInterface.get().upsertAndCommit(instantTime,instantTime,Option.empty());
-    testUtils.sendMessages(topic, jsonifyRecords(dataGenerator.generateInserts("000", 1000)));
+    sendMessagesToKafka(topic, 1000, 2);
     testUtils.sendMessages(topic, new String[]{"error_event12", "error_event21", "error_events_31"});
     InputBatch<JavaRDD<GenericRecord>> fetch2 = kafkaSource.fetchNewDataInAvroFormat(Option.of(fetch1.getCheckpointForNextBatch()),Long.MAX_VALUE);
+    fetch2.getBatch().get().count();
     String instantTime2 =  quarantineTableWriterInterface.get().startCommit();
     assertEquals(3, ((JavaRDD)quarantineTableWriterInterface.get().getErrorEvents(instantTime2,Option.of(instantTime)).get()).count());
     quarantineTableWriterInterface.get().upsertAndCommit(instantTime2,instantTime2,Option.of(instantTime));
     // counts after 2 commits should match for unique events
-    assertEquals(5,spark().read().format("hudi").load(quarantineTableWriterInterface.get().getQuarantineTableWriteConfig().getBasePath()).count());
+    long count = spark().read().format("hudi").load(quarantineTableWriterInterface.get().getQuarantineTableWriteConfig().getBasePath()).count();
+    assertEquals(5, count);
     testUtils.sendMessages(topic, new String[]{"error_event12", "error_event21", "error_events_31"});
     InputBatch<JavaRDD<GenericRecord>> fetch3 = kafkaSource.fetchNewDataInAvroFormat(Option.of(fetch1.getCheckpointForNextBatch()),Long.MAX_VALUE);
     String instantTime3 =  quarantineTableWriterInterface.get().startCommit();

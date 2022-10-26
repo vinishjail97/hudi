@@ -58,7 +58,6 @@ public class TestPushGateWayReporter {
     when(config.getPushGatewayReportPeriodSeconds()).thenReturn(30);
     when(config.getPushGatewayDeleteOnShutdown()).thenReturn(true);
     when(config.getPushGatewayJobName()).thenReturn("foo");
-    when(config.getPushGatewayRandomJobNameSuffix()).thenReturn(false);
     when(config.getBasePath()).thenReturn("s3://test" + UUID.randomUUID());
     hoodieMetrics = new HoodieMetrics(config);
     metrics = hoodieMetrics.getMetrics();

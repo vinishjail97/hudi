@@ -10,17 +10,17 @@ on:
       - master
       - 'release-*'
 env:
-  MVN_ARGS: -ntp -B -V -Pwarn-log -Dorg.slf4j.simpleLogger.log.org.apache.maven.plugins.shade=warn -Dorg.slf4j.simpleLogger.log.org.apache.maven.plugins.dependency=warn
+  MVN_ARGS: -ntp -B -V -Pci-log -Pwarn-log -Dorg.slf4j.simpleLogger.log.org.apache.maven.plugins.shade=warn -Dorg.slf4j.simpleLogger.log.org.apache.maven.plugins.dependency=warn
+  MODULES: "hudi-sync/hudi-datahub-sync,hudi-sync/hudi-hive-sync,hudi-sync/hudi-sync-common,hudi-utilities,hudi-aws,hudi-gcp,hudi-examples/hudi-examples-spark"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  unit-tests:
+    runs-on: ubuntu-latest-16-cores
     strategy:
       matrix:
         include:
           - scalaProfile: "scala-2.12"
             sparkProfile: "spark3.2"
-            flinkProfile: "flink1.14"
     steps:
       - uses: actions/checkout@v2
       - name: Set up JDK 8
@@ -29,25 +29,48 @@ jobs:
           java-version: '8'
           distribution: 'adopt'
           architecture: x64
-      - name: Build Project
+      - name: Build
         env:
           SCALA_PROFILE: ${{ matrix.scalaProfile }}
           SPARK_PROFILE: ${{ matrix.sparkProfile }}
-          FLINK_PROFILE: ${{ matrix.flinkProfile }}
         run:
-          mvn clean install -Pintegration-tests -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -D"$FLINK_PROFILE" -DskipTests=true $MVN_ARGS
+          mvn -am -pl $MODULES clean install -T 2 -Pintegration-tests -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -DskipTests=true $MVN_ARGS
       - name: Quickstart Test
         env:
           SCALA_PROFILE: ${{ matrix.scalaProfile }}
           SPARK_PROFILE: ${{ matrix.sparkProfile }}
-          FLINK_PROFILE: ${{ matrix.flinkProfile }}
         run:
-          mvn test -Punit-tests -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -D"$FLINK_PROFILE" -DfailIfNoTests=false -pl hudi-examples/hudi-examples-java,hudi-examples/hudi-examples-spark $MVN_ARGS
-      - name: Spark SQL Test
+          mvn test -Punit-tests -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -DfailIfNoTests=false -pl hudi-examples/hudi-examples-spark $MVN_ARGS
+      - name: Unit Test
         env:
           SCALA_PROFILE: ${{ matrix.scalaProfile }}
           SPARK_PROFILE: ${{ matrix.sparkProfile }}
-          FLINK_PROFILE: ${{ matrix.flinkProfile }}
-        if: ${{ !endsWith(env.SPARK_PROFILE, '2.4') }} # skip test spark 2.4 as it's covered by Azure CI
         run:
-          mvn test -Punit-tests -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -D"$FLINK_PROFILE" '-Dtest=Test*' -pl hudi-spark-datasource/hudi-spark $MVN_ARGS
+          mvn test -Punit-tests -DskipSparkClientUTs=true -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -am -pl $MODULES $MVN_ARGS
+  spark-client-unit-tests:
+    runs-on: ubuntu-latest-16-cores
+    strategy:
+      matrix:
+        include:
+          - scalaProfile: "scala-2.12"
+            sparkProfile: "spark3.2"
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up JDK 8
+        uses: actions/setup-java@v2
+        with:
+          java-version: '8'
+          distribution: 'adopt'
+          architecture: x64
+      - name: Build
+        env:
+          SCALA_PROFILE: ${{ matrix.scalaProfile }}
+          SPARK_PROFILE: ${{ matrix.sparkProfile }}
+        run:
+          mvn clean install -T 2 -DskipTests -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -am -pl hudi-client/hudi-spark-client $MVN_ARGS
+      - name: Hudi Spark Client Unit Tests
+        env:
+          SCALA_PROFILE: ${{ matrix.scalaProfile }}
+          SPARK_PROFILE: ${{ matrix.sparkProfile }}
+        run:
+          mvn test -Punit-tests -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -pl hudi-client/hudi-spark-client $MVN_ARGS

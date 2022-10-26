@@ -114,9 +114,9 @@ public final class SourceFormatAdapter implements Closeable {
     return inputBatch.getBatch().map(rdd -> {
       if (quarantineTableWriterInterface.isPresent()) {
         JavaRDD<Either<GenericRecord,String>> javaRDD = rdd.map(convertor::fromJsonWithError);
-        quarantineTableWriterInterface.get().addErrorEvents(javaRDD.filter(x -> x.isRight()).map(x ->
+        quarantineTableWriterInterface.get().addErrorEvents(javaRDD.filter(Either::isRight).map(x ->
             new QuarantineJsonEvent(x.right().get(), QuarantineEvent.QuarantineReason.JSON_AVRO_DESERIALIZATION_FAILURE)));
-        return javaRDD.filter(x -> x.isLeft()).map(x -> x.left().get());
+        return javaRDD.filter(Either::isLeft).map(x -> x.left().get());
       } else {
         return rdd.map(convertor::fromJson);
       }

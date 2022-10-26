@@ -157,6 +157,8 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
     // NOTE: We have to serialize Avro schema, and then subsequently parse it on the executor node, since Spark
     //       serializer is not able to digest it
     val writerAvroSchemaStr = writerAvroSchema.toString
+    val readerAvroSchemaStr = readerAvroSchema.toString
+
     // NOTE: We're accessing toRdd here directly to avoid [[InternalRow]] to [[Row]] conversion
 
     if (!sameSchema) {
@@ -164,11 +166,12 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
         if (rows.isEmpty) {
           Iterator.empty
         } else {
+          val readerAvroSchema = new Schema.Parser().parse(readerAvroSchemaStr)
           val writerAvroSchema = new Schema.Parser().parse(writerAvroSchemaStr)
           val convert = AvroConversionUtils.createInternalRowToAvroConverter(writerSchema, writerAvroSchema, nullable = nullable)
           val rowDeserializer = RowEncoder(writerSchema).resolveAndBind().createDeserializer()
           val transform: InternalRow => Either[GenericRecord, String] = internalRow => try {
-            Left(HoodieAvroUtils.rewriteRecordDeep(convert(internalRow), readerAvroSchema))
+            Left(HoodieAvroUtils.rewriteRecordDeep(convert(internalRow), readerAvroSchema, true))
           } catch {
             case _: Throwable => Right(rowDeserializer.apply(internalRow).json)
           }

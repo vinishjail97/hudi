@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.orc.CompressionKind;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
+import org.junit.jupiter.api.Disabled;
 import org.mockito.Mockito;
 
 import java.io.IOException;
@@ -43,6 +44,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
+@Disabled
 public class TestHoodieOrcReaderWriter extends TestHoodieReaderWriterBase {
 
   @Override
