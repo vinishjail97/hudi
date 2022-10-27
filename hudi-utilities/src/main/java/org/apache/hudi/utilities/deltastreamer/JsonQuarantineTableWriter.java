@@ -65,6 +65,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.apache.hudi.common.model.HoodieRecord.PARTITION_PATH_METADATA_FIELD;
 import static org.apache.hudi.common.table.HoodieTableConfig.ARCHIVELOG_FOLDER;
 import static org.apache.hudi.config.HoodieQuarantineTableConfig.QUARANTINE_TABLE_BASE_PATH;
 import static org.apache.hudi.config.HoodieQuarantineTableConfig.QUARANTINE_TABLE_INSERT_PARALLELISM_VALUE;
@@ -245,6 +246,7 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
           .setArchiveLogFolder(ARCHIVELOG_FOLDER.defaultValue())
           .setPayloadClassName(quarantineTableCfg.getPayloadClass())
           .setBaseFileFormat("parquet")
+          .setPartitionFields(PARTITION_PATH_METADATA_FIELD)
           .initTable(new Configuration(jssc.hadoopConfiguration()), props.getString(QUARANTINE_TABLE_BASE_PATH.key()));
     } catch (IOException e) {
       e.printStackTrace();
