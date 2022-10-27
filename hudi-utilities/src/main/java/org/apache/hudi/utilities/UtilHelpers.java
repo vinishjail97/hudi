@@ -45,6 +45,7 @@ import org.apache.hudi.utilities.checkpointing.InitialCheckPointProvider;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamerMetrics;
 import org.apache.hudi.utilities.exception.HoodieSchemaPostProcessException;
 import org.apache.hudi.utilities.exception.HoodieSourcePostProcessException;
+import org.apache.hudi.utilities.schema.OnehouseSchemaProviderWithPostProcessor;
 import org.apache.hudi.utilities.schema.postprocessor.ChainedSchemaPostProcessor;
 import org.apache.hudi.utilities.schema.DelegatingSchemaProvider;
 import org.apache.hudi.utilities.schema.RowBasedSchemaProvider;
@@ -482,12 +483,15 @@ public class UtilHelpers {
     String schemaPostProcessorClass = cfg.getString(Config.SCHEMA_POST_PROCESSOR_PROP, null);
     boolean enableSparkAvroPostProcessor = Boolean.parseBoolean(cfg.getString(SparkAvroPostProcessor.Config.SPARK_AVRO_POST_PROCESSOR_PROP_ENABLE, "true"));
 
-    if (transformerClassNames != null && !transformerClassNames.isEmpty()
-        && enableSparkAvroPostProcessor && StringUtils.isNullOrEmpty(schemaPostProcessorClass)) {
-      schemaPostProcessorClass = SparkAvroPostProcessor.class.getName();
+    if (transformerClassNames != null && !transformerClassNames.isEmpty() && enableSparkAvroPostProcessor) {
+      if (!StringUtils.isNullOrEmpty(schemaPostProcessorClass)) {
+        schemaPostProcessorClass = schemaPostProcessorClass + "," + SparkAvroPostProcessor.class.getName();
+      } else {
+        schemaPostProcessorClass = SparkAvroPostProcessor.class.getName();
+      }
     }
 
-    return new SchemaProviderWithPostProcessor(provider,
+    return new OnehouseSchemaProviderWithPostProcessor(provider,
         Option.ofNullable(createSchemaPostProcessor(schemaPostProcessorClass, cfg, jssc)));
   }
 
