@@ -248,12 +248,13 @@ public class OnehouseDeltaStreamer implements Serializable {
 
         HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(multiTableConfigs, hadoopConfig, properties, sourceTablePropsFilePath, JobType.MULTI_TABLE_DELTASTREAMER);
 
-        LogContext.getInstance().withTableBasePath(tableConfig.targetBasePath);
+        LogContext.getInstance().withTableDetails(tableConfig.targetTableName, tableConfig.databaseName);
 
         FileSystem fs = FSUtils.getFs(tableConfig.targetBasePath, hadoopConfig);
         HoodieDeltaStreamer.DeltaSyncService deltaSync = new HoodieDeltaStreamer.DeltaSyncService(tableConfig, jssc, fs, hadoopConfig, Option.of(properties));
 
-        JobInfo jobInfo = new JobInfo(jssc, hadoopConfig, sourceTablePropsFilePath, tableConfig.targetBasePath, deltaSync, properties, multiTableConfigs, jobManager);
+        JobInfo jobInfo = new JobInfo(jssc, hadoopConfig, sourceTablePropsFilePath, tableConfig.targetBasePath, tableConfig.targetTableName, tableConfig.databaseName, deltaSync,
+            properties, multiTableConfigs, jobManager);
 
         Option<String> resumeCheckpointStr = getLastCommittedOffsets(fs, tableConfig.targetBasePath, tableConfig.payloadClassName);
         if (resumeCheckpointStr.isPresent()) {
@@ -277,14 +278,17 @@ public class OnehouseDeltaStreamer implements Serializable {
             try {
               // Mark eligible jobs for scheduling
               long currentTimeMs = System.currentTimeMillis();
-              List<JobInfo> selectedJobs = jobManager.getActiveJobs().stream().filter(jobInfo -> jobInfo.canSchedule(currentTimeMs)).collect(Collectors.toList());
+              List<JobInfo> selectedJobs = jobManager.getActiveJobs().stream().filter(jobInfo -> {
+                LogContext.getInstance().withTableDetails(jobInfo.tableName, jobInfo.databaseName);
+                return jobInfo.canSchedule(currentTimeMs);
+              }).collect(Collectors.toList());
 
               LOG.info("In this round, scheduling ingestion for the following tables " + selectedJobs.stream().map(JobInfo::getSourceTablePath).collect(Collectors.toList()));
 
               selectedJobs.forEach(jobInfo -> {
                 jobInfo.onSyncScheduled();
                 CompletableFuture.supplyAsync(() -> {
-                  LogContext.getInstance().withTableBasePath(jobInfo.basePath);
+                  LogContext.getInstance().withTableDetails(jobInfo.tableName, jobInfo.databaseName);
                   if (jobInfo.canStart()) {
                     try {
                       jobInfo.onSyncStarted();
@@ -298,7 +302,7 @@ public class OnehouseDeltaStreamer implements Serializable {
                   }
                   return null;
                 }, multiTableStreamThreadPool).whenCompleteAsync((response, throwable) -> {
-                  LogContext.getInstance().withTableBasePath(jobInfo.basePath);
+                  LogContext.getInstance().withTableDetails(jobInfo.tableName, jobInfo.databaseName);
                   if (throwable != null) {
                     jobInfo.onSyncFailure();
                     LOG.error("Failed to run job for table: " + jobInfo.getSourceTablePath(), throwable.getCause());
@@ -437,6 +441,16 @@ public class OnehouseDeltaStreamer implements Serializable {
       private final String basePath;
 
       /**
+       * Target Table name.
+       */
+      private final String tableName;
+
+      /**
+       * Target database name.
+       */
+      private final String databaseName;
+
+      /**
        * Bag of properties with source, hoodie client, key generator etc.
        */
       private TypedProperties props;
@@ -517,14 +531,16 @@ public class OnehouseDeltaStreamer implements Serializable {
       private Integer minSyncTimeMs;
       private Long readSourceLimit;
 
-      public JobInfo(JavaSparkContext jssc, Configuration hadoopConfig, String sourceTablePath, String basePath, HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs,
-                     JobManager jobManager) {
+      public JobInfo(JavaSparkContext jssc, Configuration hadoopConfig, String sourceTablePath, String basePath, String tableName, String databaseName,
+                     HoodieDeltaStreamer.DeltaSyncService deltaSync, TypedProperties props, Config configs, JobManager jobManager) {
         this.jssc = jssc;
         this.hadoopConfig = hadoopConfig;
         long currentMillis = System.currentTimeMillis();
         this.propertiesUpdated = new AtomicLong(currentMillis);
         this.deltaServiceUpdated = new AtomicLong(currentMillis);
         this.sourceTablePath = sourceTablePath;
+        this.tableName = tableName;
+        this.databaseName = databaseName;
         this.basePath = basePath;
         this.deltaSync = deltaSync;
         this.props = props;
@@ -797,6 +813,7 @@ public class OnehouseDeltaStreamer implements Serializable {
     tableConfig.targetTableName = configuredWriteConfig.getTableName();
     tableConfig.tableType = configuredWriteConfig.getTableType().name();
     tableConfig.baseFileFormat = onehouseInternalDeltastreamerConfig.getTableFileFormat().name();
+    tableConfig.databaseName = onehouseInternalDeltastreamerConfig.getDatabaseName();
     tableConfig.propsFilePath = sourceTablePropsFilePath;
     tableConfig.sourceClassName = onehouseInternalDeltastreamerConfig.getSourceClassName();
     tableConfig.sourceLimit = onehouseInternalDeltastreamerConfig.getReadSourceLimit();
@@ -838,7 +855,7 @@ public class OnehouseDeltaStreamer implements Serializable {
   }
 
   private static class LogContext {
-    private static final String TABLE_BASEPATH_CONTEXT_KEY = "basepath";
+    private static final String DATABASE_TABLE_CONTEXT_KEY = "database.table";
 
     private static final LogContext LOG_CONTEXT = new LogContext();
 
@@ -849,9 +866,9 @@ public class OnehouseDeltaStreamer implements Serializable {
       return LOG_CONTEXT;
     }
 
-    public LogContext withTableBasePath(String basePath) {
-      if (!StringUtils.isNullOrEmpty(basePath)) {
-        MDC.put(TABLE_BASEPATH_CONTEXT_KEY, kvString(TABLE_BASEPATH_CONTEXT_KEY, basePath));
+    public LogContext withTableDetails(String tableName, String databaseName) {
+      if (!StringUtils.isNullOrEmpty(tableName) && !StringUtils.isNullOrEmpty(databaseName)) {
+        MDC.put(DATABASE_TABLE_CONTEXT_KEY, kvString(DATABASE_TABLE_CONTEXT_KEY, databaseName + "." + tableName));
       }
       return this;
     }

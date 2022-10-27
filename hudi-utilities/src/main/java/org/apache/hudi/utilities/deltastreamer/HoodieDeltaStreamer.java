@@ -256,6 +256,9 @@ public class HoodieDeltaStreamer implements Serializable {
     @Parameter(names = {"--base-file-format"}, description = "File format for the base files. PARQUET (or) HFILE", required = false)
     public String baseFileFormat = "PARQUET";
 
+    @Parameter(names = {"--database"}, description = "Database name for the table", required = false)
+    public String databaseName;
+
     @Parameter(names = {"--props"}, description = "path to properties file on localfs or dfs, with configurations for "
         + "hoodie client, schema provider, key generator and data source. For hoodie client props, sane defaults are "
         + "used, but recommend use to provide basic things like metrics endpoints, hive configs etc. For sources, refer"
@@ -452,6 +455,7 @@ public class HoodieDeltaStreamer implements Serializable {
               && Objects.equals(targetTableName, config.targetTableName)
               && Objects.equals(tableType, config.tableType)
               && Objects.equals(baseFileFormat, config.baseFileFormat)
+              && Objects.equals(databaseName, config.databaseName)
               && Objects.equals(propsFilePath, config.propsFilePath)
               && Objects.equals(configs, config.configs)
               && Objects.equals(sourceClassName, config.sourceClassName)
@@ -487,7 +491,7 @@ public class HoodieDeltaStreamer implements Serializable {
     @Override
     public int hashCode() {
       return Objects.hash(targetBasePath, targetTableName, tableType,
-              baseFileFormat, propsFilePath, configs, sourceClassName,
+              baseFileFormat, databaseName, propsFilePath, configs, sourceClassName,
               sourceOrderingField, payloadClassName, schemaProviderClassName,
               transformerClassNames, sourceLimit, operation, filterDupes,
               enableHiveSync, enableMetaSync, forceEmptyMetaSync, syncClientToolClassNames, maxPendingCompactions, maxPendingClustering,
@@ -504,6 +508,7 @@ public class HoodieDeltaStreamer implements Serializable {
               + ", targetTableName='" + targetTableName + '\''
               + ", tableType='" + tableType + '\''
               + ", baseFileFormat='" + baseFileFormat + '\''
+              + ", databaseName=" + databaseName
               + ", propsFilePath='" + propsFilePath + '\''
               + ", configs=" + configs
               + ", sourceClassName='" + sourceClassName + '\''

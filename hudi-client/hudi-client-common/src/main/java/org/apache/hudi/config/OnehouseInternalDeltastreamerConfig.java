@@ -141,6 +141,10 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
         HoodieTableConfig.BASE_FILE_FORMAT, HoodieTableConfig.BASE_FILE_FORMAT.defaultValue().name()).toUpperCase());
   }
 
+  public String getDatabaseName() {
+    return getString(HoodieTableConfig.DATABASE_NAME);
+  }
+
   /**
    * Meta Sync Configs
    */
