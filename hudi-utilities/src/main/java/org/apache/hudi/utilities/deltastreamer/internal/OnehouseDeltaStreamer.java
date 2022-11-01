@@ -59,7 +59,6 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Timer;
@@ -235,14 +234,11 @@ public class OnehouseDeltaStreamer implements Serializable {
 
       this.lastTimeMetricsReportedMs = 0L;
 
-      Map<String, HoodieMultiTableCommitStatsManager.TableCommitStats> initialTableCommitStatsMap = new HashMap<>();
       jobManager = new JobManager(multiTableConfigs.tablePropsFile, hadoopConfig,
-          (sourceTablePropsPath, jobManagerInstance) -> createJobInfo(multiTableConfigs, jssc, hadoopConfig, initialTableCommitStatsMap, sourceTablePropsPath, jobManagerInstance));
-      HoodieMultiTableCommitStatsManager.initializeCommitStatsMap(initialTableCommitStatsMap);
+          (sourceTablePropsPath, jobManagerInstance) -> createJobInfo(multiTableConfigs, jssc, hadoopConfig, sourceTablePropsPath, jobManagerInstance));
     }
 
-    private JobInfo createJobInfo(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig,
-                                  Map<String, HoodieMultiTableCommitStatsManager.TableCommitStats> initialTableCommitStatsMap, String sourceTablePropsFilePath, JobManager jobManager) {
+    private JobInfo createJobInfo(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig, String sourceTablePropsFilePath, JobManager jobManager) {
       try {
         final TypedProperties properties = buildProperties(sourceTablePropsFilePath, multiTableConfigs, hadoopConfig);
 
@@ -257,9 +253,7 @@ public class OnehouseDeltaStreamer implements Serializable {
             properties, multiTableConfigs, jobManager);
 
         Option<String> resumeCheckpointStr = getLastCommittedOffsets(fs, tableConfig.targetBasePath, tableConfig.payloadClassName);
-        if (resumeCheckpointStr.isPresent()) {
-          initialTableCommitStatsMap.put(jobInfo.getBasePath(), new HoodieMultiTableCommitStatsManager.TableCommitStats(resumeCheckpointStr, Option.empty()));
-        }
+        HoodieMultiTableCommitStatsManager.getCommitStatsMap().put(jobInfo.getBasePath(), new HoodieMultiTableCommitStatsManager.TableCommitStats(resumeCheckpointStr, Option.empty()));
         return jobInfo;
       } catch (IOException exception) {
         LOG.error("Reading table config files failed: ", exception);
@@ -616,6 +610,7 @@ public class OnehouseDeltaStreamer implements Serializable {
           // If number of bytes available in source exceeds {@link OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP},
           // schedule right away.
           if (sourceDataAvailabilityStatus.equals(SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus.MIN_INGEST_DATA_AVAILABLE)) {
+            LOG.info(String.format("Source has %s estimatedBytesAvailableForIngestion, scheduling it immediately", sourceDataAvailability.getRight()));
             return true;
           }
 
