@@ -88,6 +88,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.apache.hadoop.hbase.HConstants.ZOOKEEPER_CLIENT_PORT;
+import static org.apache.hadoop.hbase.HConstants.ZOOKEEPER_ZNODE_PARENT;
+import static org.apache.hadoop.hbase.HConstants.ZOOKEEPER_QUORUM;
 
 /**
  * Note :: HBaseTestingUtility is really flaky with issues where the HbaseMiniCluster fails to shutdown across tests,
@@ -113,7 +116,7 @@ public class TestSparkHoodieHBaseIndex extends SparkClientFunctionalTestHarness 
   public static void init() throws Exception {
     // Initialize HbaseMiniCluster
     hbaseConfig = HBaseConfiguration.create();
-    hbaseConfig.set("zookeeper.znode.parent", "/hudi-hbase-test");
+    hbaseConfig.set(ZOOKEEPER_ZNODE_PARENT, "/hudi-hbase-test");
 
     utility = new HBaseTestingUtility(hbaseConfig);
     utility.startMiniCluster();
@@ -818,10 +821,10 @@ public class TestSparkHoodieHBaseIndex extends SparkClientFunctionalTestHarness 
         .forTable("test-trip-table")
         .withIndexConfig(HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.HBASE)
             .withHBaseIndexConfig(new HoodieHBaseIndexConfig.Builder()
-                .hbaseZkPort(Integer.parseInt(hbaseConfig.get("hbase.zookeeper.property.clientPort")))
+                .hbaseZkPort(Integer.parseInt(hbaseConfig.get(ZOOKEEPER_CLIENT_PORT)))
                 .hbaseIndexPutBatchSizeAutoCompute(true)
-                .hbaseZkZnodeParent(hbaseConfig.get("zookeeper.znode.parent", ""))
-                .hbaseZkQuorum(hbaseConfig.get("hbase.zookeeper.quorum")).hbaseTableName(TABLE_NAME)
+                .hbaseZkZnodeParent(hbaseConfig.get(ZOOKEEPER_ZNODE_PARENT, ""))
+                .hbaseZkQuorum(hbaseConfig.get(ZOOKEEPER_QUORUM)).hbaseTableName(TABLE_NAME)
                 .hbaseIndexUpdatePartitionPath(updatePartitionPath)
                 .hbaseIndexRollbackSync(rollbackSync)
                 .hbaseIndexGetBatchSize(hbaseIndexBatchSize).build())

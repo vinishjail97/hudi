@@ -85,7 +85,7 @@ public class TestHiveIncrementalPuller {
     config.hiveJDBCUrl = hiveSyncProps.getString(HIVE_URL.key());
     config.hiveUsername = hiveSyncProps.getString(HIVE_USER.key());
     config.hivePassword = hiveSyncProps.getString(HIVE_PASS.key());
-    config.hoodieTmpDir = tmpDir.resolve("hivePullerTest").toUri().toString();
+    config.hoodieTmpDir = Files.createTempDirectory("hivePullerTest").toUri().toString();
     config.sourceDb = hiveSyncProps.getString(META_SYNC_DATABASE_NAME.key());
     config.sourceTable = hiveSyncProps.getString(META_SYNC_TABLE_NAME.key());
     config.targetDb = "tgtdb";

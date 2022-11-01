@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.hudi.analysis
 
-import org.apache.hudi.{DefaultSource, SparkAdapterSupport}
 import org.apache.hudi.common.table.HoodieTableMetaClient
+import org.apache.hudi.{DefaultSource, SparkAdapterSupport}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{ResolvedTable, UnresolvedPartitionSpec}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, HoodieCatalogTable}
@@ -130,53 +130,6 @@ class HoodieSpark3Analysis(sparkSession: SparkSession) extends Rule[LogicalPlan]
 }
 
 /**
-<<<<<<<< HEAD:hudi-spark-datasource/hudi-spark3.2.x/src/main/scala/org/apache/spark/sql/hudi/analysis/HoodieSpark3Analysis.scala
- * Rule for resolve hoodie's extended syntax or rewrite some logical plan.
- */
-case class HoodieSpark3ResolveReferences(sparkSession: SparkSession) extends Rule[LogicalPlan]
-  with SparkAdapterSupport with ProvidesHoodieConfig {
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
-    // Fill schema for Create Table without specify schema info
-    case c @ CreateV2Table(tableCatalog, tableName, schema, partitioning, properties, _)
-      if sparkAdapter.isHoodieTable(properties.asJava) =>
-
-      if (schema.isEmpty && partitioning.nonEmpty) {
-        failAnalysis("It is not allowed to specify partition columns when the table schema is " +
-          "not defined. When the table schema is not provided, schema and partition columns " +
-          "will be inferred.")
-      }
-
-      val tablePath = getTableLocation(properties,
-        TableIdentifier(tableName.name(), tableName.namespace().lastOption), sparkSession)
-
-      val tableExistInCatalog = tableCatalog.tableExists(tableName)
-      // Only when the table has not exist in catalog, we need to fill the schema info for creating table.
-      if (!tableExistInCatalog && tableExistsInPath(tablePath, sparkSession.sessionState.newHadoopConf())) {
-        val metaClient = HoodieTableMetaClient.builder()
-          .setBasePath(tablePath)
-          .setConf(sparkSession.sessionState.newHadoopConf())
-          .build()
-        val tableSchema = HoodieSqlCommonUtils.getTableSqlSchema(metaClient)
-        if (tableSchema.isDefined && schema.isEmpty) {
-          // Fill the schema with the schema from the table
-          c.copy(tableSchema = tableSchema.get)
-        } else if (tableSchema.isDefined && schema != tableSchema.get) {
-          throw new AnalysisException(s"Specified schema in create table statement is not equal to the table schema." +
-            s"You should not specify the schema for an exist table: $tableName ")
-        } else {
-          c
-        }
-      } else {
-        c
-      }
-    case p => p
-  }
-}
-
-/**
-========
->>>>>>>> upstream/master:hudi-spark-datasource/hudi-spark3.2plus-common/src/main/scala/org/apache/spark/sql/hudi/analysis/HoodieSpark3Analysis.scala
  * Rule replacing resolved Spark's commands (not working for Hudi tables out-of-the-box) with
  * corresponding Hudi implementations
  */

@@ -94,8 +94,7 @@ public class TestCleanPlanExecutor extends TestCleaner {
         Arguments.of(false, false, false, false),
         Arguments.of(true, false, false, false),
         Arguments.of(true, true, false, false),
-        Arguments.of(false, false, true, false),
-        Arguments.of(false, false, false, true)
+        Arguments.of(false, false, true, false)
     );
   }
 

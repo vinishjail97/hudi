@@ -88,11 +88,6 @@ public class LockManager implements Serializable, AutoCloseable {
           } catch (InterruptedException ex) {
             // ignore InterruptedException here
           }
-          try {
-            Thread.sleep(maxWaitTimeInMs);
-          } catch (InterruptedException ex) {
-            // ignore InterruptedException here
-          }
         } finally {
           retryCount++;
         }
