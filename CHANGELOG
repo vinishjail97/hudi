@@ -64,3 +64,17 @@ a5df37c704 Merge remote-tracking branch 'origin/master' into support_multi_write
 944f7a4131 more checkstyle
 760d00ecd2 checkstyle fixes
 b42cff544a adding checkpoint as a state of multiple delta streamer consumer/sources (writing many sources to single target table) adding support for multi writer checkpoint using callback
+
+---[2022-11-01 14:24:17] [release-v0.9.0] Adding release tag for hudi-internal release-v0.9.0---
+daac6b8733 Upstream merge 10 31 (#120)
+d4a01e7804 Update HoodieMultiTableCommitStatsManager when creating job info (#122)
+8a469a20a0 adding _hoodie_partition_path as partition field for quarantine table writer (#116)
+7722f30c75 adding support for kafka offsets in json kafka source (#105)
+5098b1f4ab [ONHS-3389] Add database name to deltastreamer (#115)
+5e459af9ea [ONHS-3294] Generalize partition path fields to add (#99)
+1bee066c5e Add validation feature back to HoodieAvroUtils (#112)
+485a5aa938 [ONHS-3887] Add logs to debug quarantine issue (#111)
+aa8af5056a Fix reflection instantion for source estimator (#110)
+bbeac41f7a fail job if duplicate data files detected during reconcileAgainstMarkers (#109)
+18c8b59f69 [ONHS-3774] Fix estimated source data bytes available metric (#107)
+e06863f08b Upgrade to version release-v0.8.0 (#108)
