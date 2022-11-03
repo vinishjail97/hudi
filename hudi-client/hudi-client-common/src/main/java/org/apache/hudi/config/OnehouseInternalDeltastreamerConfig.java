@@ -122,6 +122,13 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
       .defaultValue(false) // 1MB
       .withDocumentation("Disable Compaction");
 
+  public static final ConfigProperty<Boolean> COMMIT_ON_NO_CHECKPOINT_CHANGE = ConfigProperty
+      .key("hoodie.deltastreamer.allow.commit.on.no.checkpoint.change")
+      .defaultValue(false) // 1MB
+      .withDocumentation("allow commits even if checkpoint has not changed before and after fetch data from "
+          + " source. This might be useful in sources like SqlSource where there is not checkpoint. And is "
+          + "not recommended to enable in continuous mode.");
+
   public static final ConfigProperty<Boolean> COMMIT_ON_ERRORS = ConfigProperty
       .key("hoodie.deltastreamer.allow.commit.on.errors")
       .defaultValue(false) // 1MB
@@ -202,6 +209,10 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
 
   public boolean isCompactionDisabled() {
     return getBooleanOrDefault(DISABLE_COMPACTION);
+  }
+
+  public Boolean isAllowCommitOnNoCheckpointChange() {
+    return getBooleanOrDefault(COMMIT_ON_NO_CHECKPOINT_CHANGE);
   }
 
   public static OnehouseInternalDeltastreamerConfig.Builder newBuilder() {

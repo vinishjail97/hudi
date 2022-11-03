@@ -826,6 +826,7 @@ public class OnehouseDeltaStreamer implements Serializable {
     tableConfig.skipRddUnpersist = jobType.equals(JobType.MULTI_TABLE_DELTASTREAMER);
 
     tableConfig.checkpoint = onehouseInternalDeltastreamerConfig.getCheckpoint();
+    tableConfig.allowCommitOnNoCheckpointChange = onehouseInternalDeltastreamerConfig.isAllowCommitOnNoCheckpointChange();
     tableConfig.initialCheckpointProvider = onehouseInternalDeltastreamerConfig.getInitialCheckpointProvider();
     if (tableConfig.initialCheckpointProvider != null && tableConfig.checkpoint == null) {
       InitialCheckPointProvider checkPointProvider = UtilHelpers.createInitialCheckpointProvider(tableConfig.initialCheckpointProvider, properties);
