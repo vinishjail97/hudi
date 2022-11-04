@@ -225,6 +225,8 @@ echo "---[$(date '+%Y-%m-%d %H:%M:%S')] [$tagPrefix-v$major.$minor.$patch] $msg-
 git log "$(git describe --tags --abbrev=0)"..HEAD --pretty=format:"%h %s" >> CHANGELOG
 echo "" >> CHANGELOG
 
+execute git add  CHANGELOG && git commit -m "Upgrade to version $tagPrefix-v$major.$minor.$patch"
+
 if [[ -z $msg ]]; then
     execute git tag "$tagPrefix-v$major.$minor.$patch"
 else
@@ -240,7 +242,5 @@ if [[ false == "$force" &&  "no" == $(confirm "Do you want to push this tag righ
     exit 0;
 fi
 
-# Push CHANGELOG to master and Push $tagPrefix-v$major.$minor.$patch tag.
-execute git add  CHANGELOG && git commit -m "Upgrade to version $tagPrefix-v$major.$minor.$patch"
-execute git push origin master
+# Push $tagPrefix-v$major.$minor.$patch tag.
 execute git push origin "$tagPrefix-v$major.$minor.$patch"
