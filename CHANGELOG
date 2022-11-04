@@ -78,3 +78,9 @@ aa8af5056a Fix reflection instantion for source estimator (#110)
 bbeac41f7a fail job if duplicate data files detected during reconcileAgainstMarkers (#109)
 18c8b59f69 [ONHS-3774] Fix estimated source data bytes available metric (#107)
 e06863f08b Upgrade to version release-v0.8.0 (#108)
+
+---[2022-11-03 20:24:47] [release-v0.9.1] ---
+1ef5f66857 Add in release workflow to push to codeartifact (#125)
+d0de15218e fix regression from last master (#126)
+0f811b3338 Add property to commit on no checkpoint change (#114)
+7fa7326bb4 Upgrade to version release-v0.9.0 (#123)
