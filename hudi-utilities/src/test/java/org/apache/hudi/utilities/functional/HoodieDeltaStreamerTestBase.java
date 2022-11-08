@@ -57,50 +57,49 @@ import static org.apache.hudi.sync.common.HoodieSyncConfig.META_SYNC_TABLE_NAME;
 
 public class HoodieDeltaStreamerTestBase extends UtilitiesTestBase {
 
-
-  static final Random RANDOM = new Random();
-  static final String PROPS_FILENAME_TEST_SOURCE = "test-source.properties";
-  static final String PROPS_FILENAME_TEST_SOURCE1 = "test-source1.properties";
-  static final String PROPS_INVALID_HIVE_SYNC_TEST_SOURCE1 = "test-invalid-hive-sync-source1.properties";
-  static final String PROPS_INVALID_FILE = "test-invalid-props.properties";
-  static final String PROPS_INVALID_TABLE_CONFIG_FILE = "test-invalid-table-config.properties";
-  static final String PROPS_FILENAME_TEST_INVALID = "test-invalid.properties";
-  static final String PROPS_FILENAME_TEST_CSV = "test-csv-dfs-source.properties";
-  static final String PROPS_FILENAME_TEST_PARQUET = "test-parquet-dfs-source.properties";
-  static final String PROPS_FILENAME_TEST_ORC = "test-orc-dfs-source.properties";
-  static final String PROPS_FILENAME_TEST_JSON_KAFKA = "test-json-kafka-dfs-source.properties";
-  static final String PROPS_FILENAME_TEST_SQL_SOURCE = "test-sql-source-source.properties";
-  static final String PROPS_FILENAME_TEST_MULTI_WRITER = "test-multi-writer.properties";
-  static final String FIRST_PARQUET_FILE_NAME = "1.parquet";
-  static final String FIRST_ORC_FILE_NAME = "1.orc";
-  static String PARQUET_SOURCE_ROOT;
-  static String ORC_SOURCE_ROOT;
-  static String JSON_KAFKA_SOURCE_ROOT;
-  static final int PARQUET_NUM_RECORDS = 5;
-  static final int ORC_NUM_RECORDS = 5;
-  static final int CSV_NUM_RECORDS = 3;
-  static final int JSON_KAFKA_NUM_RECORDS = 5;
-  static final int SQL_SOURCE_NUM_RECORDS = 1000;
-  String kafkaCheckpointType = "string";
+  protected static final Random RANDOM = new Random();
+  protected static final String PROPS_FILENAME_TEST_SOURCE = "test-source.properties";
+  protected static final String PROPS_FILENAME_TEST_SOURCE1 = "test-source1.properties";
+  protected static final String PROPS_INVALID_HIVE_SYNC_TEST_SOURCE1 = "test-invalid-hive-sync-source1.properties";
+  protected static final String PROPS_INVALID_FILE = "test-invalid-props.properties";
+  protected static final String PROPS_INVALID_TABLE_CONFIG_FILE = "test-invalid-table-config.properties";
+  protected static final String PROPS_FILENAME_TEST_INVALID = "test-invalid.properties";
+  protected static final String PROPS_FILENAME_TEST_CSV = "test-csv-dfs-source.properties";
+  protected static final String PROPS_FILENAME_TEST_PARQUET = "test-parquet-dfs-source.properties";
+  protected static final String PROPS_FILENAME_TEST_ORC = "test-orc-dfs-source.properties";
+  protected static final String PROPS_FILENAME_TEST_JSON_KAFKA = "test-json-kafka-dfs-source.properties";
+  protected static final String PROPS_FILENAME_TEST_SQL_SOURCE = "test-sql-source-source.properties";
+  protected static final String PROPS_FILENAME_TEST_MULTI_WRITER = "test-multi-writer.properties";
+  protected static final String FIRST_PARQUET_FILE_NAME = "1.parquet";
+  protected static final String FIRST_ORC_FILE_NAME = "1.orc";
+  protected static final int PARQUET_NUM_RECORDS = 5;
+  protected static final int ORC_NUM_RECORDS = 5;
+  protected static final int CSV_NUM_RECORDS = 3;
+  protected static final int JSON_KAFKA_NUM_RECORDS = 5;
+  protected static final int SQL_SOURCE_NUM_RECORDS = 1000;
   // Required fields
-  static final String TGT_BASE_PATH_PARAM = "--target-base-path";
-  static final String TGT_BASE_PATH_VALUE = "s3://mybucket/blah";
-  static final String TABLE_TYPE_PARAM = "--table-type";
-  static final String TABLE_TYPE_VALUE = "COPY_ON_WRITE";
-  static final String TARGET_TABLE_PARAM = "--target-table";
-  static final String TARGET_TABLE_VALUE = "test";
-  static final String BASE_FILE_FORMAT_PARAM = "--base-file-format";
-  static final String BASE_FILE_FORMAT_VALUE = "PARQUET";
-  static final String SOURCE_LIMIT_PARAM = "--source-limit";
-  static final String SOURCE_LIMIT_VALUE = "500";
-  static final String ENABLE_HIVE_SYNC_PARAM = "--enable-hive-sync";
-  static final String HOODIE_CONF_PARAM = "--hoodie-conf";
-  static final String HOODIE_CONF_VALUE1 = "hoodie.datasource.hive_sync.table=test_table";
-  static final String HOODIE_CONF_VALUE2 = "hoodie.datasource.write.recordkey.field=Field1,Field2,Field3";
+  protected static final String TGT_BASE_PATH_PARAM = "--target-base-path";
+  protected static final String TGT_BASE_PATH_VALUE = "s3://mybucket/blah";
+  protected static final String TABLE_TYPE_PARAM = "--table-type";
+  protected static final String TABLE_TYPE_VALUE = "COPY_ON_WRITE";
+  protected static final String TARGET_TABLE_PARAM = "--target-table";
+  protected static final String TARGET_TABLE_VALUE = "test";
+  protected static final String BASE_FILE_FORMAT_PARAM = "--base-file-format";
+  protected static final String BASE_FILE_FORMAT_VALUE = "PARQUET";
+  protected static final String SOURCE_LIMIT_PARAM = "--source-limit";
+  protected static final String SOURCE_LIMIT_VALUE = "500";
+  protected static final String ENABLE_HIVE_SYNC_PARAM = "--enable-hive-sync";
+  protected static final String HOODIE_CONF_PARAM = "--hoodie-conf";
+  protected static final String HOODIE_CONF_VALUE1 = "hoodie.datasource.hive_sync.table=test_table";
+  protected static final String HOODIE_CONF_VALUE2 = "hoodie.datasource.write.recordkey.field=Field1,Field2,Field3";
   public static KafkaTestUtils testUtils;
+  protected static String PARQUET_SOURCE_ROOT;
+  protected static String ORC_SOURCE_ROOT;
+  protected static String JSON_KAFKA_SOURCE_ROOT;
   protected static String topicName;
   protected static String defaultSchemaProviderClassName = FilebasedSchemaProvider.class.getName();
   protected static int testNum = 1;
+  protected String kafkaCheckpointType = "string";
 
   @BeforeAll
   public static void initClass() throws Exception {

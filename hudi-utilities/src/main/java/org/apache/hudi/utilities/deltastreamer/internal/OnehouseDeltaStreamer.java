@@ -92,7 +92,7 @@ public class OnehouseDeltaStreamer implements Serializable {
   protected final transient Config cfg;
   protected transient Option<MultiTableSyncService> syncService;
 
-  public OnehouseDeltaStreamer(Config cfg, JavaSparkContext jssc) throws IOException {
+  public OnehouseDeltaStreamer(Config cfg, JavaSparkContext jssc) {
     this.cfg = cfg;
     Configuration hadoopConf = jssc.hadoopConfiguration();
     this.syncService = Option.ofNullable(new MultiTableSyncService(cfg, jssc, hadoopConf));
@@ -109,7 +109,10 @@ public class OnehouseDeltaStreamer implements Serializable {
   }
 
   public void shutdownGracefully() {
-    syncService.ifPresent(ds -> ds.shutdown(false));
+    syncService.ifPresent(ds -> {
+      ds.jobManager.close();
+      ds.shutdown(false);
+    });
   }
 
   /**
@@ -212,6 +215,10 @@ public class OnehouseDeltaStreamer implements Serializable {
     @Parameter(names = {"--max-retry-count"}, description = "the max retry count if --retry-on-source-failures is enabled")
     public Integer maxRetryCount = 3;
 
+    @Parameter(names = {"--onehouse-metric-conf"}, description = "Any configuration related to the metrics reported by OnehouseMetricsReporter"
+        + "these metrics are not covered by HoodieDeltaStreamerMetrics, eg: failures in initialization or parsing configs for a table")
+    public List<String> metricConfigs = new ArrayList<>();
+
     @Parameter(names = {"--help", "-h"}, help = true)
     public Boolean help = false;
   }
@@ -220,12 +227,14 @@ public class OnehouseDeltaStreamer implements Serializable {
 
     private static final Integer INGESTION_SCHEDULING_FREQUENCY_MS = 15 * 1000; // 15 secs
     private static final Long MIN_TIME_EMIT_METRICS_MS = 5 * 60 * 1000L; // 5 mins
+    private static final Logger LOG = LogManager.getLogger(MultiTableSyncService.class);
 
     private final transient JobManager jobManager;
+    private final transient OnehouseMetricsReporter onehouseMetricsReporter;
     private final transient ExecutorService multiTableStreamThreadPool;
     private transient long lastTimeMetricsReportedMs;
 
-    public MultiTableSyncService(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig) throws IOException {
+    public MultiTableSyncService(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig) {
       int totalExecutorResources = Integer.parseInt(jssc.getConf().get("spark.executor.cores", "0"))
           * Math.max(Integer.parseInt(jssc.getConf().get("spark.executor.instances", "0")), Integer.parseInt(jssc.getConf().get("spark.dynamicAllocation.maxExecutors", "0")));
       int numThreads = (multiTableConfigs.syncJobsThreadPool != Config.UNINITIALIZED) ? multiTableConfigs.syncJobsThreadPool : Math.max(totalExecutorResources, Config.MIN_SYNC_THREAD_POOL);
@@ -233,9 +242,19 @@ public class OnehouseDeltaStreamer implements Serializable {
       multiTableStreamThreadPool = Executors.newFixedThreadPool(numThreads);
 
       this.lastTimeMetricsReportedMs = 0L;
-
-      jobManager = new JobManager(multiTableConfigs.tablePropsFile, hadoopConfig,
-          (sourceTablePropsPath, jobManagerInstance) -> createJobInfo(multiTableConfigs, jssc, hadoopConfig, sourceTablePropsPath, jobManagerInstance));
+      this.onehouseMetricsReporter = new OnehouseMetricsReporter(UtilHelpers.getConfig(multiTableConfigs.metricConfigs).getProps());
+      jobManager = new JobManager(multiTableConfigs, hadoopConfig,
+          (sourceTablePropsPath, jobManagerInstance) -> {
+            try {
+              JobInfo jobInfo = createJobInfo(multiTableConfigs, jssc, hadoopConfig, sourceTablePropsPath, jobManagerInstance);
+              onehouseMetricsReporter.reportJobInitializationResult(sourceTablePropsPath, true);
+              return Option.of(jobInfo);
+            } catch (Exception e) {
+              LOG.error("Failed to initialize jobInfo for the table " + sourceTablePropsPath);
+              onehouseMetricsReporter.reportJobInitializationResult(sourceTablePropsPath, false);
+              return Option.empty();
+            }
+          });
     }
 
     private JobInfo createJobInfo(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig, String sourceTablePropsFilePath, JobManager jobManager) {
@@ -336,16 +355,16 @@ public class OnehouseDeltaStreamer implements Serializable {
 
     private static class JobManager implements Serializable {
       private static final long JOB_MANAGER_REFRESH_INTERVAL = 1000;
-      private final String configPath;
+      private final Config multiTableConfigs;
       private final Configuration hadoopConf;
       private final transient Timer timer;
       private Map<String, JobStatus> desiredJobStatuses;
       private final Map<String, JobStatus> currentJobStatuses;
       private final Map<String, JobInfo> jobInfoMap;
-      private final SerializableBiFunction<String, JobManager, JobInfo> jobInfoCreator;
+      private final SerializableBiFunction<String, JobManager, Option<JobInfo>> jobInfoCreator;
 
-      JobManager(final String configPath, final Configuration hadoopConf, final SerializableBiFunction<String, JobManager, JobInfo> jobInfoCreator) {
-        this.configPath = configPath;
+      JobManager(final Config multiTableConfigs, final Configuration hadoopConf, final SerializableBiFunction<String, JobManager, Option<JobInfo>> jobInfoCreator) {
+        this.multiTableConfigs = multiTableConfigs;
         this.hadoopConf = hadoopConf;
         this.currentJobStatuses = new ConcurrentHashMap<>();
         this.jobInfoMap = new ConcurrentHashMap<>();
@@ -361,7 +380,7 @@ public class OnehouseDeltaStreamer implements Serializable {
       }
 
       private synchronized void resolve() {
-        desiredJobStatuses = UtilHelpers.readConfig(hadoopConf, new Path(configPath), Collections.emptyList()).getProps().entrySet().stream()
+        desiredJobStatuses = UtilHelpers.readConfig(hadoopConf, new Path(multiTableConfigs.tablePropsFile), Collections.emptyList()).getProps().entrySet().stream()
             .collect(Collectors.toMap(entry -> entry.getKey().toString(), entry -> JobStatus.valueOf(entry.getValue().toString().toUpperCase())));
         // stop jobs that were removed form the desiredJobStatuses
         List<String> removed = currentJobStatuses.keySet().stream().filter(jobIdentifier -> {
@@ -378,14 +397,20 @@ public class OnehouseDeltaStreamer implements Serializable {
         // remove the stopped jobs from the current job statuses
         removed.forEach(currentJobStatuses::remove);
 
+        List<String> jobsFailedToInitialize = new ArrayList<>();
         for (Map.Entry<String, JobStatus> desiredJobStatusEntry : desiredJobStatuses.entrySet()) {
           String jobIdentifier = desiredJobStatusEntry.getKey();
           JobStatus currentJobStatus = currentJobStatuses.get(jobIdentifier);
           // any job not in the desiredJobStatuses but not the currentJobStatuses should be created
           if (currentJobStatus == null) {
             LOG.info("JobManager adding: " + jobIdentifier);
-            jobInfoMap.computeIfAbsent(jobIdentifier, key -> jobInfoCreator.apply(key, this));
-            setCurrentJobStatus(jobIdentifier, desiredJobStatusEntry.getValue());
+            Option<JobInfo> jobInfo = jobInfoCreator.apply(jobIdentifier, this);
+            if (jobInfo.isPresent()) {
+              jobInfoMap.putIfAbsent(jobIdentifier, jobInfo.get());
+              setCurrentJobStatus(jobIdentifier, desiredJobStatusEntry.getValue());
+            } else {
+              jobsFailedToInitialize.add(jobIdentifier);
+            }
           } else if (desiredJobStatusEntry.getValue() == JobStatus.PAUSED && !jobInfoMap.get(jobIdentifier).isRunning()) {
             // see which jobs need to be paused and whether they can be paused now
             setCurrentJobStatus(jobIdentifier, JobStatus.PAUSED);
@@ -393,6 +418,9 @@ public class OnehouseDeltaStreamer implements Serializable {
             // make sure properties are updated when un-pausing a stream
             jobInfoMap.get(jobIdentifier).markPropertiesAsUpdated();
           }
+        }
+        if (jobInfoMap.size() == 0) {
+          throw new IllegalArgumentException("All the jobs failed during initialization " + jobsFailedToInitialize);
         }
       }
 
@@ -852,6 +880,7 @@ public class OnehouseDeltaStreamer implements Serializable {
 
   private static class LogContext {
     private static final String DATABASE_TABLE_CONTEXT_KEY = "database.table";
+    private static final String TABLE_SOURCE_PROPS_PATH = "table.source.props.path";
 
     private static final LogContext LOG_CONTEXT = new LogContext();
 
