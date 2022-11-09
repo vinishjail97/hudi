@@ -13,6 +13,10 @@ env:
   MVN_ARGS: -ntp -B -V -Pci-log -Pwarn-log -Dorg.slf4j.simpleLogger.log.org.apache.maven.plugins.shade=warn -Dorg.slf4j.simpleLogger.log.org.apache.maven.plugins.dependency=warn
   MODULES: "hudi-sync/hudi-datahub-sync,hudi-sync/hudi-hive-sync,hudi-sync/hudi-sync-common,hudi-utilities,hudi-aws,hudi-gcp,hudi-examples/hudi-examples-spark"
 
+concurrency:
+  group: ${{ github.head_ref }}
+  cancel-in-progress: ${{ github.head_ref != 'master' }}
+
 jobs:
   unit-tests:
     runs-on: ubuntu-latest

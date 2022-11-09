@@ -84,3 +84,6 @@ e06863f08b Upgrade to version release-v0.8.0 (#108)
 d0de15218e fix regression from last master (#126)
 0f811b3338 Add property to commit on no checkpoint change (#114)
 7fa7326bb4 Upgrade to version release-v0.9.0 (#123)
+
+---[2022-11-06 14:27:43] [release-v0.9.3] ---
+
