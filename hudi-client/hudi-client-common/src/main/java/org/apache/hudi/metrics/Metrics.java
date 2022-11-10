@@ -18,14 +18,21 @@
 
 package org.apache.hudi.metrics;
 
+import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.metrics.Registry;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.exception.HoodieException;
 
 import com.codahale.metrics.MetricRegistry;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,21 +48,45 @@ public class Metrics {
   private static final Map<String, Metrics> METRICS_INSTANCE_PER_BASEPATH = new HashMap<>();
 
   private final MetricRegistry registry;
-  private final MetricsReporter reporter;
+  private final List<MetricsReporter> reporters;
   private final String commonMetricPrefix;
   private final String basePath;
 
   private Metrics(HoodieWriteConfig metricConfig) {
     registry = new MetricRegistry();
     commonMetricPrefix = metricConfig.getMetricReporterMetricsNamePrefix();
-    reporter = MetricsReporterFactory.createReporter(metricConfig, registry);
-    if (reporter == null) {
-      throw new RuntimeException("Cannot initialize Reporter.");
+    reporters = new ArrayList<>();
+    MetricsReporter defaultReporter = MetricsReporterFactory.createReporter(metricConfig, registry);
+    if (defaultReporter != null) {
+      reporters.add(defaultReporter);
     }
-    reporter.start();
+    reporters.addAll(addAdditionalMetricsExporters(metricConfig));
+    if (reporters.size() == 0) {
+      throw new RuntimeException("Cannot initialize Reporters.");
+    }
+    reporters.forEach(r -> r.start());
     basePath = metricConfig.getBasePath();
 
     Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+  }
+
+  private List<MetricsReporter> addAdditionalMetricsExporters(HoodieWriteConfig metricConfig) {
+    List<MetricsReporter> reporterList = new ArrayList<>();
+    if (!StringUtils.isNullOrEmpty(metricConfig.getMetricReporterFileBasedConfigs())) {
+      List<String> propPathList = StringUtils.split(metricConfig.getMetricReporterFileBasedConfigs(), ",");
+      try (FileSystem fs = FSUtils.getFs(propPathList.get(0), new Configuration())) {
+        for (String propPath: propPathList) {
+          HoodieWriteConfig secondarySourceConfig = HoodieWriteConfig.newBuilder().fromInputStream(
+              fs.open(new Path(propPath))).withPath(metricConfig.getBasePath()).build();
+          reporterList.add(MetricsReporterFactory.createReporter(secondarySourceConfig, registry));
+        }
+      } catch (IOException e) {
+        LOG.error("Failed to add MetricsExporters", e);
+        throw new HoodieException("failed to MetricsExporters", e);
+      }
+    }
+    LOG.info("total additional metrics roporters added =" + reporterList.size());
+    return reporterList;
   }
 
   private void registerHoodieCommonMetrics() {
@@ -76,9 +107,9 @@ public class Metrics {
   public synchronized void shutdown() {
     try {
       registerHoodieCommonMetrics();
-      reporter.report();
+      reporters.forEach(r -> r.report());
       LOG.info("Stopping the metrics reporter for base path: " + basePath);
-      reporter.stop();
+      reporters.forEach(r -> r.stop());
       METRICS_INSTANCE_PER_BASEPATH.remove(basePath);
     } catch (Exception e) {
       LOG.warn("Error while closing reporter for base path: " + basePath, e);
@@ -89,7 +120,7 @@ public class Metrics {
     try {
       LOG.info("Reporting and flushing all metrics");
       registerHoodieCommonMetrics();
-      reporter.report();
+      reporters.forEach(r -> r.report());
       registry.getNames().forEach(this.registry::remove);
     } catch (Exception e) {
       LOG.error("Error while reporting and flushing metrics", e);
