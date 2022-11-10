@@ -57,11 +57,10 @@ public interface QuarantineTableWriterInterface<T extends QuarantineEvent> {
 
   /***
    *
-   * @param instantTime
    * @param baseTableInstantTime
    * @param commitedInstantTime
    * @return
    */
-  boolean upsertAndCommit(String instantTime, String baseTableInstantTime, Option<String> commitedInstantTime);
+  boolean upsertAndCommit(String baseTableInstantTime, Option<String> commitedInstantTime);
 
 }

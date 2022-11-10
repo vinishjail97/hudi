@@ -225,9 +225,10 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
   }
 
   @Override
-  public boolean upsertAndCommit(String instantTime, String baseTableInstantTime, Option<String> commitedInstantTime) {
+  public boolean upsertAndCommit(String baseTableInstantTime, Option<String> commitedInstantTime) {
     boolean result =  getErrorEvents(baseTableInstantTime, commitedInstantTime)
         .map(rdd -> {
+          String instantTime = startCommit();
           JavaRDD<WriteStatus> writeStatusJavaRDD = quarantineTableWriteClient.insert(rdd, instantTime);
           boolean success = quarantineTableWriteClient.commit(instantTime, writeStatusJavaRDD, Option.empty(),
               HoodieActiveTimeline.COMMIT_ACTION, Collections.emptyMap());

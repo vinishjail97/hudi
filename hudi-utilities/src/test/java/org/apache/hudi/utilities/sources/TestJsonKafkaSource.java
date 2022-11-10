@@ -279,14 +279,14 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     assertEquals(1000, fetch1.getBatch().get().count());
     String instantTime =  quarantineTableWriterInterface.get().startCommit();
     assertEquals(2, ((JavaRDD) quarantineTableWriterInterface.get().getErrorEvents(instantTime,Option.empty()).get()).count());
-    quarantineTableWriterInterface.get().upsertAndCommit(instantTime,instantTime,Option.empty());
+    quarantineTableWriterInterface.get().upsertAndCommit(instantTime,Option.empty());
     sendMessagesToKafka(topic, 1000, 2);
     testUtils.sendMessages(topic, new String[]{"error_event12", "error_event21", "error_events_31"});
     InputBatch<JavaRDD<GenericRecord>> fetch2 = kafkaSource.fetchNewDataInAvroFormat(Option.of(fetch1.getCheckpointForNextBatch()),Long.MAX_VALUE);
     fetch2.getBatch().get().count();
     String instantTime2 =  quarantineTableWriterInterface.get().startCommit();
     assertEquals(3, ((JavaRDD)quarantineTableWriterInterface.get().getErrorEvents(instantTime2,Option.of(instantTime)).get()).count());
-    quarantineTableWriterInterface.get().upsertAndCommit(instantTime2,instantTime2,Option.of(instantTime));
+    quarantineTableWriterInterface.get().upsertAndCommit(instantTime2,Option.of(instantTime));
     // counts after 2 commits should match for unique events
     long count = spark().read().format("hudi").load(quarantineTableWriterInterface.get().getQuarantineTableWriteConfig().getBasePath()).count();
     assertEquals(5, count);
@@ -294,7 +294,7 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     InputBatch<JavaRDD<GenericRecord>> fetch3 = kafkaSource.fetchNewDataInAvroFormat(Option.of(fetch1.getCheckpointForNextBatch()),Long.MAX_VALUE);
     String instantTime3 =  quarantineTableWriterInterface.get().startCommit();
 
-    quarantineTableWriterInterface.get().upsertAndCommit(instantTime3,instantTime3,Option.of(instantTime2));
+    quarantineTableWriterInterface.get().upsertAndCommit(instantTime3,Option.of(instantTime2));
     // duplicate event should get upserted
     assertEquals(5,spark().read().format("hudi").load(quarantineTableWriterInterface.get().getQuarantineTableWriteConfig().getBasePath()).count());
   }
