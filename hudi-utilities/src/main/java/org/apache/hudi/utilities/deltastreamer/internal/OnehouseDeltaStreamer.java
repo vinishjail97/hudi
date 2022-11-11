@@ -250,7 +250,7 @@ public class OnehouseDeltaStreamer implements Serializable {
               onehouseMetricsReporter.reportJobInitializationResult(sourceTablePropsPath, true);
               return Option.of(jobInfo);
             } catch (Exception e) {
-              LOG.error("Failed to initialize jobInfo for the table " + sourceTablePropsPath);
+              LOG.error("Failed to initialize jobInfo for the table " + sourceTablePropsPath, e);
               onehouseMetricsReporter.reportJobInitializationResult(sourceTablePropsPath, false);
               return Option.empty();
             }
