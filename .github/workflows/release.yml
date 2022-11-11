@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   deploy:
-    if: github.event.review.state == 'approved'
+    if: github.event.review.state == 'approved' && startsWith(github.event.pull_request.head.ref, 'hudi-internal-release-v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
