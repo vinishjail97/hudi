@@ -67,11 +67,11 @@ public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailability
     // or if the number of events exceeds the max number of events per ingestion batch.
     Long estimatedBytesAvailableForIngestion = (totalEventsAvailable * recordSizeBytes);
     if (estimatedBytesAvailableForIngestion >= minSourceBytesIngestion || totalEventsAvailable > Math.min(sourceLimit, maxBatchEvents)) {
-      return Pair.of(SourceDataAvailabilityStatus.MIN_INGEST_DATA_AVAILABLE, estimatedBytesAvailableForIngestion);
+      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_IMMEDIATELY, estimatedBytesAvailableForIngestion);
     } else if (totalEventsAvailable > 0) {
-      return Pair.of(SourceDataAvailabilityStatus.DATA_AVAILABLE, estimatedBytesAvailableForIngestion);
+      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, estimatedBytesAvailableForIngestion);
     }
-    return Pair.of(SourceDataAvailabilityStatus.NO_DATA, 0L);
+    return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_DEFER, 0L);
   }
 
   static class KafkaTopicInfo {
@@ -111,6 +111,10 @@ public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailability
           numUncommittedOffsets, (numUncommittedOffsets * averageRecordSizeInBytes), topicName, latestOffsets, committedOffsets));
 
       return numUncommittedOffsets;
+    }
+
+    public String getTopicName() {
+      return topicName;
     }
   }
 

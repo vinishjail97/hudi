@@ -27,7 +27,7 @@ import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
 
 /**
- * Always returns that the source has data available, so it will get scheduled regularly.
+ * Does not actually estimate the data availability in the source, and defers scheduling to  MIN SYNC TIME.
  */
 public class DefaultSourceDataAvailabilityEstimator extends SourceDataAvailabilityEstimator {
 
@@ -39,6 +39,6 @@ public class DefaultSourceDataAvailabilityEstimator extends SourceDataAvailabili
 
   @Override
   Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
-    return Pair.of(SourceDataAvailabilityStatus.DATA_AVAILABLE, 0L);
+    return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, 0L);
   }
 }

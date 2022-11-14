@@ -53,24 +53,25 @@ public abstract class SourceDataAvailabilityEstimator {
   /**
    * Returns the status of the source based on data available for ingest at any given time.
    * The following params are provided to ensure accurate numbers.
+   *
    * @param lastCommittedCheckpointStr The checkpoint from the latest Hudi commit.
-   * @param averageRecordSizeInBytes The average record size as computed by Hudi writer.
-   * @param sourceLimit Max data that will be ingested in every round.
+   * @param averageRecordSizeInBytes   The average record size as computed by Hudi writer.
+   * @param sourceLimit                Max data that will be ingested in every round.
    * @return
    */
   abstract Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit);
 
-  /** Source Data Availability Status */
+  /**
+   * Source Data Availability Status
+   */
   public enum SourceDataAvailabilityStatus {
-    UNKNOWN(-1),
-    // There is no data available in the source.
-    NO_DATA(0),
-    // There is data available in the source, only schedule ingest if min sync time has passed since last ingestion.
-    DATA_AVAILABLE(1),
-    // There is sufficient data available to schedule ingest immediately.
-    MIN_INGEST_DATA_AVAILABLE(2);
+    UNKNOWN(-1), // There is no data available in the source, differ scheduling until next time estimator is run.
+    SCHEDULE_DEFER(0), // There is data available in the source, but schedule ingest only if min sync time has passed since the start of the last ingestion.
+    SCHEDULE_AFTER_MIN_SYNC_TIME(1), // There is sufficient data available to schedule ingest immediately.
+    SCHEDULE_IMMEDIATELY(2);
 
     private final int value;
+
     SourceDataAvailabilityStatus(int value) {
       this.value = value;
     }

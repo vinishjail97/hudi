@@ -260,10 +260,10 @@ public class OnehouseDeltaStreamer implements Serializable {
     private JobInfo createJobInfo(Config multiTableConfigs, JavaSparkContext jssc, Configuration hadoopConfig, String sourceTablePropsFilePath, JobManager jobManager) {
       try {
         final TypedProperties properties = buildProperties(sourceTablePropsFilePath, multiTableConfigs, hadoopConfig);
-
         HoodieDeltaStreamer.Config tableConfig = composeTableConfigs(multiTableConfigs, hadoopConfig, properties, sourceTablePropsFilePath, JobType.MULTI_TABLE_DELTASTREAMER);
 
         LogContext.getInstance().withTableDetails(tableConfig.targetTableName, tableConfig.databaseName);
+        LOG.info(String.format("Configuring the table / job info %s at propsFilePath %s", tableConfig.targetBasePath, sourceTablePropsFilePath));
 
         FileSystem fs = FSUtils.getFs(tableConfig.targetBasePath, hadoopConfig);
         HoodieDeltaStreamer.DeltaSyncService deltaSync = new HoodieDeltaStreamer.DeltaSyncService(tableConfig, jssc, fs, hadoopConfig, Option.of(properties));
@@ -637,15 +637,14 @@ public class OnehouseDeltaStreamer implements Serializable {
 
           // If number of bytes available in source exceeds {@link OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP},
           // schedule right away.
-          if (sourceDataAvailabilityStatus.equals(SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus.MIN_INGEST_DATA_AVAILABLE)) {
-            LOG.info(String.format("Source has %s estimatedBytesAvailableForIngestion, scheduling it immediately", sourceDataAvailability.getRight()));
+          if (sourceDataAvailabilityStatus.equals(SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus.SCHEDULE_IMMEDIATELY)) {
             return true;
           }
 
           // If there is data in the source, schedule only if minSyncTimeMs has passed since the last ingest round.
-          return sourceDataAvailabilityStatus.equals(SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus.DATA_AVAILABLE) && checkSyncIntervalDone();
+          return sourceDataAvailabilityStatus.equals(SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME) && checkSyncIntervalDone();
         } catch (Exception exception) {
-          LOG.warn("Failed to detect data availability in source, falling back to using time based scheduling ", exception);
+          LOG.warn("Failed to estimate the data availability in source, falling back to using time based scheduling ", exception);
           return checkSyncIntervalDone();
         }
       }

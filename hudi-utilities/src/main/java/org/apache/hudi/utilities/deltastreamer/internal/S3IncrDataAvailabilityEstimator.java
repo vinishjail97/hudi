@@ -41,8 +41,8 @@ import java.util.Map;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_SRC_BASE_PATH;
 
 /**
- * Implements logic to collect the total bytes yet to be ingested for a prefix in a S3 bucket
- * being ingested using the S3 incr source (Sqs/Sns).
+ * Implements logic to schedule an S3 incr job based on number of pending commits to be ingested from the
+ * base S3 Metadata table.
  *
  * NOTE: Eventually this class should be implemented by the {@link org.apache.hudi.utilities.sources.Source} class
  * that ingests data. To avoid changing the interface for
@@ -50,6 +50,8 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_S
 public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstimator {
 
   private static final Logger LOG = LogManager.getLogger(S3IncrDataAvailabilityEstimator.class);
+  private static final String DEFAULT_BEGIN_TIMESTAMP = "000";
+
   private final Option<String> s3KeyPrefix;
 
   public S3IncrDataAvailabilityEstimator(JavaSparkContext jssc, TypedProperties properties) {
@@ -60,27 +62,29 @@ public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstim
   @Override
   public Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     S3MetadataTableInfo s3MetadataTableInfo = S3MetadataTableInfo.createOrGetInstance(jssc, properties);
+    String lastCommittedCheckpoint = (lastCommittedCheckpointStr.isPresent()) ? lastCommittedCheckpointStr.get() : DEFAULT_BEGIN_TIMESTAMP;
+    Pair<String, String> instantThresholds = s3MetadataTableInfo.getMinAndMaxInstantsForScheduling();
     Long aggrBytesPerIncrJob = s3MetadataTableInfo.getAggrBytesPerIncrJob(lastCommittedCheckpointStr, s3KeyPrefix);
 
-    if (aggrBytesPerIncrJob >= minSourceBytesIngestion) {
-      return Pair.of(SourceDataAvailabilityStatus.MIN_INGEST_DATA_AVAILABLE, aggrBytesPerIncrJob);
-    } else if (aggrBytesPerIncrJob > 0) {
-      return Pair.of(SourceDataAvailabilityStatus.DATA_AVAILABLE, aggrBytesPerIncrJob);
+    if (HoodieTimeline.compareTimestamps(lastCommittedCheckpoint, HoodieTimeline.LESSER_THAN_OR_EQUALS, instantThresholds.getLeft())) {
+      LOG.info(String.format("Scheduling ingestion right away since lastCommittedCheckpoint %s <= lowerThresholdInstant %s", lastCommittedCheckpoint, instantThresholds.getLeft()));
+      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_IMMEDIATELY, aggrBytesPerIncrJob);
+    } else if (HoodieTimeline.compareTimestamps(lastCommittedCheckpoint, HoodieTimeline.LESSER_THAN, instantThresholds.getRight())) {
+      LOG.info(String.format("Scheduling ingestion after min sync time since lastCommittedCheckpoint %s < upperThresholdInstant %s", lastCommittedCheckpoint, instantThresholds.getRight()));
+      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, aggrBytesPerIncrJob);
     }
-
-    return Pair.of(SourceDataAvailabilityStatus.NO_DATA, 0L);
+    return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_DEFER, 0L);
   }
 
-  static class S3MetadataTableInfo {
+  static class S3MetadataTableInfo extends HoodieIncrSourceEstimator.HudiSourceTableInfo {
     public static final String S3_INCR_SOURCE_RATE_ESTIMATOR_KEY = HOODIE_SRC_BASE_PATH;
     private static final String S3_BUCKET_NAME_FIELD = "s3.bucket.name";
     private static final String S3_OBJECT_FIELD = "s3.object.";
     private static final String S3_KEY_FIELD = "key";
     private static final String S3_SIZE_FIELD = "size";
     // In the case of S3, we do not need to ingest in real-time, hence setting
-    // a min sync interval of 1min.
-    private static final long MIN_SYNC_INTERVAL_MS = 60000;
-    private static final String DEFAULT_BEGIN_TIMESTAMP = "000";
+    // a min sync interval of 5mins.
+    private static final long MIN_SYNC_INTERVAL_MS = 300000;
     private static final Map<String, S3MetadataTableInfo> S3_METADATA_BASE_PATH = new HashMap<>();
     private final TypedProperties props;
 
@@ -91,6 +95,7 @@ public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstim
     private long lastSyncTimeMs;
 
     private S3MetadataTableInfo(JavaSparkContext jssc, String s3MetadataBasePath, TypedProperties props) {
+      super(jssc, s3MetadataBasePath, props);
       this.jssc = jssc;
       this.s3MetadataBasePath = s3MetadataBasePath;
       this.sparkSession = SparkSession.builder().config(jssc.getConf()).getOrCreate();
@@ -196,6 +201,10 @@ public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstim
           aggrBytes,
           startCommitInstant));
       return aggrBytes;
+    }
+
+    public String getS3MetadataBasePath() {
+      return s3MetadataBasePath;
     }
   }
 }
