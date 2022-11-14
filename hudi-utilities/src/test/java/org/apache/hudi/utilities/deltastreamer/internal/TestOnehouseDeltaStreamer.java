@@ -89,19 +89,19 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
   @Test
   public void testOnehouseDeltaStreamer() throws Exception {
     // Source Props Paths.
-    String sourceTablePropsPathKafka = TestHelpers.getConcatenatedPath(dfsBasePath, SOURCE_TABLE_PROPS_KAFKA);
-    String sourceTablePropsHudiIncr = TestHelpers.getConcatenatedPath(dfsBasePath, SOURCE_TABLE_PROPS_HUDI_INCR);
-    String invalidSourceTablePropsPath = TestHelpers.getConcatenatedPath(dfsBasePath,  SOURCE_TABLE_PROPS_INVALID);
+    String sourceTablePropsPathKafka = TestHelpers.getConcatenatedPath(basePath, SOURCE_TABLE_PROPS_KAFKA);
+    String sourceTablePropsHudiIncr = TestHelpers.getConcatenatedPath(basePath, SOURCE_TABLE_PROPS_HUDI_INCR);
+    String invalidSourceTablePropsPath = TestHelpers.getConcatenatedPath(basePath,  SOURCE_TABLE_PROPS_INVALID);
     List<String> multiSourceTablePropsPath = Arrays.asList(sourceTablePropsPathKafka, sourceTablePropsHudiIncr, invalidSourceTablePropsPath);
 
     // Table Base Paths.
-    String tableBasePathKafka = TestHelpers.getConcatenatedPath(dfsBasePath, SOURCE_TABLE_KAFKA);
-    String tableBasePathHudiIncr = TestHelpers.getConcatenatedPath(dfsBasePath, SOURCE_TABLE_HUDI_INCR);
+    String tableBasePathKafka = TestHelpers.getConcatenatedPath(basePath, SOURCE_TABLE_KAFKA);
+    String tableBasePathHudiIncr = TestHelpers.getConcatenatedPath(basePath, SOURCE_TABLE_HUDI_INCR);
     // Push data to Kafka.
     prepareDataForKafka(KAFKA_NUM_RECORDS, true, TOPIC_NAME);
     prepareJsonKafkaDFSSourceProps(sourceTablePropsPathKafka, tableBasePathKafka, TOPIC_NAME);
     // Push data to source hoodie table.
-    String sourceHudiTablePath = dfsBasePath + "/source_hudi_incr";
+    String sourceHudiTablePath = basePath + "/source_hudi_incr";
     prepareHoodieIncrSourceProps(sourceTablePropsHudiIncr, tableBasePathHudiIncr);
 
     // Initialize OnehouseDeltaStreamer.
@@ -162,13 +162,13 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
   }
 
   private void prepareHoodieIncrSourceProps(String sourceTablePropsPath, String tableBasePath) throws Exception {
-    String sourceTablePath = dfsBasePath + "/source_hudi_incr";
+    String sourceTablePath = basePath + "/source_hudi_incr";
     prepareDataForHoodieIncrSource(sourceTablePath, "001");
 
     // Properties used for testing delta-streamer with JsonKafka source
     TypedProperties props = new TypedProperties();
     props.setProperty("include", "base.properties");
-    populateCommonProps(props, dfsBasePath);
+    populateCommonProps(props, basePath);
     props.setProperty("hoodie.base.path", tableBasePath);
     props.setProperty("hoodie.datasource.write.recordkey.field", "_row_key");
     props.setProperty("hoodie.datasource.write.partitionpath.field", "driver");
@@ -181,7 +181,7 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     props.setProperty("hoodie.table.name", "hoodie_trips");
     props.setProperty("hoodie.deltastreamer.min.sync.interval.secs", "5");
     props.setProperty("hoodie.deltastreamer.source.hoodieincr.num_instants", "1");
-    UtilitiesTestBase.Helpers.savePropsToDFS(props, dfs, sourceTablePropsPath);
+    UtilitiesTestBase.Helpers.savePropsToDFS(props, fs, sourceTablePropsPath);
   }
 
   private void prepareDataForHoodieIncrSource(String tableBasePath, String commitTime) throws IOException {
@@ -205,14 +205,14 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     List<WriteStatus> statuses = writeClient.insert(writeRecords, commitTime).collect();
     byte[] hoodieProps = new byte[1000];
 
-    dfs.open(new Path(tableBasePath + "/.hoodie/hoodie.properties")).read(hoodieProps);
+    fs.open(new Path(tableBasePath + "/.hoodie/hoodie.properties")).read(hoodieProps);
     assertNoWriteErrors(statuses);
   }
 
   private void prepareJsonKafkaDFSSourceProps(String sourceTablePropsPath, String tableBasePath, String topicName) throws IOException {
     // Properties used for testing delta-streamer with JsonKafka source
     TypedProperties props = new TypedProperties();
-    populateAllCommonProps(props, dfsBasePath, testUtils.brokerAddress());
+    populateAllCommonProps(props, basePath, testUtils.brokerAddress());
     props.setProperty("include", "base.properties");
     props.setProperty("hoodie.embed.timeline.server", "false");
     props.setProperty("hoodie.datasource.write.recordkey.field", "_row_key");
@@ -221,10 +221,10 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     props.setProperty("hoodie.deltastreamer.source.kafka.topic", topicName);
     props.setProperty(
         "hoodie.deltastreamer.schemaprovider.source.schema.file",
-        dfsBasePath + "/source_uber.avsc");
+        basePath + "/source_uber.avsc");
     props.setProperty(
         "hoodie.deltastreamer.schemaprovider.target.schema.file",
-        dfsBasePath + "/target_uber.avsc");
+        basePath + "/target_uber.avsc");
     props.setProperty("auto.offset.reset", "earliest");
 
     props.setProperty("hoodie.base.path", tableBasePath);
@@ -236,7 +236,7 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     props.setProperty("hoodie.deltastreamer.source.estimator.class", "org.apache.hudi.utilities.deltastreamer.internal.KafkaSourceDataAvailabilityEstimator");
     props.setProperty("hoodie.deltastreamer.kafka.source.maxEvents", "3");
     props.setProperty("hoodie.deltastreamer.min.sync.interval.secs", "5");
-    UtilitiesTestBase.Helpers.savePropsToDFS(props, dfs, sourceTablePropsPath);
+    UtilitiesTestBase.Helpers.savePropsToDFS(props, fs, sourceTablePropsPath);
   }
 
   private void prepareDataForKafka(int numRecords, boolean createTopic, String topicName) {
@@ -258,8 +258,8 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
   static class TestHelpers {
 
     static OnehouseDeltaStreamer.Config makeConfig(List<String> sourceTablePropsPath) throws IOException {
-      String tablePropsFile = dfsBasePath + "/" + "desired_job_state.properties";
-      UtilitiesTestBase.Helpers.saveStringsToDFS(sourceTablePropsPath.stream().map(s -> s + "=RUNNING").toArray(String[]::new), dfs, tablePropsFile);
+      String tablePropsFile = basePath + "/" + "desired_job_state.properties";
+      UtilitiesTestBase.Helpers.saveStringsToDFS(sourceTablePropsPath.stream().map(s -> s + "=RUNNING").toArray(String[]::new), fs, tablePropsFile);
       OnehouseDeltaStreamer.Config config = new OnehouseDeltaStreamer.Config();
       config.syncOnce = false;
       config.tablePropsFile = tablePropsFile;
@@ -268,7 +268,7 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
 
     static void cleanAndRestartTableSource(String tableBasePath, List<String> sourceTablePropPaths) {
       try {
-        dfs.delete(new Path(tableBasePath), true);
+        fs.delete(new Path(tableBasePath), true);
         TestHelpers.updateDesiredJobStateProps(sourceTablePropPaths);
       } catch (IOException e) {
         LOG.error("Failed to clean and re-start table", e);
@@ -277,9 +277,9 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     }
 
     static void updateDesiredJobStateProps(List<String> sourceTablePropsPath) {
-      String tablePropsFile = dfsBasePath + "/" + "desired_job_state.properties";
+      String tablePropsFile = basePath + "/" + "desired_job_state.properties";
       try {
-        Helpers.saveStringsToDFS(sourceTablePropsPath.stream().map(s -> s + "=RUNNING").toArray(String[]::new), dfs, tablePropsFile);
+        Helpers.saveStringsToDFS(sourceTablePropsPath.stream().map(s -> s + "=RUNNING").toArray(String[]::new), fs, tablePropsFile);
       } catch (IOException e) {
         LOG.error("Failed to update desired_job_state.properties", e);
         throw new RuntimeException(e);

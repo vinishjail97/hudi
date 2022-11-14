@@ -99,7 +99,7 @@ public abstract class HoodieTestSuiteWriter implements Serializable {
                 .withPayloadClass(cfg.payloadClassName)
                 .build())
             .forTable(cfg.targetTableName)
-            .withIndexConfig(HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.BLOOM).build())
+            .withIndexConfig(HoodieIndexConfig.newBuilder().withIndexType(HoodieIndex.IndexType.valueOf(cfg.indexType)).build())
             .withProps(props);
     builder = builder.withSchema(schema);
     return builder.build();
