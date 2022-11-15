@@ -132,6 +132,11 @@ public class Metrics {
     metricsMap.forEach((k, v) -> registerGauge(metricPrefix + k, v));
   }
 
+  public void registerGauges(Map<String, Long> metricsMap, Option<String> prefix, Map<String, String> labels) {
+    String metricPrefix = prefix.isPresent() ? prefix.get() + "." : "";
+    metricsMap.forEach((k, v) -> registerGauge(metricPrefix + MetricUtils.getMetricWithLabel(k, labels), v));
+  }
+
   public void registerGauge(String metricName, final long value) {
     try {
       HoodieGauge guage = (HoodieGauge) registry.gauge(metricName, () -> new HoodieGauge<>(value));
