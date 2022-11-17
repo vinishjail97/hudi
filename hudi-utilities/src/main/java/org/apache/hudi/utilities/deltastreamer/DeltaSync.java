@@ -106,7 +106,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -716,9 +715,6 @@ public class DeltaSync implements Serializable, Closeable {
       }
       String commitActionType = CommitUtils.getCommitActionType(cfg.operation, HoodieTableType.valueOf(cfg.tableType));
       if (quarantineTableWriterInterfaceImpl.isPresent()) {
-        // Removing writeStatus events from quarantine events, as action on writeStatus can cause base table DAG to reexecute
-        // if original cached dataframe get's unpersisted before this action.
-        //        quarantineTableWriterInterfaceImpl.get().addErrorEvents(getErrorEventsForWriteStatus(writeStatusRDD));
         Option<String> commitedInstantTime = getLatestInstantWithValidCheckpointInfo(commitTimelineOpt);
         boolean quarantineTableSuccess = quarantineTableWriterInterfaceImpl.get().upsertAndCommit(instantTime, commitedInstantTime);
         if (!quarantineTableSuccess) {
@@ -764,29 +760,6 @@ public class DeltaSync implements Serializable, Closeable {
       quarantineTableWriterInterfaceImpl.get().cleanErrorEvents();
     }
     return Pair.of(scheduledCompactionInstant, writeStatusRDD);
-  }
-
-  protected JavaRDD<QuarantineJsonEvent> getErrorEventsForWriteStatus(JavaRDD<WriteStatus> writeStatusRDD) {
-    HoodieWriteConfig config = writeClient.getConfig();
-
-    return writeStatusRDD
-        .filter(WriteStatus::hasErrors)
-        .flatMap(x -> {
-          Schema schema = Schema.parse(config.getSchema());
-          Properties props = config.getPayloadConfig().getProps();
-          return x.getFailedRecords().stream()
-              .map(z -> {
-                HoodieRecordPayload hoodieRecordPayload = (HoodieRecordPayload)z.getData();
-                String recordStr;
-                try {
-                  recordStr = (String) hoodieRecordPayload.getInsertValue(schema,
-                      props).map(value -> value.toString()).get();
-                } catch (IOException e) {
-                  recordStr = null;
-                }
-                return new QuarantineJsonEvent(recordStr, QuarantineEvent.QuarantineReason.HUDI_WRITE_FAILURES);
-              }).iterator();
-        });
   }
 
   /**
