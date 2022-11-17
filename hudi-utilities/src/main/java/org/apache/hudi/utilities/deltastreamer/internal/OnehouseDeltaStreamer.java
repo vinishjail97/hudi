@@ -295,6 +295,7 @@ public class OnehouseDeltaStreamer implements Serializable {
                 LogContext.getInstance().withTableDetails(jobInfo.tableName, jobInfo.databaseName);
                 return jobInfo.canSchedule(currentTimeMs);
               }).collect(Collectors.toList());
+              LogContext.clear();
 
               LOG.info("In this round, scheduling ingestion for the following tables " + selectedJobs.stream().map(JobInfo::getSourceTablePath).collect(Collectors.toList()));
 
