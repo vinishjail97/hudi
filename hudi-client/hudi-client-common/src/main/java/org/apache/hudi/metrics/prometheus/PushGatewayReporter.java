@@ -137,10 +137,9 @@ public class PushGatewayReporter extends ScheduledReporter {
           labelValues.add((String) et.getValue());
         }
         if (!gaugeHashMap.containsKey(stringMapPair.getKey())) {
-          registry.remove(key);
           gaugeHashMap.put(stringMapPair.getKey(), io.prometheus.client.Gauge.build().help("labeled metricName:" + stringMapPair.getKey())
               .name(stringMapPair.getKey())
-              .labelNames(labelNames.toArray(labelNames.toArray(new String[0]))).register(collectorRegistry).register());
+              .labelNames(labelNames.toArray(labelNames.toArray(new String[0]))).register(collectorRegistry));
         }
         gaugeHashMap.get(stringMapPair.getKey())
             .labels(labelValues.toArray(labelNames.toArray(new String[0])))

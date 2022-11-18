@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 
 public class MetricUtils {
 
+  private static final String  METRIC_SUFFIX = "__labelled__";
   private static Pair<String, String> splitToPair(String label) {
     String[] keyValuess = label.split(":");
     return  Pair.of(keyValuess[0], keyValuess.length == 2 ? keyValuess[1] : "");
@@ -40,13 +41,15 @@ public class MetricUtils {
 
   public static Pair<String,String> getMetricAndLabels(String metric) {
     String[] tokens = metric.split(";");
+
     if (tokens.length > 2) {
       throw new RuntimeException("more than one ';' detected in metric string");
     }
+    String metricName = tokens[0].replace(METRIC_SUFFIX, "");
     if (tokens.length == 2) {
-      return  Pair.of(tokens[0], tokens[1]);
+      return  Pair.of(metricName, tokens[1]);
     }
-    return Pair.of(tokens[0], "");
+    return Pair.of(metricName, "");
   }
 
   public static Pair<String,List<String>> getLabelsAndMetricList(String metric) {
@@ -59,6 +62,6 @@ public class MetricUtils {
   public static String getMetricWithLabel(String metric, Map<String,String> labels) {
     String labelsStr = labels.entrySet().stream().map(entry -> String.format("%s:%s",entry.getKey(), entry.getValue()))
         .collect(Collectors.joining(","));
-    return String.format("%s;%s",metric,labelsStr);
+    return String.format("%s%s;%s",metric, METRIC_SUFFIX, labelsStr);
   }
 }

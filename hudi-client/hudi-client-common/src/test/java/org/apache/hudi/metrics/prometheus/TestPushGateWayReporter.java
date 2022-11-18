@@ -89,8 +89,9 @@ public class TestPushGateWayReporter {
     } else {
       when(config.getBasePath()).thenReturn("s3://test" + UUID.randomUUID());
       when(config.isMetricsOn()).thenReturn(true);
+      when(config.getMetricReporterMetricsNamePrefix()).thenReturn("");
     }
-    when(config.getMetricReporterFileBasedConfigs()).thenReturn(propPrometheusPath + "," + propDatadogPath);
+    when(config.getMetricReporterFileBasedConfigs()).thenReturn(propDatadogPath + "," + propPrometheusPath);
     hoodieMetrics = new HoodieMetrics(config);
     metrics = hoodieMetrics.getMetrics();
     Map<String, Long> metricsMap = new HashMap<>();
@@ -118,6 +119,7 @@ public class TestPushGateWayReporter {
     when(config.getPushGatewayReportPeriodSeconds()).thenReturn(30);
     when(config.getPushGatewayDeleteOnShutdown()).thenReturn(true);
     when(config.getPushGatewayJobName()).thenReturn("foo");
+    when(config.getMetricReporterMetricsNamePrefix()).thenReturn("");
     when(config.getBasePath()).thenReturn("s3://test" + UUID.randomUUID());
   }
 }

@@ -40,6 +40,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
@@ -88,14 +90,13 @@ public class DatadogReporter extends ScheduledReporter {
       SortedMap<String, Meter> meters,
       SortedMap<String, Timer> timers) {
 
-    Map<List<String>, List<Pair<String, List<String>>>> labelsPair = gauges.keySet().stream().map(MetricUtils::getLabelsAndMetricList)
-        .collect(Collectors.groupingBy(Pair::getValue));
+    Map<List<String>, List<Pair<String,Gauge>>> labelsPair = getMapOfLabelVsMetricGauges(gauges);
     labelsPair.entrySet().forEach(labelsKeyValue -> {
       final long now = clock.getTime() / 1000;
       final PayloadBuilder builder = new PayloadBuilder();
       builder.withMetricType(MetricType.gauge);
-      gauges.forEach((metricName, metric) -> {
-        builder.addGauge(prefix(MetricUtils.getMetricAndLabels(metricName).getKey()), now, (long) metric.getValue());
+      labelsKeyValue.getValue().stream().forEach(metricGaugePair -> {
+        builder.addGauge(prefix(metricGaugePair.getKey()), now, (long) metricGaugePair.getValue().getValue());
       });
       host.ifPresent(builder::withHost);
       List<String> runTimeLables = labelsKeyValue.getKey();
@@ -103,6 +104,18 @@ public class DatadogReporter extends ScheduledReporter {
       builder.withTags(runTimeLables);
       client.send(builder.build());
     });
+  }
+
+  private Map<List<String>, List<Pair<String,Gauge>>> getMapOfLabelVsMetricGauges(SortedMap<String, Gauge> gauges) {
+    Map<List<String>, List<Pair<String,Gauge>>> listListHashMap = new HashMap<>();
+    gauges.entrySet().stream().forEach(entry -> {
+      Pair<String, List<String>> metricLabelPair = MetricUtils.getLabelsAndMetricList(entry.getKey());
+      if (!listListHashMap.containsKey(metricLabelPair.getValue())) {
+        listListHashMap.put(metricLabelPair.getValue(), new ArrayList<>());
+      }
+      listListHashMap.get(metricLabelPair.getValue()).add(Pair.of(metricLabelPair.getLeft(), entry.getValue()));
+    });
+    return listListHashMap;
   }
 
   protected String prefix(String... components) {
