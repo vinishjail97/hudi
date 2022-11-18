@@ -855,6 +855,7 @@ public class OnehouseDeltaStreamer implements Serializable {
 
     tableConfig.checkpoint = onehouseInternalDeltastreamerConfig.getCheckpoint();
     tableConfig.allowCommitOnNoCheckpointChange = onehouseInternalDeltastreamerConfig.isAllowCommitOnNoCheckpointChange();
+    tableConfig.allowCommitOnNoData = onehouseInternalDeltastreamerConfig.isAllowCommitOnNoData();
     tableConfig.initialCheckpointProvider = onehouseInternalDeltastreamerConfig.getInitialCheckpointProvider();
     if (tableConfig.initialCheckpointProvider != null && tableConfig.checkpoint == null) {
       InitialCheckPointProvider checkPointProvider = UtilHelpers.createInitialCheckpointProvider(tableConfig.initialCheckpointProvider, properties);

@@ -124,10 +124,16 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
 
   public static final ConfigProperty<Boolean> COMMIT_ON_NO_CHECKPOINT_CHANGE = ConfigProperty
       .key("hoodie.deltastreamer.allow.commit.on.no.checkpoint.change")
-      .defaultValue(false) // 1MB
+      .defaultValue(false)
       .withDocumentation("allow commits even if checkpoint has not changed before and after fetch data from "
           + " source. This might be useful in sources like SqlSource where there is not checkpoint. And is "
           + "not recommended to enable in continuous mode.");
+
+  public static final ConfigProperty<Boolean> COMMIT_ON_NO_DATA = ConfigProperty
+      .key("hoodie.deltastreamer.allow.commit.on.no.data")
+      .defaultValue(true)
+      .withDocumentation("allow commit if there is no new data. This is useful for sources where checkpointing "
+          + " is not done as they are irrelevant, eg: gcs metadata table.");
 
   public static final ConfigProperty<Boolean> COMMIT_ON_ERRORS = ConfigProperty
       .key("hoodie.deltastreamer.allow.commit.on.errors")
@@ -213,6 +219,10 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
 
   public Boolean isAllowCommitOnNoCheckpointChange() {
     return getBooleanOrDefault(COMMIT_ON_NO_CHECKPOINT_CHANGE);
+  }
+
+  public Boolean isAllowCommitOnNoData() {
+    return getBooleanOrDefault(COMMIT_ON_NO_DATA);
   }
 
   public static OnehouseInternalDeltastreamerConfig.Builder newBuilder() {

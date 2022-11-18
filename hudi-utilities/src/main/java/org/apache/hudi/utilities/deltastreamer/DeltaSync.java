@@ -558,6 +558,10 @@ public class DeltaSync implements Serializable, Closeable {
     }
 
     if ((!avroRDDOptional.isPresent()) || (avroRDDOptional.get().isEmpty())) {
+      if (!cfg.allowCommitOnNoData) {
+        LOG.info("No new data found, hence nothing to commit.");
+        return null;
+      }
       LOG.info("No new data, perform empty commit.");
       return Pair.of(schemaProvider, Pair.of(checkpointStr, jssc.emptyRDD()));
     }

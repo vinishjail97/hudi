@@ -409,8 +409,12 @@ public class HoodieDeltaStreamer implements Serializable {
     public Integer maxRetryCount = 3;
 
     @Parameter(names = {"--allow-commit-on-no-checkpoint-change"}, description = "allow commits even if checkpoint has not changed before and after fetch data"
-        + "from souce. This might be useful in sources like SqlSource where there is not checkpoint. And is not recommended to enable in continuous mode.")
+        + "from source. This might be useful in sources like SqlSource where there is not checkpoint. And is not recommended to enable in continuous mode.")
     public Boolean allowCommitOnNoCheckpointChange = false;
+
+    @Parameter(names = {"--allow-commit-on-no-data"}, description = "allow commit if there is no new data. This is useful for sources where checkpointing is"
+        + " not done as they are irrelevant, eg: gcs metadata table.")
+    public Boolean allowCommitOnNoData = true;
 
     @Parameter(names = {"--help", "-h"}, help = true)
     public Boolean help = false;
