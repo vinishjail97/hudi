@@ -23,6 +23,7 @@ import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -38,12 +39,15 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_S
  * base Hoodie Table.
  *
  * NOTE: Eventually this class should be implemented by the {@link org.apache.hudi.utilities.sources.Source} class
- * that ingests data. To avoid changing the interface for
+ * that ingests data.
  */
 public class HoodieIncrSourceEstimator extends SourceDataAvailabilityEstimator {
 
   private static final Logger LOG = LogManager.getLogger(HoodieIncrSourceEstimator.class);
-  private static final String DEFAULT_BEGIN_TIMESTAMP = "000";
+  // If the last committed checkpoint (last ingested commit of the source hudi table) divided
+  // by the total commits in the active timeline of the source hudi table is below this threshold,
+  // then the ingestion of this derived table is scheduled immediately, else its scheduled
+  // based on the min sync time.
   private static final int INSTANT_THRESHOLD_PERC = 30;
 
   public HoodieIncrSourceEstimator(JavaSparkContext jssc, TypedProperties properties) {
@@ -51,20 +55,32 @@ public class HoodieIncrSourceEstimator extends SourceDataAvailabilityEstimator {
   }
 
   @Override
-  public Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+  public Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     HudiSourceTableInfo hudiSourceTableInfo = HudiSourceTableInfo.createOrGetInstance(jssc, properties);
-    String lastCommittedCheckpoint = (lastCommittedCheckpointStr.isPresent()) ? lastCommittedCheckpointStr.get() : DEFAULT_BEGIN_TIMESTAMP;
+    String lastCommittedCheckpoint = (lastCommittedCheckpointStr.isPresent()) ? lastCommittedCheckpointStr.get() : IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
     Pair<String, String> instantThresholds = hudiSourceTableInfo.getMinAndMaxInstantsForScheduling();
 
     // Currently we do not estimate the actual bytes for the source hudi table
+    return Pair.of(getScheduleStatus(lastCommittedCheckpoint, instantThresholds), 0L);
+  }
+
+  /**
+   * Computes the status for scheduling ingestion based on the instant (commit) thresholds and the last committed instant.
+   * @param lastCommittedCheckpoint last committed instant.
+   * @param instantThresholds instant (commit) thresholds within the active timeline.
+   * @return The {@link IngestionSchedulingStatus}
+   */
+  public IngestionSchedulingStatus getScheduleStatus(String lastCommittedCheckpoint, Pair<String, String> instantThresholds) {
+    // Currently we do not estimate the actual bytes for the source hudi table
     if (HoodieTimeline.compareTimestamps(lastCommittedCheckpoint, HoodieTimeline.LESSER_THAN_OR_EQUALS, instantThresholds.getLeft())) {
       LOG.info(String.format("Scheduling ingestion right away since lastCommittedCheckpoint %s <= lowerThresholdInstant %s", lastCommittedCheckpoint, instantThresholds.getLeft()));
-      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_IMMEDIATELY, 0L);
+      return IngestionSchedulingStatus.SCHEDULE_IMMEDIATELY;
     } else if (HoodieTimeline.compareTimestamps(lastCommittedCheckpoint, HoodieTimeline.LESSER_THAN, instantThresholds.getRight())) {
-      LOG.info(String.format("Scheduling ingestion after min sync time since lastCommittedCheckpoint %s <= upperThresholdInstant %s", lastCommittedCheckpoint, instantThresholds.getRight()));
-      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, 0L);
+      LOG.info(String.format("Scheduling ingestion after min sync time since lastCommittedCheckpoint %s < upperThresholdInstant %s", lastCommittedCheckpoint, instantThresholds.getRight()));
+      return IngestionSchedulingStatus.SCHEDULE_AFTER_MIN_SYNC_TIME;
     }
-    return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_DEFER, 0L);
+    return IngestionSchedulingStatus.SCHEDULE_DEFER;
+
   }
 
   public static class HudiSourceTableInfo {

@@ -59,12 +59,12 @@ public abstract class SourceDataAvailabilityEstimator {
    * @param sourceLimit                Max data that will be ingested in every round.
    * @return
    */
-  abstract Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit);
+  abstract Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit);
 
   /**
-   * Source Data Availability Status
+   * Reflects the status for scheduling Ingestion for a specific table based on data availability in the source.
    */
-  public enum SourceDataAvailabilityStatus {
+  public enum IngestionSchedulingStatus {
     UNKNOWN(-1), // There is no data available in the source, differ scheduling until next time estimator is run.
     SCHEDULE_DEFER(0), // There is data available in the source, but schedule ingest only if min sync time has passed since the start of the last ingestion.
     SCHEDULE_AFTER_MIN_SYNC_TIME(1), // There is sufficient data available to schedule ingest immediately.
@@ -72,7 +72,7 @@ public abstract class SourceDataAvailabilityEstimator {
 
     private final int value;
 
-    SourceDataAvailabilityStatus(int value) {
+    IngestionSchedulingStatus(int value) {
       this.value = value;
     }
 

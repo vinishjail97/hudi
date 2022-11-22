@@ -59,7 +59,7 @@ public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailability
   }
 
   @Override
-  Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+  Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     long recordSizeBytes = (averageRecordSizeInBytes.isPresent() && averageRecordSizeInBytes.get() > 0L) ? averageRecordSizeInBytes.get() : DEFAULT_RECORD_SIZE;
     Long totalEventsAvailable = new KafkaTopicInfo(properties, lastCommittedCheckpointStr, recordSizeBytes, sourceLimit).eventsAvailableForTopic();
 
@@ -67,11 +67,11 @@ public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailability
     // or if the number of events exceeds the max number of events per ingestion batch.
     Long estimatedBytesAvailableForIngestion = (totalEventsAvailable * recordSizeBytes);
     if (estimatedBytesAvailableForIngestion >= minSourceBytesIngestion || totalEventsAvailable > Math.min(sourceLimit, maxBatchEvents)) {
-      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_IMMEDIATELY, estimatedBytesAvailableForIngestion);
+      return Pair.of(IngestionSchedulingStatus.SCHEDULE_IMMEDIATELY, estimatedBytesAvailableForIngestion);
     } else if (totalEventsAvailable > 0) {
-      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, estimatedBytesAvailableForIngestion);
+      return Pair.of(IngestionSchedulingStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, estimatedBytesAvailableForIngestion);
     }
-    return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_DEFER, 0L);
+    return Pair.of(IngestionSchedulingStatus.SCHEDULE_DEFER, 0L);
   }
 
   static class KafkaTopicInfo {

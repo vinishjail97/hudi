@@ -39,7 +39,7 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.READ_LAT
 
 public class IncrSourceHelper {
 
-  private static final String DEFAULT_BEGIN_TIMESTAMP = "000";
+  public static final String DEFAULT_BEGIN_TIMESTAMP = "000";
   /**
    * Kafka reset offset strategies.
    */

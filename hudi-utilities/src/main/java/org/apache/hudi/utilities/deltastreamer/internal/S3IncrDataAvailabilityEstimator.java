@@ -27,6 +27,7 @@ import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.sources.S3EventsHoodieIncrSource;
+import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -47,10 +48,9 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_S
  * NOTE: Eventually this class should be implemented by the {@link org.apache.hudi.utilities.sources.Source} class
  * that ingests data. To avoid changing the interface for
  */
-public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstimator {
+public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
 
   private static final Logger LOG = LogManager.getLogger(S3IncrDataAvailabilityEstimator.class);
-  private static final String DEFAULT_BEGIN_TIMESTAMP = "000";
 
   private final Option<String> s3KeyPrefix;
 
@@ -60,20 +60,13 @@ public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstim
   }
 
   @Override
-  public Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+  public Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     S3MetadataTableInfo s3MetadataTableInfo = S3MetadataTableInfo.createOrGetInstance(jssc, properties);
-    String lastCommittedCheckpoint = (lastCommittedCheckpointStr.isPresent()) ? lastCommittedCheckpointStr.get() : DEFAULT_BEGIN_TIMESTAMP;
+    String lastCommittedCheckpoint = (lastCommittedCheckpointStr.isPresent()) ? lastCommittedCheckpointStr.get() : IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
     Pair<String, String> instantThresholds = s3MetadataTableInfo.getMinAndMaxInstantsForScheduling();
     Long aggrBytesPerIncrJob = s3MetadataTableInfo.getAggrBytesPerIncrJob(lastCommittedCheckpointStr, s3KeyPrefix);
 
-    if (HoodieTimeline.compareTimestamps(lastCommittedCheckpoint, HoodieTimeline.LESSER_THAN_OR_EQUALS, instantThresholds.getLeft())) {
-      LOG.info(String.format("Scheduling ingestion right away since lastCommittedCheckpoint %s <= lowerThresholdInstant %s", lastCommittedCheckpoint, instantThresholds.getLeft()));
-      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_IMMEDIATELY, aggrBytesPerIncrJob);
-    } else if (HoodieTimeline.compareTimestamps(lastCommittedCheckpoint, HoodieTimeline.LESSER_THAN, instantThresholds.getRight())) {
-      LOG.info(String.format("Scheduling ingestion after min sync time since lastCommittedCheckpoint %s < upperThresholdInstant %s", lastCommittedCheckpoint, instantThresholds.getRight()));
-      return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, aggrBytesPerIncrJob);
-    }
-    return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_DEFER, 0L);
+    return Pair.of(getScheduleStatus(lastCommittedCheckpoint, instantThresholds), aggrBytesPerIncrJob);
   }
 
   static class S3MetadataTableInfo extends HoodieIncrSourceEstimator.HudiSourceTableInfo {
@@ -122,10 +115,10 @@ public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstim
         return incrementalDataset;
       }
       lastSyncTimeMs = System.currentTimeMillis();
-      String beginInstantTime = (activeCommitTimeline.firstInstant().isPresent()) ? activeCommitTimeline.firstInstant().get().getTimestamp() : DEFAULT_BEGIN_TIMESTAMP;
+      String beginInstantTime = (activeCommitTimeline.firstInstant().isPresent()) ? activeCommitTimeline.firstInstant().get().getTimestamp() : IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
       Option<HoodieInstant> lastInstant = activeCommitTimeline.lastInstant();
 
-      Pair<String, String> instantEndpts = Pair.of(beginInstantTime, (lastInstant.isPresent()) ? lastInstant.get().getTimestamp() : DEFAULT_BEGIN_TIMESTAMP);
+      Pair<String, String> instantEndpts = Pair.of(beginInstantTime, (lastInstant.isPresent()) ? lastInstant.get().getTimestamp() : IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP);
 
       incrementalDataset = sparkSession.read().format("org.apache.hudi")
           .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_INCREMENTAL_OPT_VAL())
@@ -184,7 +177,7 @@ public class S3IncrDataAvailabilityEstimator extends SourceDataAvailabilityEstim
 
     Long getAggrBytesPerIncrJob(Option<String> lastCommittedInstant, Option<String> keyPrefix) {
       long aggrBytes = 0L;
-      String startCommitInstant = (lastCommittedInstant.isPresent()) ? lastCommittedInstant.get() : DEFAULT_BEGIN_TIMESTAMP;
+      String startCommitInstant = (lastCommittedInstant.isPresent()) ? lastCommittedInstant.get() : IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
       if (keyPrefix.isPresent()) {
         Row aggregateRow = getEventsRows(startCommitInstant)
             .filter(S3_KEY_FIELD + " like '" + keyPrefix.get() + "%'")

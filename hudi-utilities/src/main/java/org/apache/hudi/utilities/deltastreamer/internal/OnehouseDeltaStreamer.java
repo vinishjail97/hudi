@@ -520,9 +520,9 @@ public class OnehouseDeltaStreamer implements Serializable {
 
       /**
        * Status of the availability of data in the source as defined by
-       * {@link org.apache.hudi.utilities.deltastreamer.internal.SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus}
+       * {@link SourceDataAvailabilityEstimator.IngestionSchedulingStatus}
        */
-      private SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus sourceDataAvailabilityStatus;
+      private SourceDataAvailabilityEstimator.IngestionSchedulingStatus ingestionSchedulingStatus;
 
       /**
        * Amount of available data in bytes ready for ingest at the source.
@@ -573,7 +573,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         this.numberConsecutiveFailures = new AtomicInteger(0);
         this.numberSyncSuccesses = new AtomicInteger(0);
         this.numberSyncFailures = new AtomicInteger(0);
-        this.sourceDataAvailabilityStatus = SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus.UNKNOWN;
+        this.ingestionSchedulingStatus = SourceDataAvailabilityEstimator.IngestionSchedulingStatus.UNKNOWN;
         this.sourceBytesAvailableForIngest = new AtomicLong(0);
         this.lastSyncCompletedTimeMs = 0L;
         this.minSyncTimeMs = props.getInteger(OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.key(), OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue()) * 1000;
@@ -630,20 +630,20 @@ public class OnehouseDeltaStreamer implements Serializable {
 
         try {
           HoodieMultiTableCommitStatsManager.TableCommitStats commitStats = HoodieMultiTableCommitStatsManager.getCommitStatsMap().get(basePath);
-          Pair<SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus, Long> sourceDataAvailability = sourceDataAvailabilityEstimator
+          Pair<SourceDataAvailabilityEstimator.IngestionSchedulingStatus, Long> sourceDataAvailability = sourceDataAvailabilityEstimator
               .getDataAvailabilityStatus((commitStats != null) ? commitStats.getLastCommittedCheckpoint() : Option.empty(), (commitStats != null) ? commitStats.getAvgRecordSizes() : Option.empty(),
                   readSourceLimit);
-          SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus sourceDataAvailabilityStatus = sourceDataAvailability.getLeft();
+          SourceDataAvailabilityEstimator.IngestionSchedulingStatus ingestionSchedulingStatus = sourceDataAvailability.getLeft();
           updateSourceBytesAvailableMetric(sourceDataAvailability.getLeft(), sourceDataAvailability.getRight());
 
           // If number of bytes available in source exceeds {@link OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP},
           // schedule right away.
-          if (sourceDataAvailabilityStatus.equals(SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus.SCHEDULE_IMMEDIATELY)) {
+          if (ingestionSchedulingStatus.equals(SourceDataAvailabilityEstimator.IngestionSchedulingStatus.SCHEDULE_IMMEDIATELY)) {
             return true;
           }
 
           // If there is data in the source, schedule only if minSyncTimeMs has passed since the last ingest round.
-          return sourceDataAvailabilityStatus.equals(SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME) && checkSyncIntervalDone();
+          return ingestionSchedulingStatus.equals(SourceDataAvailabilityEstimator.IngestionSchedulingStatus.SCHEDULE_AFTER_MIN_SYNC_TIME) && checkSyncIntervalDone();
         } catch (Exception exception) {
           LOG.warn("Failed to estimate the data availability in source, falling back to using time based scheduling ", exception);
           return checkSyncIntervalDone();
@@ -720,8 +720,8 @@ public class OnehouseDeltaStreamer implements Serializable {
         return startSyncScheduledTimeMs == null || (System.currentTimeMillis() - startSyncScheduledTimeMs >= minSyncTimeMs);
       }
 
-      private void updateSourceBytesAvailableMetric(SourceDataAvailabilityEstimator.SourceDataAvailabilityStatus sourceDataStatus, long sourceBytes) {
-        sourceDataAvailabilityStatus = sourceDataStatus;
+      private void updateSourceBytesAvailableMetric(SourceDataAvailabilityEstimator.IngestionSchedulingStatus sourceDataStatus, long sourceBytes) {
+        ingestionSchedulingStatus = sourceDataStatus;
         sourceBytesAvailableForIngest.set(sourceBytes);
       }
 
@@ -730,7 +730,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         deltaSync.getDeltaSync().getMetrics().updateNumFailedSyncs(numberSyncFailures.getAndSet(0));
         deltaSync.getDeltaSync().getMetrics().updateNumConsecutiveFailures(numberConsecutiveFailures.get());
         deltaSync.getDeltaSync().getMetrics().updateTotalSourceBytesAvailableForIngest(sourceBytesAvailableForIngest.get());
-        deltaSync.getDeltaSync().getMetrics().updateTotalSourceAvailabilityStatusForIngest(sourceDataAvailabilityStatus.getValue());
+        deltaSync.getDeltaSync().getMetrics().updateTotalSourceAvailabilityStatusForIngest(ingestionSchedulingStatus.getValue());
       }
 
       public void close() {

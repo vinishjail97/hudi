@@ -38,7 +38,7 @@ public class DefaultSourceDataAvailabilityEstimator extends SourceDataAvailabili
   }
 
   @Override
-  Pair<SourceDataAvailabilityStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
-    return Pair.of(SourceDataAvailabilityStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, 0L);
+  Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+    return Pair.of(IngestionSchedulingStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, 0L);
   }
 }
