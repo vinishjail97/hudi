@@ -842,3 +842,15 @@ e1ccf2e00b [HUDI-3977] Flink hudi table with date type partition path throws Hoo
 6ec039ba42 [MINOR] Update alter rename command class type for pattern matching (#5381)
 77e333298d [HUDI-3478] Claim RFC 51 For CDC (#5437)
 762623a15c [HUDI-3972] Fixing hoodie.properties/tableConfig for no preCombine field with writes (#5424)
+
+---[2022-11-23 10:26:47] [release-v0.10.1] ---
+c2120fd0c [ONHS-3796] Address reviewer comments on s3 estimator PR 106 (#141)
+c955e8359 up the list of modules (#149)
+d64fd51e7 Added flag to avoid empty commits. (#128)
+4de4b12aa added fix for not removing labelled metric in prometheus exporter (#144)
+ac52be84a Clear incorrect log context (#146)
+61e47a944 Add setter for prometheus labels config (#142)
+6dc10a58c Remove unused code from DeltaSync (#143)
+b6933bf4c append labels as part of metric (#138)
+46452e33e [ONHS-3796] Fix the Hoodie and S3 incr source availability estimators (#106)
+33ae77893 Hudi internal release v0.10.0 (#136)
