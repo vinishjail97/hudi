@@ -99,6 +99,12 @@ public class HoodieMetricsConfig extends HoodieConfig {
       .defaultValue("")
       .sinceVersion("0.12.2")
       .withDocumentation("list of config file paths for metric exporter configs");
+
+  public static final ConfigProperty<String> METRICS_REPORTER_DEFAULT_LABELS = ConfigProperty
+      .key(METRIC_PREFIX + ".default.labels")
+      .defaultValue("")
+      .sinceVersion("0.12.2")
+      .withDocumentation("default labels for metric reporter");
   /**
    * @deprecated Use {@link #TURN_METRICS_ON} and its methods instead
    */

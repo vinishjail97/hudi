@@ -23,6 +23,8 @@ import org.apache.hudi.common.metrics.Registry;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.config.metrics.HoodieMetricsDatadogConfig;
+import org.apache.hudi.config.metrics.HoodieMetricsPrometheusConfig;
 import org.apache.hudi.exception.HoodieException;
 
 import com.codahale.metrics.MetricRegistry;
@@ -73,11 +75,12 @@ public class Metrics {
   private List<MetricsReporter> addAdditionalMetricsExporters(HoodieWriteConfig metricConfig) {
     List<MetricsReporter> reporterList = new ArrayList<>();
     if (!StringUtils.isNullOrEmpty(metricConfig.getMetricReporterFileBasedConfigs())) {
+      Map<String, String> reporterLabelProps = getAdditionalMetricsExporterLabelProps(metricConfig);
       List<String> propPathList = StringUtils.split(metricConfig.getMetricReporterFileBasedConfigs(), ",");
       try (FileSystem fs = FSUtils.getFs(propPathList.get(0), new Configuration())) {
         for (String propPath: propPathList) {
           HoodieWriteConfig secondarySourceConfig = HoodieWriteConfig.newBuilder().fromInputStream(
-              fs.open(new Path(propPath))).withPath(metricConfig.getBasePath()).build();
+              fs.open(new Path(propPath))).withProps(reporterLabelProps).withPath(metricConfig.getBasePath()).build();
           reporterList.add(MetricsReporterFactory.createReporter(secondarySourceConfig, registry));
         }
       } catch (IOException e) {
@@ -87,6 +90,16 @@ public class Metrics {
     }
     LOG.info("total additional metrics roporters added =" + reporterList.size());
     return reporterList;
+  }
+
+  private Map<String, String> getAdditionalMetricsExporterLabelProps(HoodieWriteConfig metricConfig) {
+    Map<String, String> props = new HashMap<>();
+    String defaultLabels = metricConfig.getMetricReporterDefaultLabels();
+    if (!StringUtils.isNullOrEmpty(defaultLabels)) {
+      props.put(HoodieMetricsPrometheusConfig.PUSHGATEWAY_LABELS.key(), defaultLabels);
+      props.put(HoodieMetricsDatadogConfig.METRIC_TAG_VALUES.key(), defaultLabels);
+    }
+    return props;
   }
 
   private void registerHoodieCommonMetrics() {

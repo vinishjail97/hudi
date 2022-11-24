@@ -1973,6 +1973,10 @@ public class HoodieWriteConfig extends HoodieConfig {
     return getStringOrDefault(HoodieMetricsConfig.METRICS_REPORTER_FILE_BASED_CONFIGS_PATH);
   }
 
+  public String getMetricReporterDefaultLabels() {
+    return getStringOrDefault(HoodieMetricsConfig.METRICS_REPORTER_DEFAULT_LABELS);
+  }
+
   /**
    * memory configs.
    */
