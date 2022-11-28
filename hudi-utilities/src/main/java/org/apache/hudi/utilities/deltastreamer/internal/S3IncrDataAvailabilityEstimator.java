@@ -71,10 +71,6 @@ public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
 
   static class S3MetadataTableInfo extends HoodieIncrSourceEstimator.HudiSourceTableInfo {
     public static final String S3_INCR_SOURCE_RATE_ESTIMATOR_KEY = HOODIE_SRC_BASE_PATH;
-    private static final String S3_BUCKET_NAME_FIELD = "s3.bucket.name";
-    private static final String S3_OBJECT_FIELD = "s3.object.";
-    private static final String S3_KEY_FIELD = "key";
-    private static final String S3_SIZE_FIELD = "size";
     // In the case of S3, we do not need to ingest in real-time, hence setting
     // a min sync interval of 5mins.
     private static final long MIN_SYNC_INTERVAL_MS = 300000;
@@ -82,18 +78,20 @@ public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
     private final TypedProperties props;
 
     private final JavaSparkContext jssc;
-    private final String s3MetadataBasePath;
+    private final String metadataTableBasePath;
     private final SparkSession sparkSession;
+    private final FsIncrMetadataTableConfigProvider fsIncrMetadataTableConfigProvider;
     private Dataset<Row> incrementalDataset;
     private long lastSyncTimeMs;
 
-    private S3MetadataTableInfo(JavaSparkContext jssc, String s3MetadataBasePath, TypedProperties props) {
-      super(jssc, s3MetadataBasePath, props);
+    private S3MetadataTableInfo(JavaSparkContext jssc, String metadataTableBasePath, TypedProperties props) {
+      super(jssc, metadataTableBasePath, props);
       this.jssc = jssc;
-      this.s3MetadataBasePath = s3MetadataBasePath;
+      this.metadataTableBasePath = metadataTableBasePath;
       this.sparkSession = SparkSession.builder().config(jssc.getConf()).getOrCreate();
       this.props = props;
       lastSyncTimeMs = 0L;
+      this.fsIncrMetadataTableConfigProvider = FsIncrMetadataTableConfigProvider.getInstance(metadataTableBasePath);
     }
 
     static synchronized S3MetadataTableInfo createOrGetInstance(JavaSparkContext jssc, TypedProperties props) {
@@ -124,13 +122,14 @@ public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
           .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_INCREMENTAL_OPT_VAL())
           .option(DataSourceReadOptions.BEGIN_INSTANTTIME().key(), instantEndpts.getLeft())
           .option(DataSourceReadOptions.END_INSTANTTIME().key(), instantEndpts.getRight())
-          .load(s3MetadataBasePath)
-          .filter(S3_OBJECT_FIELD + S3_SIZE_FIELD + " > 0")
-          .select(HoodieRecord.COMMIT_TIME_METADATA_FIELD, S3_BUCKET_NAME_FIELD, S3_OBJECT_FIELD + S3_KEY_FIELD, S3_OBJECT_FIELD + S3_SIZE_FIELD)
+          .load(metadataTableBasePath)
+          .filter(fsIncrMetadataTableConfigProvider.getSizeFieldName() + " > 0")
+          .select(HoodieRecord.COMMIT_TIME_METADATA_FIELD, fsIncrMetadataTableConfigProvider.getBucketFieldName(),
+              fsIncrMetadataTableConfigProvider.getKeyFieldName(), fsIncrMetadataTableConfigProvider.getSizeFieldName())
           .distinct();
 
       LOG.info(String.format("Refreshed the incr s3 metadata %s source rate, took %s ms to get all data from instant %s with source size %s",
-          s3MetadataBasePath,
+          metadataTableBasePath,
           (System.currentTimeMillis() - lastSyncTimeMs),
           instantEndpts.getLeft(),
           incrementalDataset.count()));
@@ -146,14 +145,15 @@ public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
     private Dataset<Row> runSnapshotQuery(String commit) {
       long snapshotStarTimeMs = System.currentTimeMillis();
       Dataset<Row> source = sparkSession.read().format("org.apache.hudi")
-          .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_SNAPSHOT_OPT_VAL()).load(s3MetadataBasePath)
+          .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_SNAPSHOT_OPT_VAL()).load(metadataTableBasePath)
           .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD, commit))
-          .filter(S3_OBJECT_FIELD + S3_SIZE_FIELD + " > 0")
-          .select(HoodieRecord.COMMIT_TIME_METADATA_FIELD, S3_BUCKET_NAME_FIELD, S3_OBJECT_FIELD + S3_KEY_FIELD, S3_OBJECT_FIELD + S3_SIZE_FIELD)
+          .filter(fsIncrMetadataTableConfigProvider.getSizeFieldName() + " > 0")
+          .select(HoodieRecord.COMMIT_TIME_METADATA_FIELD, fsIncrMetadataTableConfigProvider.getBucketFieldName(), fsIncrMetadataTableConfigProvider.getKeyFieldName(),
+             fsIncrMetadataTableConfigProvider.getSizeFieldName())
           .distinct();
 
       LOG.info(String.format("Made a one-time snapshot query for the s3 metadata %s source rate, took %s ms to get all data from instant %s with source size %s",
-          s3MetadataBasePath,
+          metadataTableBasePath,
           (System.currentTimeMillis() - snapshotStarTimeMs),
           commit,
           source.count()));
@@ -164,7 +164,7 @@ public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
     private Dataset<Row> getEventsRows(String startCommitInstant) {
       // Currently, we assume strategy is set to READ_UPTO_LATEST_COMMIT,
       // if checkpoint is missing from source table we have to issue snapshot query
-      HoodieTableMetaClient srcMetaClient = HoodieTableMetaClient.builder().setConf(jssc.hadoopConfiguration()).setBasePath(s3MetadataBasePath).setLoadActiveTimelineOnLoad(true).build();
+      HoodieTableMetaClient srcMetaClient = HoodieTableMetaClient.builder().setConf(jssc.hadoopConfiguration()).setBasePath(metadataTableBasePath).setLoadActiveTimelineOnLoad(true).build();
       HoodieTimeline activeCommitTimeline = srcMetaClient.getActiveTimeline().getCommitTimeline().filterCompletedInstants();
 
       if (activeCommitTimeline.isBeforeTimelineStarts(startCommitInstant)) {
@@ -180,8 +180,8 @@ public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
       String startCommitInstant = (lastCommittedInstant.isPresent()) ? lastCommittedInstant.get() : IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
       if (keyPrefix.isPresent()) {
         Row aggregateRow = getEventsRows(startCommitInstant)
-            .filter(S3_KEY_FIELD + " like '" + keyPrefix.get() + "%'")
-            .agg(org.apache.spark.sql.functions.sum(S3_SIZE_FIELD).cast("long")).first();
+            .filter(fsIncrMetadataTableConfigProvider.getAggregateKeyFieldName() + " like '" + keyPrefix.get() + "%'")
+            .agg(org.apache.spark.sql.functions.sum(fsIncrMetadataTableConfigProvider.getAggregateSizeFieldName()).cast("long")).first();
 
         if (!aggregateRow.isNullAt(0)) {
           aggrBytes = aggregateRow.getLong(0);
@@ -189,15 +189,103 @@ public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
       }
 
       LOG.info(String.format("Computed the total data waiting for ingest for the S3 metadata basepath: %s with prefix %s is %s bytes with starting commit (last committed commit) %s",
-          s3MetadataBasePath,
+          metadataTableBasePath,
           keyPrefix,
           aggrBytes,
           startCommitInstant));
       return aggrBytes;
     }
 
-    public String getS3MetadataBasePath() {
-      return s3MetadataBasePath;
+    public String getMetadataTableBasePath() {
+      return metadataTableBasePath;
     }
   }
+
+  interface FsIncrMetadataTableConfigProvider {
+
+    String getBucketFieldName();
+
+    String getKeyFieldName();
+
+    String getSizeFieldName();
+
+    String getAggregateKeyFieldName();
+
+    String getAggregateSizeFieldName();
+
+    static FsIncrMetadataTableConfigProvider getInstance(String tableBasePath) {
+      switch (cloudProvider(tableBasePath)) {
+        case "AWS":
+          return new S3IncrMetadataTableConfigProvider();
+        case "GCP":
+          return new GcsIncrMetadataTableConfigProvider();
+        default:
+          throw new RuntimeException("cloudProvider could not be inferred from metadata table basePath: " + tableBasePath);
+      }
+    }
+
+    static String cloudProvider(String tableBasePath) {
+      if (tableBasePath.startsWith("s3://") || tableBasePath.startsWith("s3a://")) {
+        return "AWS";
+      } else if (tableBasePath.startsWith("gs://")) {
+        return "GCP";
+      }
+      return "";
+    }
+  }
+
+  private static class GcsIncrMetadataTableConfigProvider implements FsIncrMetadataTableConfigProvider {
+    @Override
+    public String getBucketFieldName() {
+      return "bucket";
+    }
+
+    @Override
+    public String getKeyFieldName() {
+      return "name";
+    }
+
+    @Override
+    public String getSizeFieldName() {
+      return "size";
+    }
+
+    @Override
+    public String getAggregateKeyFieldName() {
+      return "name";
+    }
+
+    @Override
+    public String getAggregateSizeFieldName() {
+      return "size";
+    }
+  }
+
+  private static class S3IncrMetadataTableConfigProvider implements FsIncrMetadataTableConfigProvider {
+    @Override
+    public String getBucketFieldName() {
+      return "s3.bucket.name";
+    }
+
+    @Override
+    public String getKeyFieldName() {
+      return "s3.object.key";
+    }
+
+    @Override
+    public String getSizeFieldName() {
+      return "s3.object.size";
+    }
+
+    @Override
+    public String getAggregateKeyFieldName() {
+      return "key";
+    }
+
+    @Override
+    public String getAggregateSizeFieldName() {
+      return "size";
+    }
+  }
+
 }
