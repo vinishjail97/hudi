@@ -110,11 +110,16 @@ public class HoodieIncrSourceEstimator extends SourceDataAvailabilityEstimator {
     protected synchronized Pair<String, String> getMinAndMaxInstantsForScheduling() {
       if (lastActiveTimelineSyncTimeMs <= 0 || (System.currentTimeMillis() - lastActiveTimelineSyncTimeMs) > MIN_SYNC_INTERVAL_MS) {
         HoodieTableMetaClient srcMetaClient = HoodieTableMetaClient.builder().setConf(jssc.hadoopConfiguration()).setBasePath(hoodieSourceTableBasePath).setLoadActiveTimelineOnLoad(true).build();
-        HoodieTimeline activeCommitTimeline = srcMetaClient.getActiveTimeline().getCommitTimeline().filterCompletedInstants();
+        HoodieTimeline activeCommitTimeline = srcMetaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants();
 
-        int minInstantToSchedulePos = (INSTANT_THRESHOLD_PERC * activeCommitTimeline.countInstants()) / 100;
-        minInstantToSchedule = activeCommitTimeline.nthInstant(minInstantToSchedulePos).get().getTimestamp();
-        maxInstantToSchedule = activeCommitTimeline.lastInstant().get().getTimestamp();
+        if (activeCommitTimeline.countInstants() > 0) {
+          int minInstantToSchedulePos = (INSTANT_THRESHOLD_PERC * activeCommitTimeline.countInstants()) / 100;
+          minInstantToSchedule = activeCommitTimeline.nthInstant(minInstantToSchedulePos).get().getTimestamp();
+          maxInstantToSchedule = activeCommitTimeline.lastInstant().get().getTimestamp();
+        } else {
+          minInstantToSchedule = IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
+          maxInstantToSchedule = IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
+        }
 
         LOG.info(String.format("Active Timeline refreshed with minThresholdInstant %s and maxThresholdInstant %s", this.minInstantToSchedule, maxInstantToSchedule));
         lastActiveTimelineSyncTimeMs = System.currentTimeMillis();
