@@ -303,30 +303,25 @@ public class OnehouseDeltaStreamer implements Serializable {
                 jobInfo.onSyncScheduled();
                 CompletableFuture.supplyAsync(() -> {
                   LogContext.getInstance().withTableDetails(jobInfo.tableName, jobInfo.databaseName);
-                  if (jobInfo.canStart()) {
-                    try {
+                  try {
+                    if (jobInfo.canStart()) {
                       jobInfo.onSyncStarted();
                       HoodieDeltaStreamer.DeltaSyncService syncService = jobInfo.deltaSync;
                       syncService.getDeltaSync().syncOnce();
-                    } catch (IOException e) {
-                      throw new HoodieIOException(e.getMessage(), e);
-                    } finally {
-                      LogContext.clear();
+                      jobInfo.onSyncSuccess();
+                      LOG.info("Successfully ran job for table: " + jobInfo.getSourceTablePath());
+                    } else {
+                      jobInfo.onSyncCompleted();
+                      LOG.info("Skipped job run for table: " + jobInfo.getSourceTablePath());
                     }
+                  } catch (Exception e) {
+                    jobInfo.onSyncFailure();
+                    LOG.error("Failed to run job for table: " + jobInfo.getSourceTablePath(), e);
+                  } finally {
+                    LogContext.clear();
                   }
                   return null;
-                }, multiTableStreamThreadPool).whenCompleteAsync((response, throwable) -> {
-                  LogContext.getInstance().withTableDetails(jobInfo.tableName, jobInfo.databaseName);
-                  if (throwable != null) {
-                    jobInfo.onSyncFailure();
-                    LOG.error("Failed to run job for table: " + jobInfo.getSourceTablePath(), throwable.getCause());
-                    LOG.error("StackTrace: ", throwable);
-                  } else {
-                    jobInfo.onSyncSuccess();
-                    LOG.info("Successfully ran job for table: " + jobInfo.getSourceTablePath());
-                  }
-                  LogContext.clear();
-                });
+                }, multiTableStreamThreadPool);
               });
 
               LOG.info("Sleeping for " + INGESTION_SCHEDULING_FREQUENCY_MS + " milliseconds before checking the source topics for ingestion.");
@@ -381,47 +376,57 @@ public class OnehouseDeltaStreamer implements Serializable {
       }
 
       private synchronized void resolve() {
-        desiredJobStatuses = UtilHelpers.readConfig(hadoopConf, new Path(multiTableConfigs.tablePropsFile), Collections.emptyList()).getProps().entrySet().stream()
-            .collect(Collectors.toMap(entry -> entry.getKey().toString(), entry -> JobStatus.valueOf(entry.getValue().toString().toUpperCase())));
-        // stop jobs that were removed form the desiredJobStatuses
-        List<String> removed = currentJobStatuses.keySet().stream().filter(jobIdentifier -> {
-          if (!desiredJobStatuses.containsKey(jobIdentifier)) {
-            LOG.info("JobManager removing: " + jobIdentifier);
-            JobInfo jobToStop = jobInfoMap.remove(jobIdentifier);
-            if (jobToStop != null) {
-              jobToStop.deltaSync.close();
-              return true;
+        try {
+          desiredJobStatuses = UtilHelpers.readConfig(hadoopConf, new Path(multiTableConfigs.tablePropsFile), Collections.emptyList()).getProps().entrySet().stream()
+              .collect(Collectors.toMap(entry -> entry.getKey().toString(), entry -> JobStatus.valueOf(entry.getValue().toString().toUpperCase())));
+          // stop jobs that were removed form the desiredJobStatuses
+          List<String> removed = currentJobStatuses.keySet().stream().filter(jobIdentifier -> {
+            if (!desiredJobStatuses.containsKey(jobIdentifier)) {
+              LOG.info("JobManager removing: " + jobIdentifier);
+              JobInfo jobToStop = jobInfoMap.get(jobIdentifier);
+              if (jobToStop != null) {
+                try {
+                  jobToStop.deltaSync.close();
+                  jobInfoMap.remove(jobIdentifier);
+                  return true;
+                } catch (Exception ex) {
+                  LOG.error(String.format("Failed to close DeltaSync for: %s, will retry in next resolve() iteration", jobIdentifier), ex);
+                  return false;
+                }
+              }
             }
-          }
-          return false;
-        }).collect(Collectors.toList());
-        // remove the stopped jobs from the current job statuses
-        removed.forEach(currentJobStatuses::remove);
+            return false;
+          }).collect(Collectors.toList());
+          // remove the stopped jobs from the current job statuses
+          removed.forEach(currentJobStatuses::remove);
 
-        List<String> jobsFailedToInitialize = new ArrayList<>();
-        for (Map.Entry<String, JobStatus> desiredJobStatusEntry : desiredJobStatuses.entrySet()) {
-          String jobIdentifier = desiredJobStatusEntry.getKey();
-          JobStatus currentJobStatus = currentJobStatuses.get(jobIdentifier);
-          // any job not in the desiredJobStatuses but not the currentJobStatuses should be created
-          if (currentJobStatus == null) {
-            LOG.info("JobManager adding: " + jobIdentifier);
-            Option<JobInfo> jobInfo = jobInfoCreator.apply(jobIdentifier, this);
-            if (jobInfo.isPresent()) {
-              jobInfoMap.putIfAbsent(jobIdentifier, jobInfo.get());
-              setCurrentJobStatus(jobIdentifier, desiredJobStatusEntry.getValue());
-            } else {
-              jobsFailedToInitialize.add(jobIdentifier);
+          List<String> jobsFailedToInitialize = new ArrayList<>();
+          for (Map.Entry<String, JobStatus> desiredJobStatusEntry : desiredJobStatuses.entrySet()) {
+            String jobIdentifier = desiredJobStatusEntry.getKey();
+            JobStatus currentJobStatus = currentJobStatuses.get(jobIdentifier);
+            // any job not in the desiredJobStatuses but not the currentJobStatuses should be created
+            if (currentJobStatus == null) {
+              LOG.info("JobManager adding: " + jobIdentifier);
+              Option<JobInfo> jobInfo = jobInfoCreator.apply(jobIdentifier, this);
+              if (jobInfo.isPresent()) {
+                jobInfoMap.putIfAbsent(jobIdentifier, jobInfo.get());
+                setCurrentJobStatus(jobIdentifier, desiredJobStatusEntry.getValue());
+              } else {
+                jobsFailedToInitialize.add(jobIdentifier);
+              }
+            } else if (desiredJobStatusEntry.getValue() == JobStatus.PAUSED && !jobInfoMap.get(jobIdentifier).isRunning()) {
+              // see which jobs need to be paused and whether they can be paused now
+              setCurrentJobStatus(jobIdentifier, JobStatus.PAUSED);
+            } else if (desiredJobStatusEntry.getValue() == JobStatus.RUNNING && currentJobStatus == JobStatus.PAUSED) {
+              // make sure properties are updated when un-pausing a stream
+              jobInfoMap.get(jobIdentifier).markPropertiesAsUpdated();
             }
-          } else if (desiredJobStatusEntry.getValue() == JobStatus.PAUSED && !jobInfoMap.get(jobIdentifier).isRunning()) {
-            // see which jobs need to be paused and whether they can be paused now
-            setCurrentJobStatus(jobIdentifier, JobStatus.PAUSED);
-          } else if (desiredJobStatusEntry.getValue() == JobStatus.RUNNING && currentJobStatus == JobStatus.PAUSED) {
-            // make sure properties are updated when un-pausing a stream
-            jobInfoMap.get(jobIdentifier).markPropertiesAsUpdated();
           }
-        }
-        if (jobInfoMap.size() == 0) {
-          throw new IllegalArgumentException("All the jobs failed during initialization " + jobsFailedToInitialize);
+          if (jobInfoMap.size() == 0) {
+            throw new IllegalArgumentException("All the jobs failed during initialization " + jobsFailedToInitialize);
+          }
+        } catch (Exception ex) {
+          LOG.error("JobManager unable to refresh state", ex);
         }
       }
 
@@ -451,6 +456,7 @@ public class OnehouseDeltaStreamer implements Serializable {
     }
 
     public static class JobInfo {
+      private static final long MAX_BACKOFF_MS = 30 * 60 * 1000; // 30 minutes
       private final JavaSparkContext jssc;
       private final Configuration hadoopConfig;
 
@@ -700,7 +706,7 @@ public class OnehouseDeltaStreamer implements Serializable {
 
       void onSyncFailure() {
         numberSyncFailures.incrementAndGet();
-        nextTimeScheduleMsecs = System.currentTimeMillis() + (numberConsecutiveFailures.incrementAndGet() * configs.minSyncIntervalPostFailuresSeconds * 1000);
+        nextTimeScheduleMsecs = System.currentTimeMillis() + Math.min(MAX_BACKOFF_MS, numberConsecutiveFailures.incrementAndGet() * configs.minSyncIntervalPostFailuresSeconds * 1000);
         onSyncCompleted();
         // update metrics
         deltaSync.getDeltaSync().getMetrics().updateIsActivelyIngesting(0);
