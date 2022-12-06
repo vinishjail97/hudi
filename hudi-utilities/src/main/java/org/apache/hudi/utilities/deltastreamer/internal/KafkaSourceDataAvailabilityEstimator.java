@@ -20,7 +20,6 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
 import org.apache.hudi.utilities.sources.helpers.KafkaOffsetGen;
 
@@ -59,19 +58,21 @@ public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailability
   }
 
   @Override
-  Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+  IngestionStats getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     long recordSizeBytes = (averageRecordSizeInBytes.isPresent() && averageRecordSizeInBytes.get() > 0L) ? averageRecordSizeInBytes.get() : DEFAULT_RECORD_SIZE;
     Long totalEventsAvailable = new KafkaTopicInfo(properties, lastCommittedCheckpointStr, recordSizeBytes, sourceLimit).eventsAvailableForTopic();
+    // Measure the approx source lag as the time taken to ingest the current data available in the source.
+    Long sourceLagSecs = totalEventsAvailable / Math.min(sourceLimit, maxBatchEvents) * minSyncTimeSecs;
 
     // Either the aggr size of available kafka events is at least minSourceBytesIngestion
     // or if the number of events exceeds the max number of events per ingestion batch.
     Long estimatedBytesAvailableForIngestion = (totalEventsAvailable * recordSizeBytes);
     if (estimatedBytesAvailableForIngestion >= minSourceBytesIngestion || totalEventsAvailable > Math.min(sourceLimit, maxBatchEvents)) {
-      return Pair.of(IngestionSchedulingStatus.SCHEDULE_IMMEDIATELY, estimatedBytesAvailableForIngestion);
+      return new IngestionStats(IngestionSchedulingStatus.SCHEDULE_IMMEDIATELY, estimatedBytesAvailableForIngestion, sourceLagSecs);
     } else if (totalEventsAvailable > 0) {
-      return Pair.of(IngestionSchedulingStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, estimatedBytesAvailableForIngestion);
+      return new IngestionStats(IngestionSchedulingStatus.SCHEDULE_AFTER_MIN_SYNC_TIME, estimatedBytesAvailableForIngestion, sourceLagSecs);
     }
-    return Pair.of(IngestionSchedulingStatus.SCHEDULE_DEFER, 0L);
+    return new IngestionStats(IngestionSchedulingStatus.SCHEDULE_DEFER, 0L, 0L);
   }
 
   static class KafkaTopicInfo {
@@ -88,7 +89,7 @@ public class KafkaSourceDataAvailabilityEstimator extends SourceDataAvailability
       this.averageRecordSizeInBytes = averageRecordSizeInBytes;
     }
 
-    /** The source status is computed as the difference between the latest offset per topic-partition and
+    /** The source ingestionSchedulingStatus is computed as the difference between the latest offset per topic-partition and
     * the committed offset from the latest Hudi commit file. The load (num of events) is then summed across all
     * partitions of a topic.
     */

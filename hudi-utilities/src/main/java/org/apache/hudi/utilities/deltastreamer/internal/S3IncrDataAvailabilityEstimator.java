@@ -26,6 +26,7 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.utilities.sources.HoodieIncrSource;
 import org.apache.hudi.utilities.sources.S3EventsHoodieIncrSource;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 
@@ -53,20 +54,26 @@ public class S3IncrDataAvailabilityEstimator extends HoodieIncrSourceEstimator {
   private static final Logger LOG = LogManager.getLogger(S3IncrDataAvailabilityEstimator.class);
 
   private final Option<String> s3KeyPrefix;
+  private final int numInstantsPerFetch;
 
   public S3IncrDataAvailabilityEstimator(JavaSparkContext jssc, TypedProperties properties) {
     super(jssc, properties);
     s3KeyPrefix = Option.ofNullable(properties.getString(S3EventsHoodieIncrSource.Config.S3_KEY_PREFIX, null));
+    this.numInstantsPerFetch = properties.getInteger(HoodieIncrSource.Config.NUM_INSTANTS_PER_FETCH, HoodieIncrSource.Config.DEFAULT_NUM_INSTANTS_PER_FETCH);
   }
 
   @Override
-  public Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+  public IngestionStats getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     S3MetadataTableInfo s3MetadataTableInfo = S3MetadataTableInfo.createOrGetInstance(jssc, properties);
     String lastCommittedCheckpoint = (lastCommittedCheckpointStr.isPresent()) ? lastCommittedCheckpointStr.get() : IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
-    Pair<String, String> instantThresholds = s3MetadataTableInfo.getMinAndMaxInstantsForScheduling();
+    HoodieIncrSourceEstimator.HudiSourceTableInfo.TimelineStats stats = s3MetadataTableInfo.getMinAndMaxInstantsForScheduling(lastCommittedCheckpoint);
     Long aggrBytesPerIncrJob = s3MetadataTableInfo.getAggrBytesPerIncrJob(lastCommittedCheckpointStr, s3KeyPrefix);
+    // Measure the approx source lag as the time taken to ingest the current data available in the source.
+    Long sourceLagSecs = Long.valueOf(stats.numInstantsToIngest) / numInstantsPerFetch * minSyncTimeSecs;
 
-    return Pair.of(getScheduleStatus(lastCommittedCheckpoint, instantThresholds), aggrBytesPerIncrJob);
+    return new IngestionStats(
+        getIngestionSchedulingStatus(lastCommittedCheckpoint, Pair.of(stats.minInstantToSchedule, stats.maxInstantToSchedule)), aggrBytesPerIncrJob, sourceLagSecs);
+
   }
 
   static class S3MetadataTableInfo extends HoodieIncrSourceEstimator.HudiSourceTableInfo {

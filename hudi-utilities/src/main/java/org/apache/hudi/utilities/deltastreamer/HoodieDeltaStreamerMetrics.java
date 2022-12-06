@@ -132,6 +132,12 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
     }
   }
 
+  public void updateSourceIngestionLag(Long sourceLagSecs) {
+    if (config.isMetricsOn()) {
+      metrics.registerGauge(getMetricsName("deltastreamer", "sourceLagSecs"), sourceLagSecs);
+    }
+  }
+
   public void updateTotalSourceBytesAvailableForIngest(long totalSourceBytesAvailable) {
     if (config.isMetricsOn()) {
       metrics.registerGauge(getMetricsName("deltastreamer", "totalSourceBytesAvailable"), totalSourceBytesAvailable);

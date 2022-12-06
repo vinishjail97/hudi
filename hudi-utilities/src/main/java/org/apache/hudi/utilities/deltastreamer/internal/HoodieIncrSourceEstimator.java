@@ -23,6 +23,7 @@ import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.utilities.sources.HoodieIncrSource;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 
 import org.apache.log4j.LogManager;
@@ -49,29 +50,35 @@ public class HoodieIncrSourceEstimator extends SourceDataAvailabilityEstimator {
   // then the ingestion of this derived table is scheduled immediately, else its scheduled
   // based on the min sync time.
   private static final int INSTANT_THRESHOLD_PERC = 30;
+  private final int numInstantsPerFetch;
 
   public HoodieIncrSourceEstimator(JavaSparkContext jssc, TypedProperties properties) {
     super(jssc, properties);
+    this.numInstantsPerFetch = properties.getInteger(HoodieIncrSource.Config.NUM_INSTANTS_PER_FETCH, HoodieIncrSource.Config.DEFAULT_NUM_INSTANTS_PER_FETCH);
   }
 
   @Override
-  public Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
+  public IngestionStats getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit) {
     HudiSourceTableInfo hudiSourceTableInfo = HudiSourceTableInfo.createOrGetInstance(jssc, properties);
     String lastCommittedCheckpoint = (lastCommittedCheckpointStr.isPresent()) ? lastCommittedCheckpointStr.get() : IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
-    Pair<String, String> instantThresholds = hudiSourceTableInfo.getMinAndMaxInstantsForScheduling();
+    HudiSourceTableInfo.TimelineStats stats = hudiSourceTableInfo.getMinAndMaxInstantsForScheduling(lastCommittedCheckpoint);
+    // Measure the approx source lag as the time taken to ingest the current data available in the source.
+    Long sourceLagSecs = Long.valueOf(stats.numInstantsToIngest) / numInstantsPerFetch * minSyncTimeSecs;
 
     // Currently we do not estimate the actual bytes for the source hudi table
-    return Pair.of(getScheduleStatus(lastCommittedCheckpoint, instantThresholds), 0L);
+    IngestionSchedulingStatus ingestionSchedulingStatus = getIngestionSchedulingStatus(lastCommittedCheckpoint, Pair.of(stats.minInstantToSchedule, stats.maxInstantToSchedule));
+    return new IngestionStats(ingestionSchedulingStatus,
+        (ingestionSchedulingStatus == IngestionSchedulingStatus.SCHEDULE_DEFER) ? 0L : DEFAULT_AVAILABLE_SOURCE_BYTES,
+        sourceLagSecs);
   }
 
   /**
-   * Computes the status for scheduling ingestion based on the instant (commit) thresholds and the last committed instant.
+   * Computes the ingestionSchedulingStatus for scheduling ingestion based on the instant (commit) thresholds and the last committed instant.
    * @param lastCommittedCheckpoint last committed instant.
    * @param instantThresholds instant (commit) thresholds within the active timeline.
    * @return The {@link IngestionSchedulingStatus}
    */
-  public IngestionSchedulingStatus getScheduleStatus(String lastCommittedCheckpoint, Pair<String, String> instantThresholds) {
-    // Currently we do not estimate the actual bytes for the source hudi table
+  public IngestionSchedulingStatus getIngestionSchedulingStatus(String lastCommittedCheckpoint, Pair<String, String> instantThresholds) {
     if (HoodieTimeline.compareTimestamps(lastCommittedCheckpoint, HoodieTimeline.LESSER_THAN_OR_EQUALS, instantThresholds.getLeft())) {
       LOG.info(String.format("Scheduling ingestion right away since lastCommittedCheckpoint %s <= lowerThresholdInstant %s", lastCommittedCheckpoint, instantThresholds.getLeft()));
       return IngestionSchedulingStatus.SCHEDULE_IMMEDIATELY;
@@ -80,7 +87,6 @@ public class HoodieIncrSourceEstimator extends SourceDataAvailabilityEstimator {
       return IngestionSchedulingStatus.SCHEDULE_AFTER_MIN_SYNC_TIME;
     }
     return IngestionSchedulingStatus.SCHEDULE_DEFER;
-
   }
 
   public static class HudiSourceTableInfo {
@@ -90,6 +96,8 @@ public class HoodieIncrSourceEstimator extends SourceDataAvailabilityEstimator {
     private final JavaSparkContext jssc;
     private String minInstantToSchedule;
     private String maxInstantToSchedule;
+    private int numInstantsToIngest;
+
     private long lastActiveTimelineSyncTimeMs;
 
     public HudiSourceTableInfo(JavaSparkContext jssc, String hoodieSourceTableBasePath, TypedProperties props) {
@@ -107,24 +115,45 @@ public class HoodieIncrSourceEstimator extends SourceDataAvailabilityEstimator {
       return HOODIE_SRC_TABLE_BASE_PATH_MAP.get(hoodieSourceTableBasePath);
     }
 
-    protected synchronized Pair<String, String> getMinAndMaxInstantsForScheduling() {
+    protected synchronized TimelineStats getMinAndMaxInstantsForScheduling(String lastCommittedCheckpoint) {
       if (lastActiveTimelineSyncTimeMs <= 0 || (System.currentTimeMillis() - lastActiveTimelineSyncTimeMs) > MIN_SYNC_INTERVAL_MS) {
         HoodieTableMetaClient srcMetaClient = HoodieTableMetaClient.builder().setConf(jssc.hadoopConfiguration()).setBasePath(hoodieSourceTableBasePath).setLoadActiveTimelineOnLoad(true).build();
         HoodieTimeline activeCommitTimeline = srcMetaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants();
 
         if (activeCommitTimeline.countInstants() > 0) {
           int minInstantToSchedulePos = (INSTANT_THRESHOLD_PERC * activeCommitTimeline.countInstants()) / 100;
-          minInstantToSchedule = activeCommitTimeline.nthInstant(minInstantToSchedulePos).get().getTimestamp();
+          if (activeCommitTimeline.nthInstant(minInstantToSchedulePos).isPresent()) {
+            minInstantToSchedule = activeCommitTimeline.nthInstant(minInstantToSchedulePos).get().getTimestamp();
+          } else {
+            minInstantToSchedule = activeCommitTimeline.firstInstant().get().getTimestamp();
+          }
           maxInstantToSchedule = activeCommitTimeline.lastInstant().get().getTimestamp();
+          HoodieTimeline remainingTimeline = activeCommitTimeline.findInstantsInRange(lastCommittedCheckpoint, maxInstantToSchedule);
+          numInstantsToIngest = remainingTimeline.countInstants();
         } else {
           minInstantToSchedule = IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
           maxInstantToSchedule = IncrSourceHelper.DEFAULT_BEGIN_TIMESTAMP;
+          numInstantsToIngest = 0;
         }
 
-        LOG.info(String.format("Active Timeline refreshed with minThresholdInstant %s and maxThresholdInstant %s", this.minInstantToSchedule, maxInstantToSchedule));
+        LOG.info(String.format("Active Timeline refreshed with minThresholdInstant %s and maxThresholdInstant %s "
+                + "and sourceLag (num instants still to ingest) %d", this.minInstantToSchedule, maxInstantToSchedule,
+            numInstantsToIngest));
         lastActiveTimelineSyncTimeMs = System.currentTimeMillis();
       }
-      return Pair.of(minInstantToSchedule, maxInstantToSchedule);
+      return new TimelineStats(minInstantToSchedule, maxInstantToSchedule, numInstantsToIngest);
+    }
+
+    public static class TimelineStats {
+      public final String minInstantToSchedule;
+      public final String maxInstantToSchedule;
+      public final Integer numInstantsToIngest;
+
+      public TimelineStats(String minInstantToSchedule, String maxInstantToSchedule, Integer numInstantsToIngest) {
+        this.minInstantToSchedule = minInstantToSchedule;
+        this.maxInstantToSchedule = maxInstantToSchedule;
+        this.numInstantsToIngest = numInstantsToIngest;
+      }
     }
   }
 }

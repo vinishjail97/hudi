@@ -20,7 +20,6 @@ package org.apache.hudi.utilities.deltastreamer.internal;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
 
 import org.apache.spark.api.java.JavaSparkContext;
@@ -39,19 +38,24 @@ import org.apache.spark.api.java.JavaSparkContext;
  */
 public abstract class SourceDataAvailabilityEstimator {
 
+  public static final Long DEFAULT_AVAILABLE_SOURCE_BYTES = 1L;
+  public static final Long DEFAULT_SOURCE_LAG_SECS = 1L;
+
   protected final JavaSparkContext jssc;
   protected final TypedProperties properties;
   protected final long minSourceBytesIngestion;
+  protected final int minSyncTimeSecs;
 
   public SourceDataAvailabilityEstimator(JavaSparkContext jssc, TypedProperties properties) {
     this.jssc = jssc;
     this.properties = properties;
     this.minSourceBytesIngestion = properties.getLong(OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP.key(),
         OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP.defaultValue());
+    this.minSyncTimeSecs = properties.getInteger(OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.key(), OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue()) * 1000;
   }
 
   /**
-   * Returns the status of the source based on data available for ingest at any given time.
+   * Returns the ingestionSchedulingStatus of the source based on data available for ingest at any given time.
    * The following params are provided to ensure accurate numbers.
    *
    * @param lastCommittedCheckpointStr The checkpoint from the latest Hudi commit.
@@ -59,10 +63,10 @@ public abstract class SourceDataAvailabilityEstimator {
    * @param sourceLimit                Max data that will be ingested in every round.
    * @return
    */
-  abstract Pair<IngestionSchedulingStatus, Long> getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit);
+  abstract IngestionStats getDataAvailabilityStatus(Option<String> lastCommittedCheckpointStr, Option<Long> averageRecordSizeInBytes, long sourceLimit);
 
   /**
-   * Reflects the status for scheduling Ingestion for a specific table based on data availability in the source.
+   * Reflects the ingestionSchedulingStatus for scheduling Ingestion for a specific table based on data availability in the source.
    */
   public enum IngestionSchedulingStatus {
     UNKNOWN(-1), // There is no data available in the source, differ scheduling until next time estimator is run.
@@ -78,6 +82,18 @@ public abstract class SourceDataAvailabilityEstimator {
 
     public int getValue() {
       return value;
+    }
+  }
+
+  public static class IngestionStats {
+    public final IngestionSchedulingStatus ingestionSchedulingStatus;
+    public final Long bytesAvailable;
+    public final Long sourceLagSecs;
+
+    public IngestionStats(IngestionSchedulingStatus ingestionSchedulingStatus, Long bytesAvailable, Long sourceLagSecs) {
+      this.ingestionSchedulingStatus = ingestionSchedulingStatus;
+      this.bytesAvailable = bytesAvailable;
+      this.sourceLagSecs = sourceLagSecs;
     }
   }
 }
