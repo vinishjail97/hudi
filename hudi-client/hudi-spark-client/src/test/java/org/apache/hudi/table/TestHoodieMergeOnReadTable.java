@@ -686,27 +686,28 @@ public class TestHoodieMergeOnReadTable extends SparkClientFunctionalTestHarness
 
   @Test
   public void testReleaseResource() throws Exception {
-    HoodieWriteConfig.Builder builder = getConfigBuilder(true);
+    HoodieWriteConfig.Builder builder = getConfigBuilder(false);
     builder.withReleaseResourceEnabled(true);
-    builder.withAutoCommit(false);
 
     setUp(builder.build().getProps());
+    HoodieWriteConfig writeConfig = builder.build();
 
     /**
      * Write 1 (test when RELEASE_RESOURCE_ENABLE is true)
      */
-    try (SparkRDDWriteClient client = getHoodieWriteClient(builder.build())) {
+    try (SparkRDDWriteClient client = getHoodieWriteClient(writeConfig)) {
 
       String newCommitTime = "001";
       client.startCommitWithTime(newCommitTime);
-
       List<HoodieRecord> records = dataGen.generateInserts(newCommitTime, 20);
       JavaRDD<HoodieRecord> writeRecords = jsc().parallelize(records, 1);
       writeRecords.persist(StorageLevel.MEMORY_AND_DISK());
       List<WriteStatus> statuses = client.upsert(writeRecords, newCommitTime).collect();
       assertNoWriteErrors(statuses);
+
       client.commitStats(newCommitTime, statuses.stream().map(WriteStatus::getStat).collect(Collectors.toList()), Option.empty(), metaClient.getCommitActionType());
-      assertEquals(spark().sparkContext().persistentRdds().size(), 0);
+      // when auto commit is enabled, we can't unpersist the rdd at the end of write operation.
+      assertEquals(spark().sparkContext().persistentRdds().size(), writeConfig.isMetadataTableEnabled() ? 3 : 1);
     }
 
     builder.withReleaseResourceEnabled(false);

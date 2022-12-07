@@ -37,10 +37,12 @@ import org.apache.hudi.metrics.Metrics
 import org.apache.hudi.testutils.HoodieClientTestBase
 import org.apache.hudi.util.JFunction
 import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers, QuickstartUtils}
+import org.apache.spark.sql
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, concat, lit, udf}
 import org.apache.spark.sql.hudi.HoodieSparkSessionExtension
 import org.apache.spark.sql.types._
+import org.apache.spark.storage.StorageLevel
 import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 import org.junit.jupiter.api.Assertions.{assertEquals, assertThrows, assertTrue, fail}
@@ -1061,5 +1063,26 @@ class TestCOWDataSource extends HoodieClientTestBase {
 
     assertTrue(HoodieDataSourceHelpers.hasNewCommits(fs, basePath, "000"))
     assertEquals(false, Metrics.isInitialized(basePath), "Metrics should be shutdown")
+  }
+
+  @Test def testAutoUnpersistRdds() {
+    // Insert Operation
+    val records = recordsToStrings(dataGen.generateInserts("000", 100)).toList
+    val inputDF = spark.read.json(spark.sparkContext.parallelize(records, 2))
+    // clone the df so that we can use it to validate later for persistance.
+    val inputDfCloned : sql.DataFrame = spark.createDataFrame(inputDF.rdd, inputDF.schema)
+    inputDfCloned.rdd.persist(StorageLevel.MEMORY_ONLY)
+    inputDF.write.format("hudi")
+      .options(commonOpts)
+      .option(DataSourceWriteOptions.OPERATION.key, DataSourceWriteOptions.INSERT_OPERATION_OPT_VAL)
+      .option("hoodie.metadata.enable","false")
+      .mode(SaveMode.Overwrite)
+      .save(basePath)
+
+    assertTrue(HoodieDataSourceHelpers.hasNewCommits(fs, basePath, "000"))
+    // ensure that the rdd that we persisted outside of hudi write is still persisted.
+    assertEquals(1, spark.sparkContext.getPersistentRDDs.values.filter(rdd => rdd.id == inputDfCloned.rdd.id).size)
+    // verify that there are no other persisted Rdds
+    assertEquals(1, spark.sparkContext.getPersistentRDDs.values.size)
   }
 }

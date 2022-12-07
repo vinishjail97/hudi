@@ -33,9 +33,11 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Helper class to generate commit metadata.
@@ -44,6 +46,28 @@ public class CommitUtils {
 
   private static final Logger LOG = LogManager.getLogger(CommitUtils.class);
   private static final String NULL_SCHEMA_STR = Schema.create(Schema.Type.NULL).toString();
+  public static transient ConcurrentHashMap<String, List<Integer>> PERSISTED_RDD_IDS = new ConcurrentHashMap();
+
+  public static void updatePersistedRdds(String basePath, String commitTime, int id) {
+    String key = basePath + "_" + commitTime;
+    if (PERSISTED_RDD_IDS.containsKey(key)) {
+      List<Integer> value = PERSISTED_RDD_IDS.get(key);
+      value.add(id);
+      PERSISTED_RDD_IDS.put(key, value);
+    } else {
+      List<Integer> value = new ArrayList<>();
+      value.add(id);
+      PERSISTED_RDD_IDS.put(key, value);
+    }
+  }
+
+  public static List<Integer> getPersistedRddIds(String basePath, String commitTime) {
+    return PERSISTED_RDD_IDS.get(basePath + "_" + commitTime);
+  }
+
+  public static void removePersistedRdds(String basePath, String commitTime) {
+    PERSISTED_RDD_IDS.remove(basePath + "_" + commitTime);
+  }
 
   /**
    * Gets the commit action type for given write operation and table type.
