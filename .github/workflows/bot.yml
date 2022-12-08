@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   pr-tests:
-    if: ${{ !contains(github.ref, 'release') }}
+    if: ${{ !contains(github.head_ref, 'release') }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -54,7 +54,7 @@ jobs:
         run:
           mvn test -Punit-tests -DskipSparkClientUTs=true -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -pl $PR_MODULES $MVN_ARGS
   unit-tests:
-    if: contains(github.ref, 'release')
+    if: contains(github.head_ref, 'release')
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -88,7 +88,7 @@ jobs:
         run:
           mvn test -Punit-tests -DskipSparkClientUTs=true -D"$SCALA_PROFILE" -D"$SPARK_PROFILE" -am -pl $ALL_MODULES $MVN_ARGS
   spark-client-unit-tests:
-    if: contains(github.ref, 'release')
+    if: contains(github.head_ref, 'release')
     runs-on: ubuntu-latest
     strategy:
       matrix:
