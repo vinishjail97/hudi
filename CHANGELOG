@@ -867,3 +867,9 @@ c2b7ae8dbd OnehouseDeltaStreamer improvements (#157)
 f634aa208c [ONHS-3932] Support for data availability estimator in gcs incr. (#140)
 36d45eded6 adding default labels to datadog/prometheus reporters (#154)
 c78981cebb Upgrade to version release-v0.10.1 (#152)
+
+---[2022-12-13 17:47:37] [release-v0.11.1] ---
+2c4531f80a fail job if duplicate data files detected during reconcileAgainstMarkers (#109) (#169)
+984113df4d Pr tests are always required
+6b54231c54 Fix bot yaml for tests to run for release branch
+8c58715ac9 Upgrade to version release-v0.11.0
