@@ -873,3 +873,7 @@ c78981cebb Upgrade to version release-v0.10.1 (#152)
 984113df4d Pr tests are always required
 6b54231c54 Fix bot yaml for tests to run for release branch
 8c58715ac9 Upgrade to version release-v0.11.0
+
+---[2022-12-15 15:33:46] [release-v0.11.2] Adding release tag for hudi-internal release v0.11.2---
+895c1da07 add temp fix for incident 0002458 (#172)
+21277cf82 Upgrade to version release-v0.11.1 (#170)
