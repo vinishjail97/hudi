@@ -21,6 +21,7 @@ package org.apache.hudi.hive;
 import org.apache.hudi.common.model.HoodieFileFormat;
 import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.InvalidTableException;
 import org.apache.hudi.hadoop.utils.HoodieInputFormatUtils;
@@ -36,6 +37,7 @@ import org.apache.hudi.sync.common.util.SparkDataSourceTableUtils;
 
 import com.beust.jcommander.JCommander;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.parquet.schema.MessageType;
@@ -90,6 +92,10 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
 
   public HiveSyncTool(Properties props, Configuration hadoopConf) {
     super(props, hadoopConf);
+    String metastoreUris = props.getProperty(METASTORE_URIS.key());
+    if (StringUtils.isNullOrEmpty(hadoopConf.get(HiveConf.ConfVars.METASTOREURIS.varname)) && StringUtils.nonEmpty(metastoreUris)) {
+      hadoopConf.set(HiveConf.ConfVars.METASTOREURIS.varname, metastoreUris);
+    }
     HiveSyncConfig config = new HiveSyncConfig(props, hadoopConf);
     this.config = config;
     this.databaseName = config.getStringOrDefault(META_SYNC_DATABASE_NAME);
