@@ -51,7 +51,7 @@ public abstract class SourceDataAvailabilityEstimator {
     this.properties = properties;
     this.minSourceBytesIngestion = properties.getLong(OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP.key(),
         OnehouseInternalDeltastreamerConfig.MIN_BYTES_INGESTION_SOURCE_PROP.defaultValue());
-    this.minSyncTimeSecs = properties.getInteger(OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.key(), OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue()) * 1000;
+    this.minSyncTimeSecs = properties.getInteger(OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.key(), OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue());
   }
 
   /**
