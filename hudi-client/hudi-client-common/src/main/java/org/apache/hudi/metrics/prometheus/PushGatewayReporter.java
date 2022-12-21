@@ -118,7 +118,11 @@ public class PushGatewayReporter extends ScheduledReporter {
     try {
       if (deleteShutdown) {
         collectorRegistry.unregister(metricExports);
-        pushGateway.delete(jobName);
+        pushGateway.delete(jobName, labels);
+        for (String key : gaugeHashMap.keySet()) {
+          Pair<String, Map<String, String>> mapPair = MetricUtils.getLabelsAndMetricMap(key);
+          pushGateway.delete(mapPair.getKey(), mapPair.getValue());
+        }
       }
     } catch (IOException e) {
       LOG.warn("Failed to delete metrics from pushGateway with jobName {" + jobName + "}", e);
@@ -136,12 +140,12 @@ public class PushGatewayReporter extends ScheduledReporter {
           labelNames.add((String) et.getKey());
           labelValues.add((String) et.getValue());
         }
-        if (!gaugeHashMap.containsKey(stringMapPair.getKey())) {
-          gaugeHashMap.put(stringMapPair.getKey(), io.prometheus.client.Gauge.build().help("labeled metricName:" + stringMapPair.getKey())
+        if (!gaugeHashMap.containsKey(key)) {
+          gaugeHashMap.put(key, io.prometheus.client.Gauge.build().help("labeled metricName:" + stringMapPair.getKey())
               .name(stringMapPair.getKey())
               .labelNames(labelNames.toArray(labelNames.toArray(new String[0]))).register(collectorRegistry));
         }
-        gaugeHashMap.get(stringMapPair.getKey())
+        gaugeHashMap.get(key)
             .labels(labelValues.toArray(labelNames.toArray(new String[0])))
             .set((Long) gaugeEntry.getValue().getValue());
       }
