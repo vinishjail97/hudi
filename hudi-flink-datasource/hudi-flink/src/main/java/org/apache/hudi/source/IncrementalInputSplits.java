@@ -442,7 +442,8 @@ public class IncrementalInputSplits implements Serializable {
       String tableName) {
     if (commitTimeline.isBeforeTimelineStarts(instantRange.getStartInstant())) {
       // read the archived metadata if the start instant is archived.
-      HoodieArchivedTimeline archivedTimeline = metaClient.getArchivedTimeline(instantRange.getStartInstant());
+      HoodieArchivedTimeline archivedTimeline =
+          metaClient.getArchivedTimeline(instantRange.getStartInstant(), false);
       HoodieTimeline archivedCompleteTimeline = archivedTimeline.getCommitsTimeline().filterCompletedInstants();
       if (!archivedCompleteTimeline.empty()) {
         Stream<HoodieInstant> instantStream = archivedCompleteTimeline.getInstants();
