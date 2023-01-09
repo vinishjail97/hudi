@@ -39,7 +39,6 @@ import org.apache.hudi.common.model.WriteOperationType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieActiveTimeline;
 import org.apache.hudi.common.util.CommitUtils;
-import org.apache.hudi.common.util.FileIOUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieArchivalConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
@@ -57,6 +56,7 @@ import org.apache.spark.sql.SparkSession;
 import scala.collection.JavaConverters;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -94,6 +94,7 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
   private static final String FAILURE_TYPE = "failure_type";
 
   private static final String BASE_TABLE_EMPTY_COMMIT = "00000000";
+  private static final String QUARANTINE_TABLE_AVSC = "/delta-streamer-config/quarantine-table.avsc";
 
   /**
    * Delta Sync Config.
@@ -137,7 +138,9 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
     HoodieWriteConfig writeConfig = HoodieWriteConfig.newBuilder().withProperties(props).build();
     this.basePath = writeConfig.getBasePath();
     this.conf = conf;
-    this.schema = new Schema.Parser().parse(FileIOUtils.readAsUTFString(this.getClass().getResourceAsStream("/delta-streamer-config/quarantine-table.avsc")));
+    try (InputStream inputStream = this.getClass().getResourceAsStream(QUARANTINE_TABLE_AVSC)) {
+      this.schema = new Schema.Parser().parse(inputStream);
+    }
     this.quarantineTableCfg = getQuarantineTableWriteConfig();
     this.quarantineTableWriteClient = new SparkRDDWriteClient<>(new HoodieSparkEngineContext(jssc), quarantineTableCfg);
   }
