@@ -41,6 +41,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieClusteringException;
 import org.apache.hudi.exception.HoodieCommitException;
+import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieNotSupportedException;
 import org.apache.hudi.index.FlinkHoodieIndexFactory;
 import org.apache.hudi.index.HoodieIndex;
@@ -283,20 +284,18 @@ public class HoodieFlinkWriteClient<T extends HoodieRecordPayload> extends
     if (this.metadataWriter == null) {
       initMetadataWriter();
     }
+    // refresh the timeline
+
+    // Note: the data meta client is not refreshed currently, some code path
+    // relies on the meta client for resolving the latest data schema,
+    // the schema expects to be immutable for SQL jobs but may be not for non-SQL
+    // jobs.
+    this.metadataWriter.initTableMetadata();
+    this.metadataWriter.update(metadata, instantTime, getHoodieTable().isTableServiceAction(actionType, instantTime));
     try {
-      // guard the metadata writer with concurrent lock
-      this.txnManager.getLockManager().lock();
-
-      // refresh the timeline
-
-      // Note: the data meta client is not refreshed currently, some code path
-      // relies on the meta client for resolving the latest data schema,
-      // the schema expects to be immutable for SQL jobs but may be not for non-SQL
-      // jobs.
-      this.metadataWriter.initTableMetadata();
-      this.metadataWriter.update(metadata, instantTime, getHoodieTable().isTableServiceAction(actionType));
-    } finally {
-      this.txnManager.getLockManager().unlock();
+      this.metadataWriter.close();
+    } catch (Exception e) {
+      throw new HoodieException("Failed to close metadata writer ", e);
     }
   }
 

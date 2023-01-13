@@ -31,21 +31,36 @@ import org.apache.hudi.table.HoodieTable;
 public abstract class BulkInsertInternalPartitionerFactory {
 
   public static BulkInsertPartitioner get(HoodieTable table, HoodieWriteConfig config) {
+    return get(table, config, false);
+  }
+
+  public static BulkInsertPartitioner get(
+      HoodieTable table, HoodieWriteConfig config, boolean enforceNumOutputPartitions) {
     if (config.getIndexType().equals(HoodieIndex.IndexType.BUCKET)
         && config.getBucketIndexEngineType().equals(HoodieIndex.BucketIndexEngineType.CONSISTENT_HASHING)) {
       return new RDDConsistentBucketPartitioner(table);
     }
-    return get(config.getBulkInsertSortMode());
+    return get(config.getBulkInsertSortMode(), table.isPartitioned(), enforceNumOutputPartitions);
   }
 
-  public static BulkInsertPartitioner get(BulkInsertSortMode sortMode) {
+  public static BulkInsertPartitioner get(BulkInsertSortMode sortMode, boolean isTablePartitioned) {
+    return get(sortMode, isTablePartitioned, false);
+  }
+
+  public static BulkInsertPartitioner get(BulkInsertSortMode sortMode,
+                                          boolean isTablePartitioned,
+                                          boolean enforceNumOutputPartitions) {
     switch (sortMode) {
       case NONE:
-        return new NonSortPartitioner();
+        return new NonSortPartitioner(enforceNumOutputPartitions);
       case GLOBAL_SORT:
         return new GlobalSortPartitioner();
       case PARTITION_SORT:
         return new RDDPartitionSortPartitioner();
+      case PARTITION_PATH_REPARTITION:
+        return new PartitionPathRepartitionPartitioner(isTablePartitioned);
+      case PARTITION_PATH_REPARTITION_AND_SORT:
+        return new PartitionPathRepartitionAndSortPartitioner(isTablePartitioned);
       default:
         throw new HoodieException("The bulk insert sort mode \"" + sortMode.name() + "\" is not supported.");
     }

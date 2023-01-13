@@ -99,7 +99,7 @@ public class HoodieTableMetaClient implements Serializable {
   public static final String MARKER_EXTN = ".marker";
 
   // In-memory cache for archived timeline based on the start instant time
-  // In most of the scenarios, only one entry should be present in this map
+  // Only one entry should be present in this map
   private final Map<String, HoodieArchivedTimeline> archivedTimelineMap = new HashMap<>();
 
   // NOTE: Since those two parameters lay on the hot-path of a lot of computations, we
@@ -107,7 +107,6 @@ public class HoodieTableMetaClient implements Serializable {
   //       computations secured by its immutability
   protected SerializablePath basePath;
   protected SerializablePath metaPath;
-
   private transient HoodieWrapperFileSystem fs;
   private boolean loadActiveTimelineOnLoad;
   protected SerializableConfiguration hadoopConf;
@@ -119,6 +118,12 @@ public class HoodieTableMetaClient implements Serializable {
   private FileSystemRetryConfig fileSystemRetryConfig = FileSystemRetryConfig.newBuilder().build();
   protected HoodieMetastoreConfig metastoreConfig;
 
+  /**
+   *
+   * Instantiate HoodieTableMetaClient.
+   * Can only be called if table already exists
+   *
+   */
   protected HoodieTableMetaClient(Configuration conf, String basePath, boolean loadActiveTimelineOnLoad,
                                 ConsistencyGuardConfig consistencyGuardConfig, Option<TimelineLayoutVersion> layoutVersion,
                                 String payloadClassName, FileSystemRetryConfig fileSystemRetryConfig) {
@@ -404,7 +409,12 @@ public class HoodieTableMetaClient implements Serializable {
    */
   public HoodieArchivedTimeline getArchivedTimeline(String startTs, boolean useCache) {
     if (useCache) {
-      return archivedTimelineMap.computeIfAbsent(startTs, this::instantiateArchivedTimeline);
+      if (!archivedTimelineMap.containsKey(startTs)) {
+        // Only keep one entry in the map
+        archivedTimelineMap.clear();
+        archivedTimelineMap.put(startTs, instantiateArchivedTimeline(startTs));
+      }
+      return archivedTimelineMap.get(startTs);
     }
     return instantiateArchivedTimeline(startTs);
   }
@@ -527,7 +537,7 @@ public class HoodieTableMetaClient implements Serializable {
    * @return {@code true} if any commits are found, else {@code false}.
    */
   public boolean isTimelineNonEmpty() {
-    return getCommitsTimeline().filterCompletedInstants().getInstants().collect(Collectors.toList()).size() > 0;
+    return !getCommitsTimeline().filterCompletedInstants().empty();
   }
 
   /**
@@ -741,6 +751,9 @@ public class HoodieTableMetaClient implements Serializable {
     return new PropertyBuilder();
   }
 
+  /**
+   * Builder for {@link Properties}.
+   */
   public static class PropertyBuilder {
 
     private HoodieTableType tableType;

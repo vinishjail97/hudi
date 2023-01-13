@@ -124,4 +124,17 @@ public class AvroSchemaUtils {
       return false;
     }
   }
+
+  /**
+   * Returns true in case provided {@link Schema} is nullable (ie accepting null values),
+   * returns false otherwise
+   */
+  public static boolean isNullable(Schema schema) {
+    if (schema.getType() != Schema.Type.UNION) {
+      return false;
+    }
+
+    List<Schema> innerTypes = schema.getTypes();
+    return innerTypes.size() > 1 && innerTypes.stream().anyMatch(it -> it.getType() == Schema.Type.NULL);
+  }
 }

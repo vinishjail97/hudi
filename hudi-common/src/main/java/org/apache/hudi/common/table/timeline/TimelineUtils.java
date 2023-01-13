@@ -232,8 +232,8 @@ public class TimelineUtils {
   /**
    * Returns the commit metadata of the given instant.
    *
-   * @param instant   The hoodie instant
-   * @param timeline  The timeline
+   * @param instant  The hoodie instant
+   * @param timeline The timeline
    * @return the commit metadata
    */
   public static HoodieCommitMetadata getCommitMetadata(
