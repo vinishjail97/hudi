@@ -36,8 +36,8 @@ public class CopyOnWriteRestoreActionExecutor<T extends HoodieRecordPayload, I, 
                                           HoodieWriteConfig config,
                                           HoodieTable table,
                                           String instantTime,
-                                          String restoreInstantTime) {
-    super(context, config, table, instantTime, restoreInstantTime);
+                                          String savepointToRestoreTimestamp) {
+    super(context, config, table, instantTime, savepointToRestoreTimestamp);
   }
 
   @Override

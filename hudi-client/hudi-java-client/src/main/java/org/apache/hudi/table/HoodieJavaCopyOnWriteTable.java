@@ -251,16 +251,16 @@ public class HoodieJavaCopyOnWriteTable<T extends HoodieRecordPayload>
   }
 
   @Override
-  public Option<HoodieRestorePlan> scheduleRestore(HoodieEngineContext context, String restoreInstantTime, String instantToRestore) {
-    return new RestorePlanActionExecutor(context, config, this, restoreInstantTime, instantToRestore).execute();
+  public Option<HoodieRestorePlan> scheduleRestore(HoodieEngineContext context, String restoreInstantTimestamp, String savepointToRestoreTimestamp) {
+    return new RestorePlanActionExecutor(context, config, this, restoreInstantTimestamp, savepointToRestoreTimestamp).execute();
   }
 
   @Override
   public HoodieRestoreMetadata restore(HoodieEngineContext context,
-                                       String restoreInstantTime,
-                                       String instantToRestore) {
+                                       String restoreInstantTimestamp,
+                                       String savepointToRestoreTimestamp) {
     return new CopyOnWriteRestoreActionExecutor(
-        context, config, this, restoreInstantTime, instantToRestore).execute();
+        context, config, this, restoreInstantTimestamp, savepointToRestoreTimestamp).execute();
   }
 
   @Override

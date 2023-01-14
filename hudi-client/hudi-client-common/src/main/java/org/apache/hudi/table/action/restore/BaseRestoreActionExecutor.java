@@ -53,16 +53,16 @@ public abstract class BaseRestoreActionExecutor<T extends HoodieRecordPayload, I
 
   private static final Logger LOG = LogManager.getLogger(BaseRestoreActionExecutor.class);
 
-  private final String restoreInstantTime;
+  private final String savepointToRestoreTimestamp;
   private final TransactionManager txnManager;
 
   public BaseRestoreActionExecutor(HoodieEngineContext context,
                                    HoodieWriteConfig config,
                                    HoodieTable<T, I, K, O> table,
                                    String instantTime,
-                                   String restoreInstantTime) {
+                                   String savepointToRestoreTimestamp) {
     super(context, config, table, instantTime);
-    this.restoreInstantTime = restoreInstantTime;
+    this.savepointToRestoreTimestamp = savepointToRestoreTimestamp;
     this.txnManager = new TransactionManager(config, table.getMetaClient().getFs());
   }
 
@@ -132,7 +132,7 @@ public abstract class BaseRestoreActionExecutor<T extends HoodieRecordPayload, I
     // if not, rollbacks will be considered not completed and might hinder metadata table compaction.
     List<HoodieInstant> instantsToRollback = table.getActiveTimeline().getRollbackTimeline()
         .getReverseOrderedInstants()
-        .filter(instant -> HoodieActiveTimeline.GREATER_THAN.test(instant.getTimestamp(), restoreInstantTime))
+        .filter(instant -> HoodieActiveTimeline.GREATER_THAN.test(instant.getTimestamp(), savepointToRestoreTimestamp))
         .collect(Collectors.toList());
     instantsToRollback.forEach(entry -> {
       if (entry.isCompleted()) {
@@ -141,7 +141,7 @@ public abstract class BaseRestoreActionExecutor<T extends HoodieRecordPayload, I
       table.getActiveTimeline().deletePending(new HoodieInstant(HoodieInstant.State.INFLIGHT, HoodieTimeline.ROLLBACK_ACTION, entry.getTimestamp()));
       table.getActiveTimeline().deletePending(new HoodieInstant(HoodieInstant.State.REQUESTED, HoodieTimeline.ROLLBACK_ACTION, entry.getTimestamp()));
     });
-    LOG.info("Commits " + instantsRolledBack + " rollback is complete. Restored table to " + restoreInstantTime);
+    LOG.info("Commits " + instantsRolledBack + " rollback is complete. Restored table to " + savepointToRestoreTimestamp);
     return restoreMetadata;
   }
 

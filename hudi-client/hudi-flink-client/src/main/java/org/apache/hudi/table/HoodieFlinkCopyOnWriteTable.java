@@ -346,12 +346,12 @@ public class HoodieFlinkCopyOnWriteTable<T extends HoodieRecordPayload>
   }
 
   @Override
-  public Option<HoodieRestorePlan> scheduleRestore(HoodieEngineContext context, String restoreInstantTime, String instantToRestore) {
+  public Option<HoodieRestorePlan> scheduleRestore(HoodieEngineContext context, String restoreInstantTimestamp, String savepointToRestoreTimestamp) {
     throw new HoodieNotSupportedException("Restore is not supported yet");
   }
 
   @Override
-  public HoodieRestoreMetadata restore(HoodieEngineContext context, String restoreInstantTime, String instantToRestore) {
+  public HoodieRestoreMetadata restore(HoodieEngineContext context, String restoreInstantTimestamp, String savepointToRestoreTimestamp) {
     throw new HoodieNotSupportedException("Savepoint and restore is not supported yet");
   }
 
