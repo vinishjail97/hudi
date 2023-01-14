@@ -111,6 +111,18 @@ public class HoodieTableMetadataUtil {
   public static final String PARTITION_NAME_BLOOM_FILTERS = "bloom_filters";
 
   /**
+   * Returns whether the files partition of metadata table is ready for read.
+   *
+   * @param metaClient {@link HoodieTableMetaClient} instance.
+   * @return true if the files partition of metadata table is ready for read,
+   * based on the table config; false otherwise.
+   */
+  public static boolean isFilesPartitionAvailable(HoodieTableMetaClient metaClient) {
+    return metaClient.getTableConfig().getMetadataPartitions()
+        .contains(HoodieTableMetadataUtil.PARTITION_NAME_FILES);
+  }
+
+  /**
    * Collects {@link HoodieColumnRangeMetadata} for the provided collection of records, pretending
    * as if provided records have been persisted w/in given {@code filePath}
    *
@@ -147,6 +159,8 @@ public class HoodieTableMetadataUtil {
         final Object fieldVal = convertValueForSpecificDataTypes(field.schema(), genericRecord.get(field.name()), false);
         final Schema fieldSchema = getNestedFieldSchemaFromWriteSchema(genericRecord.getSchema(), field.name());
 
+        colStats.valueCount++;
+
         if (fieldVal != null && canCompare(fieldSchema)) {
           // Set the min value of the field
           if (colStats.minValue == null
@@ -158,8 +172,6 @@ public class HoodieTableMetadataUtil {
           if (colStats.maxValue == null || ConvertingGenericData.INSTANCE.compare(fieldVal, colStats.maxValue, fieldSchema) > 0) {
             colStats.maxValue = fieldVal;
           }
-
-          colStats.valueCount++;
         } else {
           colStats.nullCount++;
         }
@@ -170,23 +182,23 @@ public class HoodieTableMetadataUtil {
         Collectors.toMap(colRangeMetadata -> colRangeMetadata.getColumnName(), Function.identity());
 
     return (Map<String, HoodieColumnRangeMetadata<Comparable>>) targetFields.stream()
-      .map(field -> {
-        ColumnStats colStats = allColumnStats.get(field.name());
-        return HoodieColumnRangeMetadata.<Comparable>create(
-            filePath,
-            field.name(),
-            colStats == null ? null : coerceToComparable(field.schema(), colStats.minValue),
-            colStats == null ? null : coerceToComparable(field.schema(), colStats.maxValue),
-            colStats == null ? 0 : colStats.nullCount,
-            colStats == null ? 0 : colStats.valueCount,
-            // NOTE: Size and compressed size statistics are set to 0 to make sure we're not
-            //       mixing up those provided by Parquet with the ones from other encodings,
-            //       since those are not directly comparable
-            0,
-            0
-        );
-      })
-      .collect(collector);
+        .map(field -> {
+          ColumnStats colStats = allColumnStats.get(field.name());
+          return HoodieColumnRangeMetadata.<Comparable>create(
+              filePath,
+              field.name(),
+              colStats == null ? null : coerceToComparable(field.schema(), colStats.minValue),
+              colStats == null ? null : coerceToComparable(field.schema(), colStats.maxValue),
+              colStats == null ? 0 : colStats.nullCount,
+              colStats == null ? 0 : colStats.valueCount,
+              // NOTE: Size and compressed size statistics are set to 0 to make sure we're not
+              //       mixing up those provided by Parquet with the ones from other encodings,
+              //       since those are not directly comparable
+              0,
+              0
+          );
+        })
+        .collect(collector);
   }
 
   /**
