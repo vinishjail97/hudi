@@ -883,3 +883,14 @@ c78981cebb Upgrade to version release-v0.10.1 (#152)
 9189b0ea4 Fix deletion of prometheus pushgateway metrics with labels (#175)
 0a2fb48ce Ensure min sync time in estimator is set in secs
 00458bac5 Upgrade to version release-v0.11.2 (#173)
+
+---[2023-01-14 10:44:25] [release-v0.12.0] ---
+a79d48d7d OSS cherry picks 1 13 23 part 4 (#192)
+6743bd30c OSS cherry picks 1 13 23 part 3 (#191)
+9a99e7c91 OSS cherry picks 1 12 24 part 2 (#190)
+3491f6fd7 OSS cherry picks 1 12 24 (#189)
+c7a3fd3e1 OSS cherry picks 1 12 23 - Batch 1 (#188)
+32fe36a06 [HUDI-5348] Cherry-Pick Cache file slices in HoodieBackedTableMetadata (#7436) (#187)
+ca7b1cae4 [HUDI-5345] Cherry Pick: Avoid fs.exists calls for metadata table in HFileBootstrapIndex (#186)
+0d72919d9 close stream after reading schema for quarantine (#184)
+1a17bf38a Upgrade to version release-v0.11.3 (#179)
