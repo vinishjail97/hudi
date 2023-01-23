@@ -100,7 +100,7 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
 
   public static final ConfigProperty<String> DELTASTREAMER_META_SYNC_CLASSES = ConfigProperty
       .key("hoodie.deltastreamer.meta.sync.classes")
-      .defaultValue("org.apache.hudi.hive.HiveSyncTool")
+      .defaultValue("")
       .withDocumentation("Meta sync client class, using comma to separate multiple classes.");
 
   public static final ConfigProperty<String> DELTASTREAMER_ENABLE_FILTER_DUPES = ConfigProperty
