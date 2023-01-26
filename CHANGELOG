@@ -894,3 +894,11 @@ c7a3fd3e1 OSS cherry picks 1 12 23 - Batch 1 (#188)
 ca7b1cae4 [HUDI-5345] Cherry Pick: Avoid fs.exists calls for metadata table in HFileBootstrapIndex (#186)
 0d72919d9 close stream after reading schema for quarantine (#184)
 1a17bf38a Upgrade to version release-v0.11.3 (#179)
+
+---[2023-01-25 14:51:44] [release-v0.12.1] ---
+203f829c6 [minor] change to noDefault for sync classes (#198)
+ad6c6710d Fix metadata metric configuration for Push Gw. (#197)
+c4790ec9d Fix test failure in `TestHoodieMergeOnReadTable` (#196)
+0f59a101a Fix Spark partition validation in `TestBulkInsertInternalPartitionerForRows` (#195)
+b8210f766 Upgrade to version release-v0.12.0
+3581e3437 Add lock back in HoodieFlinkWriteClient (#194)
