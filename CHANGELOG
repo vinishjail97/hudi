@@ -902,3 +902,7 @@ c4790ec9d Fix test failure in `TestHoodieMergeOnReadTable` (#196)
 0f59a101a Fix Spark partition validation in `TestBulkInsertInternalPartitionerForRows` (#195)
 b8210f766 Upgrade to version release-v0.12.0
 3581e3437 Add lock back in HoodieFlinkWriteClient (#194)
+
+---[2023-01-28 13:31:03] [release-v0.12.2] Adding release tag for hudi-internal release-v0.12.2---
+8119cee74 Ensure we only have a single push gw client and hence a single connection pool (#200)
+4a29699f2 Upgrade to version release-v0.12.1 (#199)
