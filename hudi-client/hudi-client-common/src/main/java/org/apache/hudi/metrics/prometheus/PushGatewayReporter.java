@@ -44,13 +44,16 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.SortedMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 public class PushGatewayReporter extends ScheduledReporter {
 
   private static final Logger LOG = LogManager.getLogger(PushGatewayReporter.class);
+  // Ensures that we maintain a single PushGw client (single connection pool) per Push Gw Server instance.
+  private static final Map<String, PushGateway> PUSH_GATEWAY_PER_HOSTNAME = new ConcurrentHashMap<>();
 
-  private final PushGateway pushGateway;
+  private final PushGateway pushGatewayClient;
   private final DropwizardExports metricExports;
   private final CollectorRegistry collectorRegistry;
   private final String jobName;
@@ -75,22 +78,31 @@ public class PushGatewayReporter extends ScheduledReporter {
     this.registry = registry;
     collectorRegistry = new CollectorRegistry();
     metricExports = new DropwizardExports(registry);
-    pushGateway = createPushGatewayClient(serverHost, serverPort);
+    pushGatewayClient = createPushGatewayClient(serverHost, serverPort);
     metricExports.register(collectorRegistry);
     gaugeHashMap = new HashMap<>();
 
   }
 
-  private PushGateway createPushGatewayClient(String serverHost, int serverPort) {
+  private synchronized PushGateway createPushGatewayClient(String serverHost, int serverPort) {
+    final String serverUrl = String.format("%s:%s", serverHost, serverPort);
+    if (PUSH_GATEWAY_PER_HOSTNAME.containsKey(serverUrl)) {
+      return PUSH_GATEWAY_PER_HOSTNAME.get(serverUrl);
+    }
+
+    PushGateway pushGateway;
     if (serverPort == 443) {
       try {
-        return new PushGateway(new URL("https://" + serverHost + ":" + serverPort));
+        pushGateway = new PushGateway(new URL("https://" + serverUrl));
       } catch (MalformedURLException e) {
         e.printStackTrace();
         throw new IllegalArgumentException("Malformed pushgateway host: " + serverHost);
       }
+    } else {
+      pushGateway = new PushGateway(serverUrl);
     }
-    return new PushGateway(serverHost + ":" + serverPort);
+    PUSH_GATEWAY_PER_HOSTNAME.put(serverUrl, pushGateway);
+    return pushGateway;
   }
 
   @Override
@@ -101,7 +113,7 @@ public class PushGatewayReporter extends ScheduledReporter {
                      SortedMap<String, Timer> timers) {
     try {
       handleLabeledMetrics();
-      pushGateway.pushAdd(collectorRegistry, jobName, labels);
+      pushGatewayClient.pushAdd(collectorRegistry, jobName, labels);
     } catch (IOException e) {
       LOG.warn("Can't push monitoring information to pushGateway", e);
     }
@@ -118,10 +130,10 @@ public class PushGatewayReporter extends ScheduledReporter {
     try {
       if (deleteShutdown) {
         collectorRegistry.unregister(metricExports);
-        pushGateway.delete(jobName, labels);
+        pushGatewayClient.delete(jobName, labels);
         for (String key : gaugeHashMap.keySet()) {
           Pair<String, Map<String, String>> mapPair = MetricUtils.getLabelsAndMetricMap(key);
-          pushGateway.delete(mapPair.getKey(), mapPair.getValue());
+          pushGatewayClient.delete(mapPair.getKey(), mapPair.getValue());
         }
       }
     } catch (IOException e) {
