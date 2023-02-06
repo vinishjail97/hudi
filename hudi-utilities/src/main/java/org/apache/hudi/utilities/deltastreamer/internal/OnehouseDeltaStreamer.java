@@ -624,8 +624,6 @@ public class OnehouseDeltaStreamer implements Serializable {
         if (getDesiredJobStatus() != JobStatus.RUNNING) {
           return false;
         }
-        // Send a heartbeat metrics event to track the active ingestion job for this table.
-        deltaSync.getDeltaSync().getMetrics().updateDeltaStreamerHeartbeatTimestamp(currentTimeMs);
 
         // If an ingestion job is active, then do not schedule right away.
         if (isTableSyncActive.get()) {
@@ -742,6 +740,8 @@ public class OnehouseDeltaStreamer implements Serializable {
         deltaSync.getDeltaSync().getMetrics().updateTotalSourceBytesAvailableForIngest(sourceBytesAvailableForIngest.get());
         deltaSync.getDeltaSync().getMetrics().updateTotalSourceAvailabilityStatusForIngest(status.getValue());
         deltaSync.getDeltaSync().getMetrics().updateSourceIngestionLag(sourceLagSecs);
+        // Send a heartbeat metrics event to track the active ingestion job for this table.
+        deltaSync.getDeltaSync().getMetrics().updateDeltaStreamerHeartbeatTimestamp(System.currentTimeMillis());
       }
 
       public void close() {
