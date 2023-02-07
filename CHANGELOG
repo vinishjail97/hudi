@@ -906,3 +906,7 @@ b8210f766 Upgrade to version release-v0.12.0
 ---[2023-01-28 13:31:03] [release-v0.12.2] Adding release tag for hudi-internal release-v0.12.2---
 8119cee74 Ensure we only have a single push gw client and hence a single connection pool (#200)
 4a29699f2 Upgrade to version release-v0.12.1 (#199)
+
+---[2023-02-06 17:00:22] [release-v0.12.3] Adding release tag v0.12.3 for fixing prometheus pushgw---
+d7444274c Reduce metrics datapoints for heatbeat metrics in attempt to restore … (#203)
+50f5c3d45 Upgrade to version release-v0.12.2 (#201)
