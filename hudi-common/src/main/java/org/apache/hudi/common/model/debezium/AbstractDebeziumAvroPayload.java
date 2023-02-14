@@ -65,7 +65,10 @@ public abstract class AbstractDebeziumAvroPayload extends OverwriteWithLatestAvr
     // Step 1: If the time occurrence of the current record in storage is higher than the time occurrence of the
     // insert record (including a delete record), pick the current record.
     Option<IndexedRecord> insertValue = getInsertRecord(schema);
-    if (!insertValue.isPresent() || shouldPickCurrentRecord(currentValue, insertValue.get(), schema)) {
+    if (!insertValue.isPresent()) {
+      return Option.empty();
+    }
+    if (shouldPickCurrentRecord(currentValue, insertValue.get(), schema)) {
       return Option.of(currentValue);
     }
     // Step 2: Pick the insert record (as a delete record if its a deleted event)
