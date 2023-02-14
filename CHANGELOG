@@ -910,3 +910,7 @@ b8210f766 Upgrade to version release-v0.12.0
 ---[2023-02-06 17:00:22] [release-v0.12.3] Adding release tag v0.12.3 for fixing prometheus pushgw---
 d7444274c Reduce metrics datapoints for heatbeat metrics in attempt to restore … (#203)
 50f5c3d45 Upgrade to version release-v0.12.2 (#201)
+
+---[2023-02-14 08:16:27] [release-v0.12.4] ---
+7a7347ad4b Handle empty payloads for AbstractDebeziumAvroPayload (#206)
+0a1be9f772 Upgrade to version release-v0.12.3 (#204)
