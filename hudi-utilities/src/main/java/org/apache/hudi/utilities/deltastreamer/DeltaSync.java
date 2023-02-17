@@ -71,6 +71,7 @@ import org.apache.hudi.utilities.callback.pulsar.HoodieWriteCommitPulsarCallback
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.Config;
 import org.apache.hudi.utilities.deltastreamer.internal.QuarantineEvent;
 import org.apache.hudi.utilities.deltastreamer.internal.QuarantineJsonEvent;
+import org.apache.hudi.utilities.deltastreamer.internal.StacktraceUtils;
 import org.apache.hudi.utilities.exception.HoodieDeltaStreamerException;
 import org.apache.hudi.utilities.exception.HoodieSourceTimeoutException;
 import org.apache.hudi.utilities.schema.DelegatingSchemaProvider;
@@ -478,8 +479,12 @@ public class DeltaSync implements Serializable, Closeable {
       InputBatch<Dataset<Row>> dataAndCheckpoint =
           formatAdapter.fetchNewDataInRowFormat(resumeCheckpointStr, cfg.sourceLimit);
 
-      Option<Dataset<Row>> transformed =
-          dataAndCheckpoint.getBatch().map(data -> transformer.get().apply(jssc, sparkSession, data, props));
+      Option<Dataset<Row>> transformed;
+      try {
+        transformed = dataAndCheckpoint.getBatch().map(data -> transformer.get().apply(jssc, sparkSession, data, props));
+      } catch (Exception ex) {
+        throw new DeltaSyncException(DeltaSyncException.Type.TRANSFORM_PLAN, "Invalid transformation specified", ex);
+      }
 
       transformed = formatAdapter.transformDatasetWithQuarantineEvents(transformed, QuarantineEvent.QuarantineReason.CUSTOM_TRANSFORMER_FAILURE);
 
@@ -551,13 +556,27 @@ public class DeltaSync implements Serializable, Closeable {
       return null;
     }
 
-    if ((!avroRDDOptional.isPresent()) || (avroRDDOptional.get().isEmpty())) {
-      if (!cfg.allowCommitOnNoData) {
-        LOG.info("No new data found, hence nothing to commit.");
-        return null;
+    try {
+      if ((!avroRDDOptional.isPresent()) || (avroRDDOptional.get().isEmpty())) {
+        if (!cfg.allowCommitOnNoData) {
+          LOG.info("No new data found, hence nothing to commit.");
+          return null;
+        }
+        LOG.info("No new data, perform empty commit.");
+        return Pair.of(schemaProvider, Pair.of(checkpointStr, jssc.emptyRDD()));
       }
-      LOG.info("No new data, perform empty commit.");
-      return Pair.of(schemaProvider, Pair.of(checkpointStr, jssc.emptyRDD()));
+    } catch (Exception ex) {
+      StackTraceElement[] causeStacktrace = ex.getCause().getStackTrace();
+      Class<?> transformerClass = StacktraceUtils.getTransformerClassFromStackTrace(causeStacktrace);
+      if (transformerClass != null) {
+        boolean isPlatformError = transformerClass.getName().startsWith("org.apache") || transformerClass.getName().startsWith("com.onehouse");
+        throw new DeltaSyncException(isPlatformError ? DeltaSyncException.Type.PLATFORM_TRANSFORM_EXECUTION : DeltaSyncException.Type.USER_TRANSFORM_EXECUTION, "Transformer failure", ex);
+      }
+      boolean isSchemaIssue = StacktraceUtils.isSchemaCompatibilityIssue(causeStacktrace);
+      if (isSchemaIssue) {
+        throw new DeltaSyncException(DeltaSyncException.Type.SCHEMA_COMPATIBILITY, "Failed to read data into schema", ex);
+      }
+      throw new DeltaSyncException(DeltaSyncException.Type.READ_FROM_SOURCE, "Failed to read data from source", ex);
     }
 
     boolean shouldCombine = cfg.filterDupes || cfg.operation.equals(WriteOperationType.UPSERT);
@@ -718,7 +737,7 @@ public class DeltaSync implements Serializable, Closeable {
         if (!quarantineTableSuccess) {
           LOG.info("Commit " + instantTime + " failed!");
           writeClient.rollback(instantTime);
-          throw new HoodieException("Quarantine Table Commit failed!");
+          throw new DeltaSyncException(DeltaSyncException.Type.WRITE, "Quarantine Table Commit failed!");
         }
       }
       boolean success = writeClient.commit(instantTime, writeStatusRDD, Option.of(checkpointCommitMetadata), commitActionType, Collections.emptyMap());
@@ -735,7 +754,7 @@ public class DeltaSync implements Serializable, Closeable {
         }
       } else {
         LOG.info("Commit " + instantTime + " failed!");
-        throw new HoodieException("Commit " + instantTime + " failed!");
+        throw new DeltaSyncException(DeltaSyncException.Type.WRITE, "Commit " + instantTime + " failed!");
       }
     } else {
       LOG.error("Delta Sync found errors when writing. Errors/Total=" + totalErrorRecords + "/" + totalRecords);
@@ -748,7 +767,7 @@ public class DeltaSync implements Serializable, Closeable {
       });
       // Rolling back instant
       writeClient.rollback(instantTime);
-      throw new HoodieException("Commit " + instantTime + " failed and rolled-back !");
+      throw new DeltaSyncException(DeltaSyncException.Type.WRITE, "Commit " + instantTime + " failed and rolled-back !");
     }
     long overallTimeMs = overallTimerContext != null ? overallTimerContext.stop() : 0;
 

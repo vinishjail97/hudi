@@ -120,6 +120,14 @@ public class HoodieDeltaStreamerMetrics implements Serializable {
     }
   }
 
+  public void updateFailureType(DeltaSyncException.Type failureType) {
+    if (config.isMetricsOn()) {
+      for (DeltaSyncException.Type type : DeltaSyncException.Type.values()) {
+        metrics.registerGauge(getMetricsName("deltastreamer", "failureType_" + type), type == failureType ? 1 : 0);
+      }
+    }
+  }
+
   public void updateIsActivelyIngesting(int isActivelyIngesting) {
     if (config.isMetricsOn()) {
       metrics.registerGauge(getMetricsName("deltastreamer", "isActivelyIngesting"), isActivelyIngesting);

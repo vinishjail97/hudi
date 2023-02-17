@@ -30,18 +30,27 @@ import org.apache.hudi.common.table.timeline.HoodieActiveTimeline;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.utilities.deltastreamer.DeltaSyncException;
 import org.apache.hudi.utilities.functional.HoodieDeltaStreamerTestBase;
 import org.apache.hudi.utilities.sources.HoodieIncrSource;
 import org.apache.hudi.utilities.sources.JsonKafkaSource;
 import org.apache.hudi.utilities.testutils.UtilitiesTestBase;
+import org.apache.hudi.utilities.transform.Transformer;
 
+import com.codahale.metrics.Gauge;
+import com.customer.CustomerExceptionThrowingTransformer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -51,6 +60,8 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -64,17 +75,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
   private static final Logger LOG = LogManager.getLogger(TestOnehouseDeltaStreamer.class);
-
-  private static final String SOURCE_TABLE_PROPS_KAFKA = "test-json-kafka-source.properties";
-  private static final String SOURCE_TABLE_PROPS_HUDI_INCR = "test-hudi-incr-source.properties";
-  private static final String SOURCE_TABLE_PROPS_INVALID = "invalid_job.properties";
-
-  private static final String SOURCE_TABLE_KAFKA = "test_json_kafka_table";
-  private static final String SOURCE_TABLE_HUDI_INCR = "hudi_incr_table";
-
   private static final Integer KAFKA_NUM_RECORDS = 5;
 
-  private static final String TOPIC_NAME = "topic-test-kafka";
+  private final String sourceTablePropsKafka = UUID.randomUUID() + "-test-json-kafka-source.properties";
+  private final String sourceTablePropsHudiIncr = UUID.randomUUID() + "-test-hudi-incr-source.properties";
+  private final String sourceTablePropsInvalid = UUID.randomUUID() + "-invalid_job.properties";
+  private final String sourceTableKafka = UUID.randomUUID() + "_test_json_kafka_table";
+  private final String sourceTableHudiIncr = UUID.randomUUID() + "_hudi_incr_table";
+  private final String topicNameForTest = UUID.randomUUID() + "-topic";
 
   private final ExecutorService executorService = Executors.newFixedThreadPool(1);
   private final HoodieTestDataGenerator dataGen = new HoodieTestDataGenerator();
@@ -89,17 +97,17 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
   @Test
   public void testOnehouseDeltaStreamer() throws Exception {
     // Source Props Paths.
-    String sourceTablePropsPathKafka = TestHelpers.getConcatenatedPath(basePath, SOURCE_TABLE_PROPS_KAFKA);
-    String sourceTablePropsHudiIncr = TestHelpers.getConcatenatedPath(basePath, SOURCE_TABLE_PROPS_HUDI_INCR);
-    String invalidSourceTablePropsPath = TestHelpers.getConcatenatedPath(basePath,  SOURCE_TABLE_PROPS_INVALID);
+    String sourceTablePropsPathKafka = TestHelpers.getConcatenatedPath(basePath, sourceTablePropsKafka);
+    String sourceTablePropsHudiIncr = TestHelpers.getConcatenatedPath(basePath, this.sourceTablePropsHudiIncr);
+    String invalidSourceTablePropsPath = TestHelpers.getConcatenatedPath(basePath, sourceTablePropsInvalid);
     List<String> multiSourceTablePropsPath = Arrays.asList(sourceTablePropsPathKafka, sourceTablePropsHudiIncr, invalidSourceTablePropsPath);
 
     // Table Base Paths.
-    String tableBasePathKafka = TestHelpers.getConcatenatedPath(basePath, SOURCE_TABLE_KAFKA);
-    String tableBasePathHudiIncr = TestHelpers.getConcatenatedPath(basePath, SOURCE_TABLE_HUDI_INCR);
+    String tableBasePathKafka = TestHelpers.getConcatenatedPath(basePath, sourceTableKafka);
+    String tableBasePathHudiIncr = TestHelpers.getConcatenatedPath(basePath, sourceTableHudiIncr);
     // Push data to Kafka.
-    prepareDataForKafka(KAFKA_NUM_RECORDS, true, TOPIC_NAME);
-    prepareJsonKafkaDFSSourceProps(sourceTablePropsPathKafka, tableBasePathKafka, TOPIC_NAME);
+    prepareDataForKafka(KAFKA_NUM_RECORDS, true, topicNameForTest);
+    prepareJsonKafkaDFSSourceProps(sourceTablePropsPathKafka, tableBasePathKafka, topicNameForTest);
     // Push data to source hoodie table.
     String sourceHudiTablePath = basePath + "/source_hudi_incr";
     prepareHoodieIncrSourceProps(sourceTablePropsHudiIncr, tableBasePathHudiIncr);
@@ -118,7 +126,7 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     TestHelpers.assertTimeline(1, 5, tableBasePathHudiIncr, jsc.hadoopConfiguration());
 
     // Push more data to Kafka and source hoodie table.
-    prepareDataForKafka(JSON_KAFKA_NUM_RECORDS, false, TOPIC_NAME);
+    prepareDataForKafka(JSON_KAFKA_NUM_RECORDS, false, topicNameForTest);
     prepareDataForHoodieIncrSource(sourceHudiTablePath, "002");
     prepareDataForHoodieIncrSource(sourceHudiTablePath, "003");
 
@@ -148,6 +156,78 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     TestHelpers.assertTimeline(4, 5, tableBasePathKafka, jsc.hadoopConfiguration());
     TestHelpers.assertRecordCount(60, tableBasePathHudiIncr, sqlContext);
     TestHelpers.assertTimeline(3, 5, tableBasePathHudiIncr, jsc.hadoopConfiguration());
+  }
+
+  @Test
+  public void transformerThrowsRuntimeError_internal() throws Exception {
+    runKafkaErrorHandlingCase(Collections.singletonList(ExceptionThrowingTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc", DeltaSyncException.Type.PLATFORM_TRANSFORM_EXECUTION);
+  }
+
+  @Test
+  public void transformerThrowsRuntimeError_customer() throws Exception {
+    runKafkaErrorHandlingCase(Collections.singletonList(CustomerExceptionThrowingTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc", DeltaSyncException.Type.USER_TRANSFORM_EXECUTION
+    );
+  }
+
+  @Test
+  public void transformerHasInvalidSparkPlan() throws Exception {
+    runKafkaErrorHandlingCase(Collections.singletonList(InvalidPlanTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc", DeltaSyncException.Type.TRANSFORM_PLAN);
+  }
+
+  @Test
+  public void dataDoesNotMatchTargetSchema() throws Exception {
+    runKafkaErrorHandlingCase(null, "source_uber.avsc", "target.avsc", DeltaSyncException.Type.WRITE);
+  }
+
+  @Test
+  public void dataDoesNotMatchTargetSchemaAfterTransform() throws Exception {
+    runKafkaErrorHandlingCase(Collections.singletonList(IdentityTransformer.class.getName()), "source_uber.avsc", "target.avsc", DeltaSyncException.Type.SCHEMA_COMPATIBILITY);
+  }
+
+  @Test
+  public void cannotReadSourceDataIntoSchema() throws Exception {
+    runKafkaErrorHandlingCase(null, "source_evolved.avsc", "target_uber.avsc", DeltaSyncException.Type.SCHEMA_COMPATIBILITY);
+  }
+
+  @Test
+  public void cannotReadSourceDataIntoSchemaWithTransform() throws Exception {
+    runKafkaErrorHandlingCase(Collections.singletonList(IdentityTransformer.class.getName()), "source_evolved.avsc", "target_uber.avsc", DeltaSyncException.Type.SCHEMA_COMPATIBILITY);
+  }
+
+  private void runKafkaErrorHandlingCase(List<String> transformerClassNames, String sourceSchema, String targetSchema, DeltaSyncException.Type exceptionType)
+      throws IOException, InterruptedException {
+    // Source Props Paths.
+    String sourceTablePropsPathKafka = TestHelpers.getConcatenatedPath(basePath, sourceTablePropsKafka);
+    List<String> multiSourceTablePropsPath = Collections.singletonList(sourceTablePropsPathKafka);
+
+    // Table Base Paths.
+    String tableBasePathKafka = TestHelpers.getConcatenatedPath(basePath, sourceTableKafka);
+    // Push data to Kafka.
+    prepareDataForKafka(KAFKA_NUM_RECORDS, true, topicNameForTest);
+
+    prepareJsonKafkaDFSSourceProps(sourceTablePropsPathKafka, tableBasePathKafka, topicNameForTest, transformerClassNames, sourceSchema,
+        targetSchema);
+
+    // Initialize OnehouseDeltaStreamer.
+    OnehouseDeltaStreamer onehouseDeltaStreamer = new OnehouseDeltaStreamer(TestHelpers.makeConfig(multiSourceTablePropsPath), jsc);
+    // Validate OnehouseDeltaStreamer start and shutdown with assertions.
+    runOnehouseDeltaStreamer(onehouseDeltaStreamer);
+
+    Thread.sleep(TimeUnit.SECONDS.toMillis(60));
+    onehouseDeltaStreamer.shutdownGracefully();
+
+    assertExpectedDeltaSyncFailureMetrics(tableBasePathKafka, exceptionType);
+  }
+
+  private void assertExpectedDeltaSyncFailureMetrics(String tableBasePath, DeltaSyncException.Type failureType) {
+    Map<String, Gauge> gauges = TestMetricsReporter.getGaugesForTableBasePath(tableBasePath);
+    for (DeltaSyncException.Type type : DeltaSyncException.Type.values()) {
+      if (type == failureType) {
+        assertEquals(1L, gauges.get("hoodie_trips.deltastreamer.failureType_" + type.name()).getValue());
+      } else {
+        assertEquals(0L, gauges.get("hoodie_trips.deltastreamer.failureType_" + type.name()).getValue());
+      }
+    }
   }
 
   private void runOnehouseDeltaStreamer(OnehouseDeltaStreamer onehouseDeltaStreamer) {
@@ -210,6 +290,11 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
   }
 
   private void prepareJsonKafkaDFSSourceProps(String sourceTablePropsPath, String tableBasePath, String topicName) throws IOException {
+    prepareJsonKafkaDFSSourceProps(sourceTablePropsPath, tableBasePath, topicName, null, "source_uber.avsc", "target_uber.avsc");
+  }
+
+  private void prepareJsonKafkaDFSSourceProps(String sourceTablePropsPath, String tableBasePath, String topicName, List<String> transformerClassNames,
+                                              String sourceSchema, String targetSchema) throws IOException {
     // Properties used for testing delta-streamer with JsonKafka source
     TypedProperties props = new TypedProperties();
     populateAllCommonProps(props, basePath, testUtils.brokerAddress());
@@ -221,10 +306,10 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     props.setProperty("hoodie.deltastreamer.source.kafka.topic", topicName);
     props.setProperty(
         "hoodie.deltastreamer.schemaprovider.source.schema.file",
-        basePath + "/source_uber.avsc");
+        basePath + "/" + sourceSchema);
     props.setProperty(
         "hoodie.deltastreamer.schemaprovider.target.schema.file",
-        basePath + "/target_uber.avsc");
+        basePath + "/" + targetSchema);
     props.setProperty("auto.offset.reset", "earliest");
 
     props.setProperty("hoodie.base.path", tableBasePath);
@@ -236,6 +321,12 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     props.setProperty("hoodie.deltastreamer.source.estimator.class", "org.apache.hudi.utilities.deltastreamer.internal.KafkaSourceDataAvailabilityEstimator");
     props.setProperty("hoodie.deltastreamer.kafka.source.maxEvents", "3");
     props.setProperty("hoodie.deltastreamer.min.sync.interval.secs", "5");
+    props.setProperty("hoodie.metrics.reporter.class", TestMetricsReporter.class.getName());
+    props.setProperty("hoodie.metrics.on", "true");
+    props.setProperty("hoodie.metrics.reporter.type", "INMEMORY");
+    if (transformerClassNames != null && !transformerClassNames.isEmpty()) {
+      props.setProperty("hoodie.deltastreamer.transformer.class.names", String.join(",", transformerClassNames));
+    }
     UtilitiesTestBase.Helpers.savePropsToDFS(props, fs, sourceTablePropsPath);
   }
 
@@ -315,6 +406,45 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
         path1 = path1.substring(0, path1.length() - 1);
       }
       return String.format("%s/%s", path1, path2);
+    }
+  }
+
+  /**
+   * Throws an exception at runtime from the transformer to trigger a failure.
+   */
+  public static class ExceptionThrowingTransformer implements Transformer {
+    @Override
+    public Dataset<Row> apply(JavaSparkContext jsc, SparkSession sparkSession, Dataset<Row> rowDataset, TypedProperties properties) {
+      return rowDataset.map(new ExceptionThrower(), rowDataset.exprEnc());
+    }
+
+    private static class ExceptionThrower implements MapFunction<Row, Row> {
+
+      @Override
+      public Row call(Row value) {
+        throw new RuntimeException("Failure in internal transform");
+      }
+    }
+  }
+
+  /**
+   * Identity transform to trigger delta sync flow that reads data into rows and converts back to avro.
+   */
+  public static class IdentityTransformer implements Transformer {
+
+    @Override
+    public Dataset<Row> apply(JavaSparkContext jsc, SparkSession sparkSession, Dataset<Row> rowDataset, TypedProperties properties) {
+      return rowDataset;
+    }
+  }
+
+  /**
+   * Creates an invalid spark plan so an error will be thrown when constructing the spark dag.
+   */
+  public static class InvalidPlanTransformer implements Transformer {
+    @Override
+    public Dataset<Row> apply(JavaSparkContext jsc, SparkSession sparkSession, Dataset<Row> rowDataset, TypedProperties properties) {
+      return rowDataset.select("nonexistent_column");
     }
   }
 }

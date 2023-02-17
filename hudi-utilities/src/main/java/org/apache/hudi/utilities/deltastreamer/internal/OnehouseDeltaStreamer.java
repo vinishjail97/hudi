@@ -41,6 +41,7 @@ import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.utilities.IdentitySplitter;
 import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.checkpointing.InitialCheckPointProvider;
+import org.apache.hudi.utilities.deltastreamer.DeltaSyncException;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer;
 import org.apache.hudi.utilities.exception.HoodieDeltaStreamerException;
 
@@ -70,6 +71,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_KEY;
@@ -315,7 +317,7 @@ public class OnehouseDeltaStreamer implements Serializable {
                       LOG.info("Skipped job run for table: " + jobInfo.getSourceTablePath());
                     }
                   } catch (Exception e) {
-                    jobInfo.onSyncFailure();
+                    jobInfo.onSyncFailure(e);
                     LOG.error("Failed to run job for table: " + jobInfo.getSourceTablePath(), e);
                   } finally {
                     LogContext.clear();
@@ -552,6 +554,11 @@ public class OnehouseDeltaStreamer implements Serializable {
       private final AtomicLong deltaServiceUpdated;
 
       /**
+       * Type of last failure, will be set to null if there are no failures.
+       */
+      private final AtomicReference<DeltaSyncException.Type> lastFailureType;
+
+      /**
        * Tracks the (1) total time to sync one batch (round) of ingest data for a table after being scheduled and
        * (2) the actual time to sync once the thread was available from the pool.
        */
@@ -592,6 +599,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         this.minSyncTimeMs = props.getInteger(OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.key(), OnehouseInternalDeltastreamerConfig.MIN_SYNC_INTERVAL_SECS.defaultValue()) * 1000;
         this.readSourceLimit = props.getLong(OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.key(), OnehouseInternalDeltastreamerConfig.READ_SOURCE_LIMIT.defaultValue());
         this.jobManager = jobManager;
+        this.lastFailureType = new AtomicReference<>(null);
       }
 
       private void checkAndSetPropertyUpdates() {
@@ -695,6 +703,7 @@ public class OnehouseDeltaStreamer implements Serializable {
       }
 
       void onSyncSuccess() {
+        lastFailureType.set(null);
         numberConsecutiveFailures.set(0);
         numberSyncSuccesses.incrementAndGet();
         onSyncCompleted();
@@ -705,7 +714,14 @@ public class OnehouseDeltaStreamer implements Serializable {
         deltaSync.getDeltaSync().getMetrics().updateIsActivelyIngesting(0);
       }
 
-      void onSyncFailure() {
+      void onSyncFailure(Exception exception) {
+        if (exception instanceof DeltaSyncException) {
+          DeltaSyncException deltaSyncException = (DeltaSyncException) exception;
+          lastFailureType.set(deltaSyncException.getType());
+        } else {
+          lastFailureType.set(DeltaSyncException.Type.UNKNOWN);
+          LOG.warn("Uncategorized exception type in delta sync failure", exception);
+        }
         numberSyncFailures.incrementAndGet();
         nextTimeScheduleMsecs = System.currentTimeMillis() + Math.min(MAX_BACKOFF_MS, numberConsecutiveFailures.incrementAndGet() * configs.minSyncIntervalPostFailuresSeconds * 1000);
         onSyncCompleted();
@@ -737,6 +753,7 @@ public class OnehouseDeltaStreamer implements Serializable {
         deltaSync.getDeltaSync().getMetrics().updateNumSuccessfulSyncs(numberSyncSuccesses.getAndSet(0));
         deltaSync.getDeltaSync().getMetrics().updateNumFailedSyncs(numberSyncFailures.getAndSet(0));
         deltaSync.getDeltaSync().getMetrics().updateNumConsecutiveFailures(numberConsecutiveFailures.get());
+        deltaSync.getDeltaSync().getMetrics().updateFailureType(lastFailureType.get());
         deltaSync.getDeltaSync().getMetrics().updateTotalSourceBytesAvailableForIngest(sourceBytesAvailableForIngest.get());
         deltaSync.getDeltaSync().getMetrics().updateTotalSourceAvailabilityStatusForIngest(status.getValue());
         deltaSync.getDeltaSync().getMetrics().updateSourceIngestionLag(sourceLagSecs);
