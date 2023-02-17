@@ -847,7 +847,7 @@ public class DeltaSync implements Serializable, Closeable {
         }
       }
       if (!metaSyncExceptions.isEmpty()) {
-        throw SyncUtilHelpers.getExceptionFromList(metaSyncExceptions);
+        throw new DeltaSyncException(DeltaSyncException.Type.META_SYNC, "Meta sync failure", SyncUtilHelpers.getExceptionFromList(metaSyncExceptions));
       }
     }
   }
