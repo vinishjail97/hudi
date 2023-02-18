@@ -22,7 +22,7 @@ import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.exception.HoodieNotSupportedException;
-import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamerMetrics;
+import org.apache.hudi.utilities.ingestion.HoodieIngestionMetrics;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -53,7 +53,7 @@ public class TestKafkaOffsetGen {
 
   private static final String TEST_TOPIC_NAME = "hoodie_test";
   private KafkaTestUtils testUtils;
-  private HoodieDeltaStreamerMetrics metrics = mock(HoodieDeltaStreamerMetrics.class);
+  private HoodieIngestionMetrics metrics = mock(HoodieIngestionMetrics.class);
 
   @BeforeEach
   public void setup() throws Exception {

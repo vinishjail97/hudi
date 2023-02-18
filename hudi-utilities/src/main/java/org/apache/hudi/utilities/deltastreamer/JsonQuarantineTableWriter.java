@@ -43,7 +43,6 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieArchivalConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieException;
-import org.apache.hudi.utilities.deltastreamer.internal.QuarantineEvent;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;

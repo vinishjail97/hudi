@@ -21,7 +21,7 @@ package org.apache.hudi.utilities.deltastreamer;
 import org.apache.hudi.common.model.HoodieAvroRecord;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieWriteConfig;
-import org.apache.hudi.utilities.deltastreamer.internal.QuarantineEvent;
+
 import org.apache.spark.api.java.JavaRDD;
 
 public interface QuarantineTableWriterInterface<T extends QuarantineEvent> {

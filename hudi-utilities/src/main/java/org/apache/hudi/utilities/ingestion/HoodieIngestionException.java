@@ -16,31 +16,27 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.utilities.deltastreamer.internal;
+package org.apache.hudi.utilities.ingestion;
 
-import org.apache.avro.generic.GenericRecord;
-import org.apache.spark.sql.types.DataType;
-import org.apache.spark.sql.types.DataTypes;
+import org.apache.hudi.exception.HoodieException;
 
-public class QuarantineJsonEvent extends QuarantineEvent<String> {
+/**
+ * The root exception class for any failure with {@link HoodieIngestionService}.
+ */
+public class HoodieIngestionException extends HoodieException {
 
-  public QuarantineJsonEvent(String payload, QuarantineReason reason) {
-    this.payload = payload;
-    this.reason = reason;
+  public HoodieIngestionException() {
   }
 
-  @Override
-  public String getPayload() {
-    return payload;
+  public HoodieIngestionException(String message) {
+    super(message);
   }
 
-  @Override
-  public GenericRecord getAvroPayload() {
-    return null;
+  public HoodieIngestionException(String message, Throwable t) {
+    super(message, t);
   }
 
-  @Override
-  public DataType getPayloadType() {
-    return DataTypes.StringType;
+  public HoodieIngestionException(Throwable t) {
+    super(t);
   }
 }

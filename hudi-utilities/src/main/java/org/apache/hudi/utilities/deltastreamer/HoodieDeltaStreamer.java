@@ -22,7 +22,6 @@ import org.apache.hudi.DataSourceWriteOptions;
 import org.apache.hudi.HoodieWriterUtils;
 import org.apache.hudi.async.AsyncClusteringService;
 import org.apache.hudi.async.AsyncCompactService;
-import org.apache.hudi.async.HoodieAsyncService;
 import org.apache.hudi.async.SparkAsyncClusteringService;
 import org.apache.hudi.async.SparkAsyncCompactService;
 import org.apache.hudi.client.SparkRDDWriteClient;
@@ -57,6 +56,9 @@ import org.apache.hudi.utilities.HiveIncrementalPuller;
 import org.apache.hudi.utilities.IdentitySplitter;
 import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.checkpointing.InitialCheckPointProvider;
+import org.apache.hudi.utilities.ingestion.HoodieIngestionException;
+import org.apache.hudi.utilities.ingestion.HoodieIngestionMetrics;
+import org.apache.hudi.utilities.ingestion.HoodieIngestionService;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.JsonDFSSource;
 
@@ -436,6 +438,9 @@ public class HoodieDeltaStreamer implements Serializable {
     @Parameter(names = {"--skip-rdd-unpersist"}, description = "Skips the unpersist step at the end of the sync. Should always be set to true for multi table ingestion")
     public Boolean skipRddUnpersist = false;
 
+    @Parameter(names = {"--ingestion-metrics-class"}, description = "Ingestion metrics class for reporting metrics during ingestion lifecycles.")
+    public String ingestionMetricsClass = HoodieDeltaStreamerMetrics.class.getCanonicalName();
+
     public boolean isAsyncCompactionEnabled() {
       return continuousMode && !forceDisableCompaction
           && HoodieTableType.MERGE_ON_READ.equals(HoodieTableType.valueOf(tableType));
@@ -491,7 +496,8 @@ public class HoodieDeltaStreamer implements Serializable {
               && Objects.equals(checkpoint, config.checkpoint)
               && Objects.equals(initialCheckpointProvider, config.initialCheckpointProvider)
               && Objects.equals(help, config.help)
-              && Objects.equals(skipRddUnpersist, config.skipRddUnpersist);
+              && Objects.equals(skipRddUnpersist, config.skipRddUnpersist)
+              && Objects.equals(ingestionMetricsClass, config.ingestionMetricsClass);
     }
 
     @Override
@@ -504,7 +510,7 @@ public class HoodieDeltaStreamer implements Serializable {
               continuousMode, minSyncIntervalSeconds, sparkMaster, commitOnErrors,
               deltaSyncSchedulingWeight, compactSchedulingWeight, clusterSchedulingWeight, deltaSyncSchedulingMinShare,
               compactSchedulingMinShare, clusterSchedulingMinShare, forceDisableCompaction, checkpoint,
-              initialCheckpointProvider, help, skipRddUnpersist);
+              initialCheckpointProvider, help, skipRddUnpersist, ingestionMetricsClass);
     }
 
     @Override
@@ -546,6 +552,7 @@ public class HoodieDeltaStreamer implements Serializable {
               + ", initialCheckpointProvider='" + initialCheckpointProvider + '\''
               + ", help=" + help
               + ", skipRddUnpersist=" + skipRddUnpersist
+              + ", ingestionMetricsClass=" + ingestionMetricsClass
               + '}';
     }
   }
@@ -609,7 +616,7 @@ public class HoodieDeltaStreamer implements Serializable {
   /**
    * Syncs data either in single-run or in continuous mode.
    */
-  public static class DeltaSyncService extends HoodieAsyncService {
+  public static class DeltaSyncService extends HoodieIngestionService {
 
     private static final long serialVersionUID = 1L;
     /**
@@ -661,6 +668,9 @@ public class HoodieDeltaStreamer implements Serializable {
 
     public DeltaSyncService(Config cfg, JavaSparkContext jssc, FileSystem fs, Configuration conf,
                             Option<TypedProperties> properties) throws IOException {
+      super(HoodieIngestionConfig.newBuilder()
+          .isContinuous(cfg.continuousMode)
+          .withMinSyncInternalSeconds(cfg.minSyncIntervalSeconds).build());
       this.cfg = cfg;
       this.jssc = jssc;
       this.sparkSession = SparkSession.builder().config(jssc.getConf()).getOrCreate();
@@ -828,6 +838,15 @@ public class HoodieDeltaStreamer implements Serializable {
       }
     }
 
+    @Override
+    public void ingestOnce() {
+      try {
+        deltaSync.syncOnce();
+      } catch (IOException e) {
+        throw new HoodieIngestionException(String.format("Ingestion via %s failed with exception.", this.getClass()), e);
+      }
+    }
+
     /**
      * Callback to initialize write client and start compaction service if required.
      *
@@ -882,6 +901,11 @@ public class HoodieDeltaStreamer implements Serializable {
         }
       }
       return true;
+    }
+
+    @Override
+    public Option<HoodieIngestionMetrics> getMetrics() {
+      return Option.ofNullable(deltaSync.getMetrics());
     }
 
     /**

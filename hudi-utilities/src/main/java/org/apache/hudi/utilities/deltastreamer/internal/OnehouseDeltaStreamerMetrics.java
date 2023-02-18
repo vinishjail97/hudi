@@ -16,15 +16,16 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.utilities.deltastreamer;
+package org.apache.hudi.utilities.deltastreamer.internal;
 
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.metrics.Metrics;
+import org.apache.hudi.utilities.deltastreamer.DeltaSyncException;
 import org.apache.hudi.utilities.ingestion.HoodieIngestionMetrics;
 
 import com.codahale.metrics.Timer;
 
-public class HoodieDeltaStreamerMetrics extends HoodieIngestionMetrics {
+public class OnehouseDeltaStreamerMetrics extends HoodieIngestionMetrics {
 
   private Metrics metrics;
 
@@ -35,7 +36,7 @@ public class HoodieDeltaStreamerMetrics extends HoodieIngestionMetrics {
   private transient Timer hiveSyncTimer;
   private transient Timer metaSyncTimer;
 
-  public HoodieDeltaStreamerMetrics(HoodieWriteConfig writeConfig) {
+  public OnehouseDeltaStreamerMetrics(HoodieWriteConfig writeConfig) {
     super(writeConfig);
     if (writeConfig.isMetricsOn()) {
       metrics = Metrics.getInstance(writeConfig);

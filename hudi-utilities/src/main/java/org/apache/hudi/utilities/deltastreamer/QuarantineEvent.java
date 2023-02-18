@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.utilities.deltastreamer.internal;
+package org.apache.hudi.utilities.deltastreamer;
 
 import org.apache.avro.generic.GenericRecord;
 import org.apache.spark.sql.types.DataType;

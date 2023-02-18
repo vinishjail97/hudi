@@ -43,6 +43,7 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.CommitUtils;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.common.util.collection.Pair;
@@ -69,11 +70,10 @@ import org.apache.hudi.utilities.callback.kafka.HoodieWriteCommitKafkaCallbackCo
 import org.apache.hudi.utilities.callback.pulsar.HoodieWriteCommitPulsarCallback;
 import org.apache.hudi.utilities.callback.pulsar.HoodieWriteCommitPulsarCallbackConfig;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.Config;
-import org.apache.hudi.utilities.deltastreamer.internal.QuarantineEvent;
-import org.apache.hudi.utilities.deltastreamer.internal.QuarantineJsonEvent;
 import org.apache.hudi.utilities.deltastreamer.internal.StacktraceUtils;
 import org.apache.hudi.utilities.exception.HoodieDeltaStreamerException;
 import org.apache.hudi.utilities.exception.HoodieSourceTimeoutException;
+import org.apache.hudi.utilities.ingestion.HoodieIngestionMetrics;
 import org.apache.hudi.utilities.schema.DelegatingSchemaProvider;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.schema.SchemaSet;
@@ -227,8 +227,7 @@ public class DeltaSync implements Serializable, Closeable {
 
   private Option<QuarantineTableWriterInterface> quarantineTableWriterInterfaceImpl = Option.empty();
 
-  private transient HoodieDeltaStreamerMetrics metrics;
-
+  private transient HoodieIngestionMetrics metrics;
   private transient HoodieMetrics hoodieMetrics;
   private final String jobGroupId;
 
@@ -260,7 +259,7 @@ public class DeltaSync implements Serializable, Closeable {
 
     this.transformer = UtilHelpers.createTransformer(cfg.transformerClassNames);
 
-    this.metrics = new HoodieDeltaStreamerMetrics(getHoodieClientConfig(this.schemaProvider));
+    this.metrics = (HoodieIngestionMetrics) ReflectionUtils.loadClass(cfg.ingestionMetricsClass, getHoodieClientConfig(this.schemaProvider));
     this.hoodieMetrics = new HoodieMetrics(getHoodieClientConfig(this.schemaProvider));
     this.conf = conf;
     if (props.getBoolean(QUARANTINE_TABLE_ENABLED.key(),QUARANTINE_TABLE_ENABLED.defaultValue())) {
@@ -675,7 +674,7 @@ public class DeltaSync implements Serializable, Closeable {
    * @return Option Compaction instant if one is scheduled
    */
   private Pair<Option<String>, JavaRDD<WriteStatus>> writeToSink(JavaRDD<HoodieRecord> records, String checkpointStr,
-                                                                 HoodieDeltaStreamerMetrics metrics,
+                                                                 HoodieIngestionMetrics metrics,
                                                                  Timer.Context overallTimerContext) {
     Option<String> scheduledCompactionInstant = Option.empty();
     // filter dupes if needed
@@ -1062,7 +1061,7 @@ public class DeltaSync implements Serializable, Closeable {
     return commitTimelineOpt;
   }
 
-  public HoodieDeltaStreamerMetrics getMetrics() {
+  public HoodieIngestionMetrics getMetrics() {
     return metrics;
   }
 
