@@ -49,6 +49,7 @@ public class DeltaSyncException extends HoodieException {
     USER_TRANSFORM_EXECUTION,
     PLATFORM_TRANSFORM_EXECUTION,
     WRITE,
-    META_SYNC
+    META_SYNC,
+    SCHEMA_FETCH
   }
 }

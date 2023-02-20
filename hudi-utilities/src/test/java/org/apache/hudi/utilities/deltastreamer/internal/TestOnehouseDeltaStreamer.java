@@ -32,6 +32,8 @@ import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.utilities.deltastreamer.DeltaSyncException;
 import org.apache.hudi.utilities.functional.HoodieDeltaStreamerTestBase;
+import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
+import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.HoodieIncrSource;
 import org.apache.hudi.utilities.sources.JsonKafkaSource;
 import org.apache.hudi.utilities.testutils.UtilitiesTestBase;
@@ -39,6 +41,7 @@ import org.apache.hudi.utilities.transform.Transformer;
 
 import com.codahale.metrics.Gauge;
 import com.customer.CustomerExceptionThrowingTransformer;
+import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.kafka.common.errors.TopicExistsException;
@@ -160,41 +163,59 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
 
   @Test
   public void transformerThrowsRuntimeError_internal() throws Exception {
-    runKafkaErrorHandlingCase(Collections.singletonList(ExceptionThrowingTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc", DeltaSyncException.Type.PLATFORM_TRANSFORM_EXECUTION);
+    runKafkaErrorHandlingCase(Collections.singletonList(ExceptionThrowingTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc",
+        DeltaSyncException.Type.PLATFORM_TRANSFORM_EXECUTION, defaultSchemaProviderClassName);
   }
 
   @Test
   public void transformerThrowsRuntimeError_customer() throws Exception {
-    runKafkaErrorHandlingCase(Collections.singletonList(CustomerExceptionThrowingTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc", DeltaSyncException.Type.USER_TRANSFORM_EXECUTION
-    );
+    runKafkaErrorHandlingCase(Collections.singletonList(CustomerExceptionThrowingTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc",
+        DeltaSyncException.Type.USER_TRANSFORM_EXECUTION, defaultSchemaProviderClassName);
   }
 
   @Test
   public void transformerHasInvalidSparkPlan() throws Exception {
-    runKafkaErrorHandlingCase(Collections.singletonList(InvalidPlanTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc", DeltaSyncException.Type.TRANSFORM_PLAN);
+    runKafkaErrorHandlingCase(Collections.singletonList(InvalidPlanTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc",
+        DeltaSyncException.Type.TRANSFORM_PLAN, defaultSchemaProviderClassName);
   }
 
   @Test
   public void dataDoesNotMatchTargetSchema() throws Exception {
-    runKafkaErrorHandlingCase(null, "source_uber.avsc", "target.avsc", DeltaSyncException.Type.WRITE);
+    runKafkaErrorHandlingCase(null, "source_uber.avsc", "target.avsc", DeltaSyncException.Type.WRITE, defaultSchemaProviderClassName);
   }
 
   @Test
   public void dataDoesNotMatchTargetSchemaAfterTransform() throws Exception {
-    runKafkaErrorHandlingCase(Collections.singletonList(IdentityTransformer.class.getName()), "source_uber.avsc", "target.avsc", DeltaSyncException.Type.SCHEMA_COMPATIBILITY);
+    runKafkaErrorHandlingCase(Collections.singletonList(IdentityTransformer.class.getName()), "source_uber.avsc", "target.avsc",
+        DeltaSyncException.Type.SCHEMA_COMPATIBILITY, defaultSchemaProviderClassName);
   }
 
   @Test
   public void cannotReadSourceDataIntoSchema() throws Exception {
-    runKafkaErrorHandlingCase(null, "source_evolved.avsc", "target_uber.avsc", DeltaSyncException.Type.SCHEMA_COMPATIBILITY);
+    runKafkaErrorHandlingCase(null, "source_evolved.avsc", "target_uber.avsc", DeltaSyncException.Type.SCHEMA_COMPATIBILITY,
+        defaultSchemaProviderClassName);
   }
 
   @Test
   public void cannotReadSourceDataIntoSchemaWithTransform() throws Exception {
-    runKafkaErrorHandlingCase(Collections.singletonList(IdentityTransformer.class.getName()), "source_evolved.avsc", "target_uber.avsc", DeltaSyncException.Type.SCHEMA_COMPATIBILITY);
+    runKafkaErrorHandlingCase(Collections.singletonList(IdentityTransformer.class.getName()), "source_evolved.avsc", "target_uber.avsc",
+        DeltaSyncException.Type.SCHEMA_COMPATIBILITY, defaultSchemaProviderClassName);
   }
 
-  private void runKafkaErrorHandlingCase(List<String> transformerClassNames, String sourceSchema, String targetSchema, DeltaSyncException.Type exceptionType)
+  @Test
+  public void cannotFetchSchema_rowBased() throws Exception {
+    runKafkaErrorHandlingCase(Collections.singletonList(IdentityTransformer.class.getName()), "source_uber.avsc", "target_uber.avsc", DeltaSyncException.Type.SCHEMA_FETCH,
+        ErrorThrowingSchemaProvider.class.getName());
+  }
+
+  @Test
+  public void cannotFetchSchema_avroBased() throws Exception {
+    runKafkaErrorHandlingCase(null, "source_uber.avsc", "target_uber.avsc", DeltaSyncException.Type.SCHEMA_FETCH,
+        ErrorThrowingSchemaProvider.class.getName());
+  }
+
+  private void runKafkaErrorHandlingCase(List<String> transformerClassNames, String sourceSchema, String targetSchema, DeltaSyncException.Type exceptionType,
+                                         String schemaProvider)
       throws IOException, InterruptedException {
     // Source Props Paths.
     String sourceTablePropsPathKafka = TestHelpers.getConcatenatedPath(basePath, sourceTablePropsKafka);
@@ -206,14 +227,14 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     prepareDataForKafka(KAFKA_NUM_RECORDS, true, topicNameForTest);
 
     prepareJsonKafkaDFSSourceProps(sourceTablePropsPathKafka, tableBasePathKafka, topicNameForTest, transformerClassNames, sourceSchema,
-        targetSchema);
+        targetSchema, schemaProvider);
 
     // Initialize OnehouseDeltaStreamer.
     OnehouseDeltaStreamer onehouseDeltaStreamer = new OnehouseDeltaStreamer(TestHelpers.makeConfig(multiSourceTablePropsPath), jsc);
     // Validate OnehouseDeltaStreamer start and shutdown with assertions.
     runOnehouseDeltaStreamer(onehouseDeltaStreamer);
 
-    Thread.sleep(TimeUnit.SECONDS.toMillis(60));
+    Thread.sleep(TimeUnit.SECONDS.toMillis(20));
     onehouseDeltaStreamer.shutdownGracefully();
 
     assertExpectedDeltaSyncFailureMetrics(tableBasePathKafka, exceptionType);
@@ -290,11 +311,11 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
   }
 
   private void prepareJsonKafkaDFSSourceProps(String sourceTablePropsPath, String tableBasePath, String topicName) throws IOException {
-    prepareJsonKafkaDFSSourceProps(sourceTablePropsPath, tableBasePath, topicName, null, "source_uber.avsc", "target_uber.avsc");
+    prepareJsonKafkaDFSSourceProps(sourceTablePropsPath, tableBasePath, topicName, null, "source_uber.avsc", "target_uber.avsc", defaultSchemaProviderClassName);
   }
 
   private void prepareJsonKafkaDFSSourceProps(String sourceTablePropsPath, String tableBasePath, String topicName, List<String> transformerClassNames,
-                                              String sourceSchema, String targetSchema) throws IOException {
+                                              String sourceSchema, String targetSchema, String schemaProvider) throws IOException {
     // Properties used for testing delta-streamer with JsonKafka source
     TypedProperties props = new TypedProperties();
     populateAllCommonProps(props, basePath, testUtils.brokerAddress());
@@ -317,7 +338,7 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     props.setProperty("hoodie.table.type", "COPY_ON_WRITE");
     props.setProperty("hoodie.deltastreamer.source.class.name", JsonKafkaSource.class.getName());
     props.setProperty("hoodie.table.name", "hoodie_trips");
-    props.setProperty("hoodie.deltastreamer.schema.provider.class.name", defaultSchemaProviderClassName);
+    props.setProperty("hoodie.deltastreamer.schema.provider.class.name", schemaProvider);
     props.setProperty("hoodie.deltastreamer.source.estimator.class", "org.apache.hudi.utilities.deltastreamer.internal.KafkaSourceDataAvailabilityEstimator");
     props.setProperty("hoodie.deltastreamer.kafka.source.maxEvents", "3");
     props.setProperty("hoodie.deltastreamer.min.sync.interval.secs", "5");
@@ -445,6 +466,31 @@ public class TestOnehouseDeltaStreamer extends HoodieDeltaStreamerTestBase {
     @Override
     public Dataset<Row> apply(JavaSparkContext jsc, SparkSession sparkSession, Dataset<Row> rowDataset, TypedProperties properties) {
       return rowDataset.select("nonexistent_column");
+    }
+  }
+
+  public static class ErrorThrowingSchemaProvider extends SchemaProvider {
+    private int count = 0;
+    private final SchemaProvider wrapppedProvider;
+
+    public ErrorThrowingSchemaProvider(TypedProperties props, JavaSparkContext jsc) {
+      super(props);
+      this.wrapppedProvider = new FilebasedSchemaProvider(props, jsc);
+    }
+
+    @Override
+    public Schema getSourceSchema() {
+      count++;
+      // First two calls happen during initialization of pipeline
+      if (count == 3) {
+        throw new RuntimeException("Failed to fetch");
+      }
+      return wrapppedProvider.getSourceSchema();
+    }
+
+    @Override
+    public Schema getTargetSchema() {
+      return wrapppedProvider.getTargetSchema();
     }
   }
 }

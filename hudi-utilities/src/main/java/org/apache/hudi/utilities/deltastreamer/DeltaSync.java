@@ -362,24 +362,28 @@ public class DeltaSync implements Serializable, Closeable {
     Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> srcRecordsWithCkpt = readFromSource(commitTimelineOpt);
 
     if (null != srcRecordsWithCkpt) {
-      // this is the first input batch. If schemaProvider not set, use it and register Avro Schema and start
-      // compactor
-      if (null == writeClient) {
-        this.schemaProvider = srcRecordsWithCkpt.getKey();
-        // Setup HoodieWriteClient and compaction now that we decided on schema
-        setupWriteClient();
-      } else {
-        Schema newSourceSchema = srcRecordsWithCkpt.getKey().getSourceSchema();
-        Schema newTargetSchema = srcRecordsWithCkpt.getKey().getTargetSchema();
-        if (!(processedSchema.isSchemaPresent(newSourceSchema))
-            || !(processedSchema.isSchemaPresent(newTargetSchema))) {
-          LOG.info("Seeing new schema. Source :" + newSourceSchema.toString(true)
-              + ", Target :" + newTargetSchema.toString(true));
-          // We need to recreate write client with new schema and register them.
-          reInitWriteClient(newSourceSchema, newTargetSchema);
-          processedSchema.addSchema(newSourceSchema);
-          processedSchema.addSchema(newTargetSchema);
+      try {
+        // this is the first input batch. If schemaProvider not set, use it and register Avro Schema and start
+        // compactor
+        if (null == writeClient) {
+          this.schemaProvider = srcRecordsWithCkpt.getKey();
+          // Setup HoodieWriteClient and compaction now that we decided on schema
+          setupWriteClient();
+        } else {
+          Schema newSourceSchema = srcRecordsWithCkpt.getKey().getSourceSchema();
+          Schema newTargetSchema = srcRecordsWithCkpt.getKey().getTargetSchema();
+          if (!(processedSchema.isSchemaPresent(newSourceSchema))
+              || !(processedSchema.isSchemaPresent(newTargetSchema))) {
+            LOG.info("Seeing new schema. Source :" + newSourceSchema.toString(true)
+                + ", Target :" + newTargetSchema.toString(true));
+            // We need to recreate write client with new schema and register them.
+            reInitWriteClient(newSourceSchema, newTargetSchema);
+            processedSchema.addSchema(newSourceSchema);
+            processedSchema.addSchema(newTargetSchema);
+          }
         }
+      } catch (Exception ex) {
+        throw new DeltaSyncException(DeltaSyncException.Type.SCHEMA_FETCH, "Failed to fetch schema", ex);
       }
 
       // complete the pending clustering before writing to sink
@@ -475,8 +479,12 @@ public class DeltaSync implements Serializable, Closeable {
     if (transformer.isPresent()) {
       // Transformation is needed. Fetch New rows in Row Format, apply transformation and then convert them
       // to generic records for writing
-      InputBatch<Dataset<Row>> dataAndCheckpoint =
-          formatAdapter.fetchNewDataInRowFormat(resumeCheckpointStr, cfg.sourceLimit);
+      InputBatch<Dataset<Row>> dataAndCheckpoint;
+      try {
+        dataAndCheckpoint = formatAdapter.fetchNewDataInRowFormat(resumeCheckpointStr, cfg.sourceLimit);
+      } catch (Exception ex) {
+        throw new DeltaSyncException(DeltaSyncException.Type.SCHEMA_FETCH, "Failed to fetch schema", ex);
+      }
 
       Option<Dataset<Row>> transformed;
       try {
@@ -540,8 +548,12 @@ public class DeltaSync implements Serializable, Closeable {
       }
     } else {
       // Pull the data from the source & prepare the write
-      InputBatch<JavaRDD<GenericRecord>> dataAndCheckpoint =
-          formatAdapter.fetchNewDataInAvroFormat(resumeCheckpointStr, cfg.sourceLimit);
+      InputBatch<JavaRDD<GenericRecord>> dataAndCheckpoint;
+      try {
+        dataAndCheckpoint = formatAdapter.fetchNewDataInAvroFormat(resumeCheckpointStr, cfg.sourceLimit);
+      } catch (Exception ex) {
+        throw new DeltaSyncException(DeltaSyncException.Type.SCHEMA_FETCH, "Failed to fetch schema", ex);
+      }
       avroRDDOptional = dataAndCheckpoint.getBatch();
       checkpointStr = dataAndCheckpoint.getCheckpointForNextBatch();
       schemaProvider = dataAndCheckpoint.getSchemaProvider();
