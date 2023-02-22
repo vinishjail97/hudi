@@ -914,3 +914,11 @@ d7444274c Reduce metrics datapoints for heatbeat metrics in attempt to restore â
 ---[2023-02-14 08:16:27] [release-v0.12.4] ---
 7a7347ad4b Handle empty payloads for AbstractDebeziumAvroPayload (#206)
 0a1be9f772 Upgrade to version release-v0.12.3 (#204)
+
+---[2023-02-22 10:29:26] [release-v0.12.5] Add release tag for hudi-internal release-v0.12.5---
+a14c1b96b make scraping work with multiple tables, add label support (#214)
+9515f0497 [ONHS-5938] add in schema fetch failure tracking (#211)
+35014ba0d [ONHS-5335] Add `HoodieIngestionService` for abstraction (#212)
+3260dfd5a [ONHS-6082] Meta sync error categorization (#210)
+8f2c5f756 [ONHS-5933][ONHS-5935] Categorize alerts and add transformer error classification (#209)
+37dfa280f Upgrade to version release-v0.12.4 (#207)
