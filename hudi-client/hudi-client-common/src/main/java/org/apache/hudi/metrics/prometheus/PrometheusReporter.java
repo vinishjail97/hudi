@@ -18,6 +18,7 @@
 
 package org.apache.hudi.metrics.prometheus;
 
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.metrics.MetricsReporter;
@@ -60,11 +61,13 @@ public class PrometheusReporter extends MetricsReporter {
     }
     List<String> labelNames = new ArrayList<>();
     List<String> labelValues = new ArrayList<>();
-    LABEL_PATTERN.splitAsStream(config.getPushGatewayLabels().trim()).map(s -> s.split(":", 2))
+    if (!StringUtils.isNullOrEmpty(config.getPushGatewayLabels())) {
+      LABEL_PATTERN.splitAsStream(config.getPushGatewayLabels().trim()).map(s -> s.split(":", 2))
           .forEach(parts -> {
             labelNames.add(parts[0]);
             labelValues.add(parts[1]);
           });
+    }
     metricExports = new DropwizardExports(registry, new LabeledSampleBuilder(labelNames, labelValues));
     this.collectorRegistry = PORT_TO_COLLECTOR_REGISTRY.get(serverPort);
     metricExports.register(collectorRegistry);
