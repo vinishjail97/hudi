@@ -55,14 +55,17 @@ public class PrometheusReporter extends MetricsReporter {
   private final CollectorRegistry collectorRegistry;
 
   public PrometheusReporter(HoodieWriteConfig config, MetricRegistry registry) {
-    int serverPort = config.getPrometheusPort();
+    this(config.getPushGatewayLabels(), config.getPrometheusPort(), registry);
+  }
+
+  public PrometheusReporter(String labelsAndValues, int serverPort, MetricRegistry registry) {
     if (!PORT_TO_SERVER.containsKey(serverPort) || !PORT_TO_COLLECTOR_REGISTRY.containsKey(serverPort)) {
       startHttpServer(serverPort);
     }
     List<String> labelNames = new ArrayList<>();
     List<String> labelValues = new ArrayList<>();
-    if (!StringUtils.isNullOrEmpty(config.getPushGatewayLabels())) {
-      LABEL_PATTERN.splitAsStream(config.getPushGatewayLabels().trim()).map(s -> s.split(":", 2))
+    if (!StringUtils.isNullOrEmpty(labelsAndValues)) {
+      LABEL_PATTERN.splitAsStream(labelsAndValues.trim()).map(s -> s.split(":", 2))
           .forEach(parts -> {
             labelNames.add(parts[0]);
             labelValues.add(parts[1]);

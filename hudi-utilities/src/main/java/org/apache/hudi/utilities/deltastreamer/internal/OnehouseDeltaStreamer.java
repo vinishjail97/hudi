@@ -194,7 +194,6 @@ public class OnehouseDeltaStreamer implements Serializable {
     private static final Logger LOG = LogManager.getLogger(MultiTableSyncService.class);
 
     private final transient JobManager jobManager;
-    private final transient OnehouseMetricsReporter onehouseMetricsReporter;
     private final transient ExecutorService multiTableStreamThreadPool;
     private transient long lastTimeMetricsReportedMs;
 
@@ -209,16 +208,13 @@ public class OnehouseDeltaStreamer implements Serializable {
       multiTableStreamThreadPool = Executors.newFixedThreadPool(numThreads);
 
       this.lastTimeMetricsReportedMs = 0L;
-      this.onehouseMetricsReporter = new OnehouseMetricsReporter(UtilHelpers.getConfig(multiTableConfigs.metricConfigs).getProps());
-      jobManager = new JobManager(multiTableConfigs, hadoopConfig,
+      jobManager = new JobManager(multiTableConfigs, hadoopConfig, UtilHelpers.getConfig(multiTableConfigs.metricConfigs).getProps(),
           (sourceTablePropsPath, jobManagerInstance) -> {
             try {
               JobInfo jobInfo = createJobInfo(multiTableConfigs, jssc, hadoopConfig, sourceTablePropsPath, jobManagerInstance);
-              onehouseMetricsReporter.reportJobInitializationResult(sourceTablePropsPath, true);
               return Option.of(jobInfo);
             } catch (Exception e) {
               LOG.error("Failed to initialize jobInfo for the table " + sourceTablePropsPath, e);
-              onehouseMetricsReporter.reportJobInitializationResult(sourceTablePropsPath, false);
               return Option.empty();
             }
           });
@@ -357,13 +353,16 @@ public class OnehouseDeltaStreamer implements Serializable {
       private final Map<String, JobStatus> currentJobStatuses;
       private final Map<String, JobInfo> jobInfoMap;
       private final SerializableBiFunction<String, JobManager, Option<JobInfo>> jobInfoCreator;
+      private final transient OnehouseMetricsReporter metricsReporter;
 
-      JobManager(final Config multiTableConfigs, final Configuration hadoopConf, final SerializableBiFunction<String, JobManager, Option<JobInfo>> jobInfoCreator) {
+      JobManager(final Config multiTableConfigs, final Configuration hadoopConf, final TypedProperties metricsReporterProps,
+                 final SerializableBiFunction<String, JobManager, Option<JobInfo>> jobInfoCreator) {
         this.multiTableConfigs = multiTableConfigs;
         this.hadoopConf = hadoopConf;
         this.currentJobStatuses = new ConcurrentHashMap<>();
         this.jobInfoMap = new ConcurrentHashMap<>();
         this.jobInfoCreator = jobInfoCreator;
+        this.metricsReporter = new OnehouseMetricsReporter(metricsReporterProps);
         resolve();
         timer = new Timer();
         timer.schedule(new TimerTask() {
@@ -407,6 +406,7 @@ public class OnehouseDeltaStreamer implements Serializable {
             if (currentJobStatus == null) {
               LOG.info("JobManager adding: " + jobIdentifier);
               Option<JobInfo> jobInfo = jobInfoCreator.apply(jobIdentifier, this);
+              metricsReporter.reportJobInitializationResult(jobIdentifier, jobInfo.isPresent());
               if (jobInfo.isPresent()) {
                 jobInfoMap.putIfAbsent(jobIdentifier, jobInfo.get());
                 setCurrentJobStatus(jobIdentifier, desiredJobStatusEntry.getValue());
@@ -421,6 +421,7 @@ public class OnehouseDeltaStreamer implements Serializable {
               jobInfoMap.get(jobIdentifier).markPropertiesAsUpdated();
             }
           }
+          metricsReporter.removeMetricsForMissingPaths(desiredJobStatuses.keySet());
           if (jobInfoMap.size() == 0) {
             throw new IllegalArgumentException("All the jobs failed during initialization " + jobsFailedToInitialize);
           }
