@@ -39,6 +39,7 @@ import org.apache.hudi.common.table.view.TableFileSystemView.BaseFileOnlyView;
 import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.common.testutils.Transformations;
 import org.apache.hudi.common.util.CollectionUtils;
+import org.apache.hudi.common.util.CommitUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.config.HoodieClusteringConfig;
 import org.apache.hudi.config.HoodieCompactionConfig;
@@ -65,12 +66,12 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.storage.StorageLevel;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -97,11 +98,6 @@ public class TestHoodieMergeOnReadTable extends SparkClientFunctionalTestHarness
     properties.setProperty(HoodieTableConfig.BASE_FILE_FORMAT.key(), HoodieTableConfig.BASE_FILE_FORMAT.defaultValue().toString());
     metaClient = getHoodieMetaClient(HoodieTableType.MERGE_ON_READ, properties);
     dataGen = new HoodieTestDataGenerator();
-  }
-
-  @BeforeEach
-  void beforeEach() {
-    jsc().getPersistentRDDs().values().forEach(JavaRDD::unpersist);
   }
 
   // Check if record level metadata is aggregated properly at the end of write.
@@ -690,12 +686,20 @@ public class TestHoodieMergeOnReadTable extends SparkClientFunctionalTestHarness
     }
   }
 
-  @Test
-  public void testReleaseResource() throws Exception {
-    HoodieWriteConfig.Builder builder = getConfigBuilder(false);
-    builder.withReleaseResourceEnabled(true);
+  @ParameterizedTest
+  @ValueSource(booleans = {true, false})
+  public void testReleaseResource(boolean enableMetadata) throws Exception {
+    jsc().getPersistentRDDs().values().forEach(rdd -> rdd.unpersist(true));
+    CommitUtils.PERSISTED_RDD_IDS.clear();
+    String seperatedPath = URI.create(basePath()).resolve("release_resource_test").getPath();
+    HoodieWriteConfig.Builder builder = getConfigBuilder(false)
+        .withMetadataConfig(HoodieMetadataConfig.newBuilder().enable(enableMetadata).build())
+        .withPath(seperatedPath).withReleaseResourceEnabled(true);
 
-    setUp(builder.build().getProps());
+    Properties properties = CollectionUtils.copy(builder.build().getProps());
+    properties.setProperty(HoodieTableConfig.BASE_FILE_FORMAT.key(), HoodieTableConfig.BASE_FILE_FORMAT.defaultValue().toString());
+    metaClient = getHoodieMetaClient(hadoopConf(), seperatedPath, HoodieTableType.MERGE_ON_READ, properties);
+    dataGen = new HoodieTestDataGenerator();
     HoodieWriteConfig writeConfig = builder.build();
 
     /**
@@ -713,7 +717,7 @@ public class TestHoodieMergeOnReadTable extends SparkClientFunctionalTestHarness
 
       client.commitStats(newCommitTime, statuses.stream().map(WriteStatus::getStat).collect(Collectors.toList()), Option.empty(), metaClient.getCommitActionType());
       // when auto commit is enabled, we can't unpersist the rdd at the end of write operation.
-      assertEquals(spark().sparkContext().persistentRdds().size(), writeConfig.isMetadataTableEnabled() ? 3 : 1);
+      assertEquals(enableMetadata ? 2 : 0, CommitUtils.PERSISTED_RDD_IDS.size());
     }
 
     builder.withReleaseResourceEnabled(false);
