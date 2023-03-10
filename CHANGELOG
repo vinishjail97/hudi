@@ -929,7 +929,7 @@ c71d50962 [MINOR] Fix pom.xml to use scala12 spark32 by default (#219)
 8811664f9 [bug] handle null or empty labels in prometheus reporter (#217)
 c0be63f40 Upgrade to version release-v0.12.5 (#215)
 
----[2023-03-09 22:44:30] [release-v0.12.7] Add release tag for hudi-internal release-v0.12.7---
+---[2023-03-09 22:46:33] [release-v0.12.7] Add release tag for hudi-internal release-v0.12.7---
 d36e5575a [HUDI-5907] Allow skip saving checkpoint in deltastreamer (#225)
 42774eb95 [HOTFIX] Fix HoodieMetadataFileSystemView serving stale view at the timeline server (#224)
 9a1249654 Upgrade to version release-v0.12.6 (#220)
