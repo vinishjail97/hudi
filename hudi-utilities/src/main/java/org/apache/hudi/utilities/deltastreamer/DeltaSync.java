@@ -126,8 +126,10 @@ import static org.apache.hudi.config.HoodieWriteConfig.COMBINE_BEFORE_INSERT;
 import static org.apache.hudi.config.HoodieWriteConfig.COMBINE_BEFORE_UPSERT;
 import static org.apache.hudi.hive.HiveSyncConfigHolder.HIVE_SYNC_BUCKET_SYNC;
 import static org.apache.hudi.hive.HiveSyncConfigHolder.HIVE_SYNC_BUCKET_SYNC_SPEC;
+import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_FORCE_SKIP_PROP;
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_KEY;
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_RESET_KEY;
+import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.DEFAULT_CHECKPOINT_FORCE_SKIP_PROP;
 import static org.apache.hudi.utilities.schema.RowBasedSchemaProvider.HOODIE_RECORD_NAMESPACE;
 import static org.apache.hudi.utilities.schema.RowBasedSchemaProvider.HOODIE_RECORD_STRUCT_NAME;
 
@@ -730,11 +732,13 @@ public class DeltaSync implements Serializable, Closeable {
     boolean hasErrors = totalErrorRecords > 0;
     if (!hasErrors || cfg.commitOnErrors) {
       HashMap<String, String> checkpointCommitMetadata = new HashMap<>();
-      if (checkpointStr != null) {
-        checkpointCommitMetadata.put(CHECKPOINT_KEY, checkpointStr);
-      }
-      if (cfg.checkpoint != null) {
-        checkpointCommitMetadata.put(CHECKPOINT_RESET_KEY, cfg.checkpoint);
+      if (!props.getBoolean(CHECKPOINT_FORCE_SKIP_PROP, DEFAULT_CHECKPOINT_FORCE_SKIP_PROP)) {
+        if (checkpointStr != null) {
+          checkpointCommitMetadata.put(CHECKPOINT_KEY, checkpointStr);
+        }
+        if (cfg.checkpoint != null) {
+          checkpointCommitMetadata.put(CHECKPOINT_RESET_KEY, cfg.checkpoint);
+        }
       }
 
       if (hasErrors) {
