@@ -41,6 +41,7 @@ public class JavaWriteHelper<T extends HoodieRecordPayload,R> extends BaseWriteH
     List<HoodieKey>, List<WriteStatus>, R> {
 
   private JavaWriteHelper() {
+    super(ignored -> -1);
   }
 
   private static class WriteHelperHolder {

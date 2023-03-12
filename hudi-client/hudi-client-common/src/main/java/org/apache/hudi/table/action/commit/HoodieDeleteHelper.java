@@ -47,7 +47,9 @@ import java.util.HashMap;
 @SuppressWarnings("checkstyle:LineLength")
 public class HoodieDeleteHelper<T extends HoodieRecordPayload, R> extends
     BaseDeleteHelper<T, HoodieData<HoodieRecord<T>>, HoodieData<HoodieKey>, HoodieData<WriteStatus>, R> {
+
   private HoodieDeleteHelper() {
+    super(HoodieData::getNumPartitions);
   }
 
   private static class DeleteHelperHolder {
@@ -76,13 +78,14 @@ public class HoodieDeleteHelper<T extends HoodieRecordPayload, R> extends
                                                               HoodieTable<T, HoodieData<HoodieRecord<T>>, HoodieData<HoodieKey>, HoodieData<WriteStatus>> table,
                                                               BaseCommitActionExecutor<T, HoodieData<HoodieRecord<T>>, HoodieData<HoodieKey>, HoodieData<WriteStatus>, R> deleteExecutor) {
     try {
-      HoodieData<HoodieKey> dedupedKeys = keys;
-      final int parallelism = config.getDeleteShuffleParallelism();
+      int targetParallelism =
+          deduceShuffleParallelism((HoodieData) keys, config.getDeleteShuffleParallelism());
+
+      HoodieData<HoodieKey> dedupedKeys;
       if (config.shouldCombineBeforeDelete()) {
-        // De-dupe/merge if needed
-        dedupedKeys = deduplicateKeys(keys, table, parallelism);
-      } else if (!keys.isEmpty()) {
-        dedupedKeys = keys.repartition(parallelism);
+        dedupedKeys = deduplicateKeys(keys, table, targetParallelism);
+      } else {
+        dedupedKeys = keys.repartition(targetParallelism);
       }
 
       HoodieData<HoodieRecord<T>> dedupedRecords =

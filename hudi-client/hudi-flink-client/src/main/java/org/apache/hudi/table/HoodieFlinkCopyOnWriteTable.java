@@ -320,7 +320,7 @@ public class HoodieFlinkCopyOnWriteTable<T extends HoodieRecordPayload>
   }
 
   @Override
-  public HoodieCleanMetadata clean(HoodieEngineContext context, String cleanInstantTime, boolean skipLocking) {
+  public HoodieCleanMetadata clean(HoodieEngineContext context, String cleanInstantTime) {
     return new CleanActionExecutor(context, config, this, cleanInstantTime).execute();
   }
 

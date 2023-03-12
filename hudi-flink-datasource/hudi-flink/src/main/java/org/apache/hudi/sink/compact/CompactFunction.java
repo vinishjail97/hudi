@@ -140,7 +140,6 @@ public class CompactFunction extends ProcessFunction<CompactionPlanEvent, Compac
       this.executor.close();
     }
     if (null != this.writeClient) {
-      this.writeClient.cleanHandlesGracefully();
       this.writeClient.close();
       this.writeClient = null;
     }

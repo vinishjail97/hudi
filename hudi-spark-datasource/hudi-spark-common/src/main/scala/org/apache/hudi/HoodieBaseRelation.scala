@@ -43,7 +43,7 @@ import org.apache.hudi.internal.schema.convert.AvroInternalSchemaConverter
 import org.apache.hudi.internal.schema.utils.{InternalSchemaUtils, SerDeHelper}
 import org.apache.hudi.internal.schema.{HoodieSchemaException, InternalSchema}
 import org.apache.hudi.io.storage.HoodieHFileReader
-
+import org.apache.hudi.metadata.HoodieTableMetadata
 import org.apache.spark.execution.datasources.HoodieInMemoryFileIndex
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -282,6 +282,7 @@ abstract class HoodieBaseRelation(val sqlContext: SQLContext,
    * Determines whether relation's schema could be pruned by Spark's Optimizer
    */
   def canPruneRelationSchema: Boolean =
+    !HoodieTableMetadata.isMetadataTable(basePath.toString) &&
     (fileFormat.isInstanceOf[ParquetFileFormat] || fileFormat.isInstanceOf[OrcFileFormat]) &&
       // NOTE: Some relations might be disabling sophisticated schema pruning techniques (for ex, nested schema pruning)
       // TODO(HUDI-XXX) internal schema doesn't support nested schema pruning currently

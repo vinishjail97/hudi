@@ -35,6 +35,7 @@ public class HoodieWriteHelper<T extends HoodieRecordPayload, R> extends BaseWri
     HoodieData<HoodieKey>, HoodieData<WriteStatus>, R> {
 
   private HoodieWriteHelper() {
+    super(HoodieData::getNumPartitions);
   }
 
   private static class WriteHelperHolder {
@@ -72,5 +73,4 @@ public class HoodieWriteHelper<T extends HoodieRecordPayload, R> extends BaseWri
       return new HoodieAvroRecord<>(reducedKey, reducedData);
     }, reduceParallelism).map(Pair::getRight);
   }
-
 }

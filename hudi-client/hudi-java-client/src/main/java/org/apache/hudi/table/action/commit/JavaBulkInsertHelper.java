@@ -49,6 +49,7 @@ public class JavaBulkInsertHelper<T extends HoodieRecordPayload, R> extends Base
     List<HoodieKey>, List<WriteStatus>, R> {
 
   private JavaBulkInsertHelper() {
+    super(ignored -> -1);
   }
 
   private static class BulkInsertHelperHolder {
@@ -95,18 +96,21 @@ public class JavaBulkInsertHelper<T extends HoodieRecordPayload, R> extends Base
                                       boolean performDedupe,
                                       BulkInsertPartitioner partitioner,
                                       boolean useWriterSchema,
-                                      int parallelism,
+                                      int configuredParallelism,
                                       WriteHandleFactory writeHandleFactory) {
 
     // De-dupe/merge if needed
     List<HoodieRecord<T>> dedupedRecords = inputRecords;
 
+    int targetParallelism = deduceShuffleParallelism(inputRecords, configuredParallelism);
+
     if (performDedupe) {
-      dedupedRecords = (List<HoodieRecord<T>>) JavaWriteHelper.newInstance().combineOnCondition(config.shouldCombineBeforeInsert(), inputRecords,
-          parallelism, table);
+      dedupedRecords = (List<HoodieRecord<T>>) JavaWriteHelper.newInstance()
+          .combineOnCondition(config.shouldCombineBeforeInsert(), inputRecords, targetParallelism, table);
     }
 
-    final List<HoodieRecord<T>> repartitionedRecords = (List<HoodieRecord<T>>) partitioner.repartitionRecords(dedupedRecords, parallelism);
+    final List<HoodieRecord<T>> repartitionedRecords =
+        (List<HoodieRecord<T>>) partitioner.repartitionRecords(dedupedRecords, targetParallelism);
 
     FileIdPrefixProvider fileIdPrefixProvider = (FileIdPrefixProvider) ReflectionUtils.loadClass(
         config.getFileIdPrefixProviderClassName(),
