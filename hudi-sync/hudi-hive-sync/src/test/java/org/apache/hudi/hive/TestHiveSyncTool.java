@@ -154,7 +154,7 @@ public class TestHiveSyncTool {
 
   @ParameterizedTest
   @MethodSource({"syncModeAndSchemaFromCommitMetadata"})
-  public void testUpdateBasePath(boolean useSchemaFromCommitMetadata, String syncMode, String enablePushDown) throws Exception {
+  public void testUpdateBasePath(boolean useSchemaFromCommitMetadata, String syncMode) throws Exception {
     hiveSyncProps.setProperty(HIVE_SYNC_MODE.key(), syncMode);
     String instantTime = "100";
     // create a cow table and sync to hive

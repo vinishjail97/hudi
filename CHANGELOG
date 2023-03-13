@@ -933,3 +933,15 @@ c0be63f40 Upgrade to version release-v0.12.5 (#215)
 d36e5575a [HUDI-5907] Allow skip saving checkpoint in deltastreamer (#225)
 42774eb95 [HOTFIX] Fix HoodieMetadataFileSystemView serving stale view at the timeline server (#224)
 9a1249654 Upgrade to version release-v0.12.6 (#220)
+
+---[2023-03-12 12:35:33] [release-v0.13.0] Adding release tag for hudi-internal release-v0.13.0---
+c6be6aefe Oss cherry picks 3 10 23  (#228)
+367761b7d Upgrade to version release-v0.12.7 (#226)
+c7389fc6f Upgrade to version release-v0.12.7
+d36e5575a [HUDI-5907] Allow skip saving checkpoint in deltastreamer (#225)
+42774eb95 [HOTFIX] Fix HoodieMetadataFileSystemView serving stale view at the timeline server (#224)
+9a1249654 Upgrade to version release-v0.12.6 (#220)
+3e210f272 [ONHS-6230] move initialization failures to scrape mode, allow cleanup after removal (#218)
+c71d50962 [MINOR] Fix pom.xml to use scala12 spark32 by default (#219)
+8811664f9 [bug] handle null or empty labels in prometheus reporter (#217)
+c0be63f40 Upgrade to version release-v0.12.5 (#215)
