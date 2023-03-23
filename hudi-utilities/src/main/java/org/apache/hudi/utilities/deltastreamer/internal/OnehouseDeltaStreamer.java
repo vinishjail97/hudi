@@ -821,7 +821,7 @@ public class OnehouseDeltaStreamer implements Serializable {
       if (clusteringConfig.isAsyncClusteringEnabled()) {
         properties.remove(HoodieClusteringConfig.ASYNC_CLUSTERING_ENABLE.key());
         properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING.key(), "true");
-        if (properties.containsKey(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS)) {
+        if (properties.containsKey(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key())) {
           properties.setProperty(HoodieClusteringConfig.INLINE_CLUSTERING_MAX_COMMITS.key(), properties.getProperty(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key()));
           properties.remove(HoodieClusteringConfig.ASYNC_CLUSTERING_MAX_COMMITS.key());
         }
