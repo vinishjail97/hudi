@@ -945,3 +945,8 @@ d36e5575a [HUDI-5907] Allow skip saving checkpoint in deltastreamer (#225)
 c71d50962 [MINOR] Fix pom.xml to use scala12 spark32 by default (#219)
 8811664f9 [bug] handle null or empty labels in prometheus reporter (#217)
 c0be63f40 Upgrade to version release-v0.12.5 (#215)
+
+---[2023-03-22 23:30:49] [release-v0.13.1] Adding release tag for hudi-internal release-v0.13.1---
+2c8c56f1e Fix the conversion of `hoodie.clustering.async.max.commits` to `hoodie.clustering.inline.max.commits` (#244)
+19ee08476 Handle duplicates in `HoodieCreateaHandle` (#236)
+4422201b0 Upgrading to Hudi internal release v0.13.0 (#231)
