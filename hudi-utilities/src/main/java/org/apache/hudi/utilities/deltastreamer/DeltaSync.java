@@ -579,7 +579,7 @@ public class DeltaSync implements Serializable, Closeable {
         return Pair.of(schemaProvider, Pair.of(checkpointStr, jssc.emptyRDD()));
       }
     } catch (Exception ex) {
-      StackTraceElement[] causeStacktrace = ex.getCause().getStackTrace();
+      StackTraceElement[] causeStacktrace = ex.getCause() != null ? ex.getCause().getStackTrace() : ex.getStackTrace();
       Class<?> transformerClass = StacktraceUtils.getTransformerClassFromStackTrace(causeStacktrace);
       if (transformerClass != null) {
         boolean isPlatformError = transformerClass.getName().startsWith("org.apache") || transformerClass.getName().startsWith("com.onehouse");
