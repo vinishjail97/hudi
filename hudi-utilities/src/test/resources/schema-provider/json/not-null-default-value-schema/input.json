@@ -1,0 +1,29 @@
+{
+  "title": "json schema with non null default values",
+  "type": "object",
+  "properties": {
+    "field1": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "property1": {
+              "type": "string",
+              "default": "property1_defaultvalue"
+            },
+            "property2": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "field2": {
+      "type": "string",
+      "default": "property2_defaultvalue"
+    }
+  }
+}

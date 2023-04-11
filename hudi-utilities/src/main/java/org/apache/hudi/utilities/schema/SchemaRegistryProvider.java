@@ -54,6 +54,17 @@ public class SchemaRegistryProvider extends SchemaProvider {
         "hoodie.deltastreamer.schemaprovider.registry.targetUrl";
   }
 
+  @FunctionalInterface
+  public interface SchemaConverter {
+    /**
+     * Convert original schema string to avro schema string.
+     *
+     * @param schema original schema string (e.g., JSON)
+     * @return avro schema string
+     */
+    String convert(String schema) throws IOException;
+  }
+
   /**
    * The method takes the provided url {@code registryUrl} and gets the schema from the schema registry using that url.
    * If the caller provides userInfo credentials in the url (e.g "https://foo:bar@schemaregistry.org") then the credentials
