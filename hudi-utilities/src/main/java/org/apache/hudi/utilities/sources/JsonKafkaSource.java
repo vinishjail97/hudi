@@ -18,8 +18,10 @@
 
 package org.apache.hudi.utilities.sources;
 
+import org.apache.hudi.common.config.ConfigProperty;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.StringUtils;
+import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.exception.HoodieSourcePostProcessException;
 import org.apache.hudi.utilities.ingestion.HoodieIngestionMetrics;
@@ -27,6 +29,7 @@ import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.KafkaOffsetGen;
 import org.apache.hudi.utilities.sources.processor.JsonKafkaSourcePostProcessor;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -51,39 +54,66 @@ import static org.apache.hudi.utilities.schema.KafkaOffsetPostProcessor.KAFKA_SO
  */
 public class JsonKafkaSource extends KafkaSource<String> {
 
-  public JsonKafkaSource(TypedProperties properties, JavaSparkContext sparkContext, SparkSession sparkSession,
+  /**
+   * Configs specific to {@link JsonKafkaSource}.
+   */
+  public static class Config  {
+    public static final ConfigProperty<String> KAFKA_JSON_VALUE_DESERIALIZER_CLASS = ConfigProperty
+            .key("hoodie.deltastreamer.source.kafka.json.value.deserializer.class")
+            .defaultValue(StringDeserializer.class.getName())
+            .sinceVersion("0.13.0")
+            .withDocumentation("Kafka Json Payload Deserializer Class");
+  }
+
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
+  public JsonKafkaSource(TypedProperties properties, JavaSparkContext sparkContext,
+                         SparkSession sparkSession,
                          SchemaProvider schemaProvider, HoodieIngestionMetrics metrics) {
     super(properties, sparkContext, sparkSession, schemaProvider, SourceType.JSON, metrics);
-    properties.put("key.deserializer", StringDeserializer.class.getName());
-    properties.put("value.deserializer", StringDeserializer.class.getName());
+    props.put(NATIVE_KAFKA_KEY_DESERIALIZER_PROP, StringDeserializer.class.getName());
+    props.put(NATIVE_KAFKA_VALUE_DESERIALIZER_PROP, props.getString(Config.KAFKA_JSON_VALUE_DESERIALIZER_CLASS.key(),
+            Config.KAFKA_JSON_VALUE_DESERIALIZER_CLASS.defaultValue()));
     this.offsetGen = new KafkaOffsetGen(props);
   }
 
   @Override
   JavaRDD<String> toRDD(OffsetRange[] offsetRanges) {
+    String deserializerClass = props.getString(NATIVE_KAFKA_VALUE_DESERIALIZER_PROP);
     JavaRDD<ConsumerRecord<Object, Object>> kafkaRDD = KafkaUtils.createRDD(sparkContext,
             offsetGen.getKafkaParams(),
             offsetRanges,
             LocationStrategies.PreferConsistent())
-        .filter(x -> !StringUtils.isNullOrEmpty((String) x.value()));
+        .filter(x -> filterForNullValues(x.value(), deserializerClass));
 
-    JavaRDD<String> result = shouldAppendKafkaOffsets() ? kafkaRDD.mapPartitions(partitionIterator -> {
-      List<String> stringList = new LinkedList<>();
-      ObjectMapper om = new ObjectMapper();
-      partitionIterator.forEachRemaining(consumerRecord -> {
-        String record = consumerRecord.value().toString();
-        try {
-          ObjectNode jsonNode = (ObjectNode) om.readTree(record);
-          jsonNode.put(KAFKA_SOURCE_OFFSET_COLUMN, consumerRecord.offset());
-          jsonNode.put(KAFKA_SOURCE_PARTITION_COLUMN, consumerRecord.partition());
-          jsonNode.put(KAFKA_SOURCE_TIMESTAMP_COLUMN, consumerRecord.timestamp());
-          stringList.add(om.writeValueAsString(jsonNode));
-        } catch (Throwable e) {
-          stringList.add(record);
-        }
-      });
-      return stringList.iterator();
-    }) : kafkaRDD.map(consumerRecord -> (String) consumerRecord.value());
+    JavaRDD<String> result =
+        shouldAppendKafkaOffsets() ? kafkaRDD.mapPartitions(partitionIterator -> {
+          List<String> stringList = new LinkedList<>();
+          partitionIterator.forEachRemaining(consumerRecord -> {
+            String record;
+            try {
+              record = getValueAsString(consumerRecord.value(), deserializerClass);
+            } catch (JsonProcessingException e) {
+              throw new HoodieException(e);
+            }
+            try {
+              ObjectNode jsonNode = (ObjectNode) OBJECT_MAPPER.readTree(record);
+              jsonNode.put(KAFKA_SOURCE_OFFSET_COLUMN, consumerRecord.offset());
+              jsonNode.put(KAFKA_SOURCE_PARTITION_COLUMN, consumerRecord.partition());
+              jsonNode.put(KAFKA_SOURCE_TIMESTAMP_COLUMN, consumerRecord.timestamp());
+              stringList.add(OBJECT_MAPPER.writeValueAsString(jsonNode));
+            } catch (Throwable e) {
+              stringList.add(record);
+            }
+          });
+          return stringList.iterator();
+        }) : kafkaRDD.map(consumerRecord -> {
+          try {
+            return getValueAsString(consumerRecord.value(), deserializerClass);
+          } catch (JsonProcessingException e) {
+            throw new HoodieException(e);
+          }
+        });
     return postProcess(result);
   }
 
@@ -102,5 +132,22 @@ public class JsonKafkaSource extends KafkaSource<String> {
     }
 
     return processor.process(jsonStringRDD);
+  }
+
+  private static Boolean filterForNullValues(Object value, String valueDeserializerClass) {
+    if (value == null) {
+      return false;
+    }
+    if (valueDeserializerClass.equals(StringDeserializer.class.getName())) {
+      return StringUtils.nonEmpty((String) value);
+    }
+    return true;
+  }
+
+  private static String getValueAsString(Object value, String valueDeserializerClass) throws JsonProcessingException {
+    if (StringDeserializer.class.getName().equals(valueDeserializerClass)) {
+      return (String) value;
+    }
+    return OBJECT_MAPPER.writeValueAsString(value);
   }
 }
