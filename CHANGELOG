@@ -954,3 +954,9 @@ c0be63f40 Upgrade to version release-v0.12.5 (#215)
 ---[2023-03-29 13:03:18] [release-v0.13.2] ---
 7ca28d6ed6 Remove onehouse deltastreamer and other internal classes (#246)
 69e770e805 Upgrade to version release-v0.13.1 (#245)
+
+---[2023-04-17 13:55:19] [release-v0.13.3] Adding release tag for hudi-internal-release-v0.13.3---
+4349b9d46 [ONHS-7165] Json schema value deserializer changes (#251)
+790738758 Fix NPE due to ex.getCause call (#250)
+f53beaa87 Upstream json schema converter along with handling for union record.  (#238)
+431728093 Upgrade to version release-v0.13.2 (#248)
