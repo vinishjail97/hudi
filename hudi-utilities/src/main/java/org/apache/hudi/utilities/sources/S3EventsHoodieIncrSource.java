@@ -93,6 +93,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
 
     // ToDo make it a list of extensions
     static final String S3_ACTUAL_FILE_EXTENSIONS = "hoodie.deltastreamer.source.s3incr.file.extensions";
+    static final String S3_PATH_REGEX = "hoodie.deltastreamer.source.cloud.data.select.path.regex";
   }
 
   public S3EventsHoodieIncrSource(
@@ -170,21 +171,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       return Pair.of(Option.empty(), queryTypeAndInstantEndpts.getRight().getRight());
     }
 
-    String filter = "s3.object.size > 0";
-    if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_KEY_PREFIX, null))) {
-      filter = filter + " and s3.object.key like '" + props.getString(Config.S3_KEY_PREFIX) + "%'";
-    }
-    if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_IGNORE_KEY_PREFIX, null))) {
-      filter = filter + " and s3.object.key not like '" + props.getString(Config.S3_IGNORE_KEY_PREFIX) + "%'";
-    }
-    if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_IGNORE_KEY_SUBSTRING, null))) {
-      filter = filter + " and s3.object.key not like '%" + props.getString(Config.S3_IGNORE_KEY_SUBSTRING) + "%'";
-    }
-    // add file format filtering by default
-    // ToDo this was an urgent fix for Zendesk, we need to make this config more formal with a
-    // list of extensions
-    String fileExtensionFilter = props.getString(Config.S3_ACTUAL_FILE_EXTENSIONS, fileFormat);
-    filter = filter + " and s3.object.key like '%" + fileExtensionFilter + "'";
+    Dataset<Row> filteredSourceData = applyFilter(source, fileFormat);
 
     String s3FS = props.getString(Config.S3_FS_PREFIX, "s3").toLowerCase();
     String s3Prefix = s3FS + "://";
@@ -192,8 +179,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     // Create S3 paths
     final boolean checkExists = props.getBoolean(Config.ENABLE_EXISTS_CHECK, Config.DEFAULT_ENABLE_EXISTS_CHECK);
     SerializableConfiguration serializableConfiguration = new SerializableConfiguration(sparkContext.hadoopConfiguration());
-    List<String> cloudFiles = source
-        .filter(filter)
+    List<String> cloudFiles = filteredSourceData
         .select("s3.bucket.name", "s3.object.key")
         .distinct()
         .mapPartitions((MapPartitionsFunction<Row, String>)  fileListIterator -> {
@@ -233,5 +219,37 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     LOG.debug("Extracted distinct files " + cloudFiles.size()
         + " and some samples " + cloudFiles.stream().limit(10).collect(Collectors.toList()));
     return Pair.of(dataset, queryTypeAndInstantEndpts.getRight().getRight());
+  }
+
+  Dataset<Row> applyFilter(Dataset<Row> source, String fileFormat) {
+    String filter = "s3.object.size > 0";
+    String s3KeyPrefix = props.getString(Config.S3_KEY_PREFIX, null);
+    if (!StringUtils.isNullOrEmpty(s3KeyPrefix)) {
+      filter = filter + " and s3.object.key like '" + s3KeyPrefix + "%'";
+    }
+    if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_IGNORE_KEY_PREFIX, null))) {
+      filter = filter + " and s3.object.key not like '" + props.getString(Config.S3_IGNORE_KEY_PREFIX) + "%'";
+    }
+    if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_IGNORE_KEY_SUBSTRING, null))) {
+      filter = filter + " and s3.object.key not like '%" + props.getString(Config.S3_IGNORE_KEY_SUBSTRING) + "%'";
+    }
+    // add file format filtering by default
+    // ToDo this was an urgent fix for Zendesk, we need to make this config more formal with a
+    // list of extensions
+    String fileExtensionFilter = props.getString(Config.S3_ACTUAL_FILE_EXTENSIONS, fileFormat);
+    filter = filter + " and s3.object.key like '%" + fileExtensionFilter + "'";
+
+    if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_PATH_REGEX, null))) {
+      String updatedPathRegex;
+      if (StringUtils.isNullOrEmpty(s3KeyPrefix)) {
+        updatedPathRegex = props.getString(Config.S3_PATH_REGEX);
+      } else {
+        updatedPathRegex = s3KeyPrefix.endsWith("/")
+            ? s3KeyPrefix + props.getString(Config.S3_PATH_REGEX) :
+            s3KeyPrefix + "/" + props.getString(Config.S3_PATH_REGEX);
+      }
+      filter = filter + " and s3.object.key rlike '" + updatedPathRegex + "'";
+    }
+    return source.filter(filter);
   }
 }
