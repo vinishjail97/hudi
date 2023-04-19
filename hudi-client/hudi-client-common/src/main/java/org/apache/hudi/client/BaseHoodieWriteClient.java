@@ -41,6 +41,7 @@ import org.apache.hudi.client.utils.TransactionUtils;
 import org.apache.hudi.common.HoodiePendingRollbackInfo;
 import org.apache.hudi.common.config.HoodieCommonConfig;
 import org.apache.hudi.common.engine.HoodieEngineContext;
+import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.model.HoodieCommitMetadata;
 import org.apache.hudi.common.model.HoodieFailedWritesCleaningPolicy;
 import org.apache.hudi.common.model.HoodieKey;
@@ -65,6 +66,7 @@ import org.apache.hudi.config.HoodieArchivalConfig;
 import org.apache.hudi.config.HoodieClusteringConfig;
 import org.apache.hudi.config.HoodieCompactionConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.config.OnehouseInternalConfig;
 import org.apache.hudi.exception.HoodieCommitException;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
@@ -182,6 +184,34 @@ public abstract class BaseHoodieWriteClient<T extends HoodieRecordPayload, I, K,
     this.index = createIndex(writeConfig);
     this.txnManager = new TransactionManager(config, fs);
     this.upgradeDowngradeHelper = upgradeDowngradeHelper;
+    if (config.getBooleanOrDefault(OnehouseInternalConfig.ADD_FIELD_IDS)) {
+      addFieldIds();
+    }
+  }
+
+  private void addFieldIds() {
+    if (config.getSchema() != null || config.getWriteSchema() != null) {
+      try {
+        Option<Schema> currentSchema;
+        if (FSUtils.isTableExists(config.getBasePath(), fs) && createMetaClient(true).getCommitsTimeline().countInstants() > 0) {
+          currentSchema = Option.of(new TableSchemaResolver(createMetaClient(true)).getTableAvroSchema());
+        } else {
+          currentSchema = Option.empty();
+        }
+        if (config.getSchema() != null) {
+          Schema schema = new Schema.Parser().parse(config.getSchema());
+          Schema newSchema = HoodieAvroUtils.addIdTracking(schema, currentSchema, config.populateMetaFields());
+          config.setSchema(newSchema.toString());
+        }
+        if (config.getProps().containsKey(HoodieWriteConfig.WRITE_SCHEMA.key())) {
+          Schema writeSchema = new Schema.Parser().parse(config.getWriteSchema());
+          Schema newWriteSchema = HoodieAvroUtils.addIdTracking(writeSchema, currentSchema, config.populateMetaFields());
+          config.getProps().setProperty(HoodieWriteConfig.WRITE_SCHEMA.key(), newWriteSchema.toString());
+        }
+      } catch (Exception ex) {
+        throw new HoodieException("Unable to initialize fieldIds", ex);
+      }
+    }
   }
 
   protected abstract HoodieIndex<?, ?> createIndex(HoodieWriteConfig writeConfig);

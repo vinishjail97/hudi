@@ -20,6 +20,7 @@ package org.apache.hudi.avro;
 
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.testutils.SchemaTestUtil;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.SchemaCompatibilityException;
 
@@ -37,6 +38,7 @@ import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.sql.Date;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -109,6 +111,108 @@ public class TestHoodieAvroUtils {
       + "{\"name\":\"ln\",\"type\":\"string\"},"
       + "{\"name\":\"ss\",\"type\":{\"name\":\"ss\",\"type\":\"record\",\"fields\":["
       + "{\"name\":\"fn\",\"type\":[\"null\" ,\"string\"],\"default\": null},{\"name\":\"ln\",\"type\":[\"null\" ,\"string\"],\"default\": null}]}}]}";
+
+  private static final String COMPLEX_SCHEMA_PRE_EVOLUTION = "{\"type\":\"record\",\"name\":\"Sample\",\"namespace\":\"test\",\"fields\":[{\"name\":\"key\",\"type\":\"string\"},"
+      + "{\"name\":\"ts\",\"type\":\"long\"},{\"name\":\"level\",\"type\":\"string\"},{\"name\":\"nested_record\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"Nested\","
+      + "\"fields\":[{\"name\":\"nested_int\",\"type\":\"int\",\"default\":0},{\"name\":\"double_nested\",\"type\":{\"type\":\"record\",\"name\":\"DoubleNested\","
+      + "\"fields\":[{\"name\":\"double_nested_int\",\"type\":\"int\",\"default\":0}]}}]}],\"default\":null},{\"name\":\"nullable_map_field\","
+      + "\"type\":[\"null\",{\"type\":\"map\",\"values\":\"Nested\"}],\"default\":null},{\"name\":\"primitive_map_field\",\"type\":\"string\"}]}";
+  private static final String COMPLEX_SCHEMA = "{\"type\":\"record\",\"name\":\"Sample\",\"namespace\":\"test\",\"fields\":[{\"name\":\"key\",\"type\":\"string\"},{\"name\":\"ts\",\"type\":\"long\"},"
+      + "{\"name\":\"level\",\"type\":\"string\"},{\"name\":\"nested_record\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"Nested\","
+      + "\"fields\":[{\"name\":\"nested_int\",\"type\":\"int\",\"default\":0},{\"name\":\"double_nested\",\"type\":{\"type\":\"record\",\"name\":\"DoubleNested\","
+      + "\"fields\":[{\"name\":\"double_nested_int\",\"type\":\"int\",\"default\":0}]}},{\"name\":\"level\",\"type\":\"string\"}]}],\"default\":null},"
+      + "{\"name\":\"nullable_map_field\",\"type\":[\"null\",{\"type\":\"map\",\"values\":\"Nested\"}],\"default\":null},{\"name\":\"primitive_map_field\",\"type\":\"string\"},"
+      + "{\"name\":\"array_field\",\"type\":{\"type\":\"array\",\"items\":\"Nested\"},\"default\":[]},{\"name\":\"primitive_array_field\",\"type\":\"string\"}]}";
+
+  @Test
+  public void testIdTrackingBootstrapWithSchema() {
+    Schema input = new Schema.Parser().parse(COMPLEX_SCHEMA);
+    // initially schema does not have id tracking set so must bootstrap even though there is a previous schema
+    Schema schemaWithIdTracking = HoodieAvroUtils.addIdTracking(input, Option.of(input), true);
+    IdTracking actual = HoodieAvroUtils.getIdTracking(schemaWithIdTracking).get();
+    assertEquals(getExpectTrackingForComplexSchema(), actual);
+    // validate that meta fields are not added to the schema itself
+    assertEquals(input.getFields().size(), schemaWithIdTracking.getFields().size());
+  }
+
+  @Test
+  public void testIdTrackingBootstrapWithoutSchema() {
+    Schema input = new Schema.Parser().parse(COMPLEX_SCHEMA);
+    Schema schemaWithIdTracking = HoodieAvroUtils.addIdTracking(input, Option.empty(), true);
+    IdTracking actual = HoodieAvroUtils.getIdTracking(schemaWithIdTracking).get();
+    assertEquals(getExpectTrackingForComplexSchema(), actual);
+  }
+
+  @Test
+  public void testIdTrackingWithIdenticalSchemas() {
+    Schema input = new Schema.Parser().parse(COMPLEX_SCHEMA);
+    Schema inputWithIdTracking = HoodieAvroUtils.addIdTracking(input, Option.empty(), true);
+    // Should be a no-op
+    Schema schemaWithIdTracking = HoodieAvroUtils.addIdTracking(input, Option.of(inputWithIdTracking), true);
+    IdTracking actual = HoodieAvroUtils.getIdTracking(schemaWithIdTracking).get();
+    assertEquals(getExpectTrackingForComplexSchema(), actual);
+  }
+
+  @Test
+  public void testIdTrackingWithPreviousSchema() {
+    Schema initial = HoodieAvroUtils.addIdTracking(new Schema.Parser().parse(COMPLEX_SCHEMA_PRE_EVOLUTION), Option.empty(), true);
+    Schema evolved = new Schema.Parser().parse(COMPLEX_SCHEMA);
+    Schema schemaWithIdTracking = HoodieAvroUtils.addIdTracking(evolved, Option.of(initial), true);
+    IdTracking actual = HoodieAvroUtils.getIdTracking(schemaWithIdTracking).get();
+    assertEquals(getExpectTrackingForComplexSchemaEvolved(), actual);
+  }
+
+  @Test
+  public void testIdTrackingWithPreviousSchemaWithoutMetaFields() {
+    Schema initial = HoodieAvroUtils.addIdTracking(new Schema.Parser().parse(COMPLEX_SCHEMA_PRE_EVOLUTION), Option.empty(), false);
+    Schema evolved = new Schema.Parser().parse(COMPLEX_SCHEMA);
+    Schema schemaWithIdTracking = HoodieAvroUtils.addIdTracking(evolved, Option.of(initial), false);
+    IdTracking actual = HoodieAvroUtils.getIdTracking(schemaWithIdTracking).get();
+    assertEquals(getExpectTrackingForComplexSchemaEvolvedNoMetaFields(), actual);
+  }
+
+  @Test
+  public void testIdTrackingWithFieldRemoval() {
+    // create initial schema with 2 fields and assign IDs
+    Schema initial = Schema.createRecord("test1", null, "hudi", false,
+        Arrays.asList(new Schema.Field("field1", Schema.create(Schema.Type.STRING)), new Schema.Field("field2", Schema.create(Schema.Type.STRING))));
+    Schema initialWithIdTracking = HoodieAvroUtils.addIdTracking(initial, Option.empty(), false);
+    // remove the second field
+    Schema withFieldRemoved = Schema.createRecord("test2", null, "hudi", false,
+        Arrays.asList(new Schema.Field("field1", Schema.create(Schema.Type.STRING))));
+    Schema withFieldRemovedAndIdTracking = HoodieAvroUtils.addIdTracking(withFieldRemoved, Option.of(initialWithIdTracking), false);
+    IdTracking actualWithFieldRemoved = HoodieAvroUtils.getIdTracking(withFieldRemovedAndIdTracking).get();
+    IdTracking expectedWithFieldRemoved = new IdTracking(Arrays.asList(new IdMapping("field1", 1)), 2);
+    assertEquals(expectedWithFieldRemoved, actualWithFieldRemoved);
+    // Adding a new field should be tracked with ID 3
+    Schema withFieldAdded = Schema.createRecord("test2", null, "hudi", false,
+        Arrays.asList(new Schema.Field("field1", Schema.create(Schema.Type.STRING)), new Schema.Field("field3", Schema.create(Schema.Type.STRING))));
+    Schema withFieldAddedAndIdTracking = HoodieAvroUtils.addIdTracking(withFieldAdded, Option.of(withFieldRemovedAndIdTracking), false);
+    IdTracking actualWithFieldAdded = HoodieAvroUtils.getIdTracking(withFieldAddedAndIdTracking).get();
+    IdTracking expectedWithFieldAdded = new IdTracking(Arrays.asList(new IdMapping("field1", 1), new IdMapping("field3", 3)), 3);
+    assertEquals(expectedWithFieldAdded, actualWithFieldAdded);
+  }
+
+  @Test
+  public void testIdTrackingAddMetaFields() {
+    // create initial schema with a meta field manually specified
+    Schema initial = Schema.createRecord("test1", null, "hudi", false,
+        Arrays.asList(new Schema.Field("_hoodie_commit_time", Schema.create(Schema.Type.STRING)), new Schema.Field("field1", Schema.create(Schema.Type.STRING))));
+    Schema initialWithIdTracking = HoodieAvroUtils.addIdTracking(initial, Option.empty(), false);
+    // add all meta fields and ensure IDs are properly assigned
+    Schema withMetaFields = Schema.createRecord("test2", null, "hudi", false,
+        Arrays.asList(new Schema.Field("_hoodie_commit_time", Schema.create(Schema.Type.STRING)), new Schema.Field("field1", Schema.create(Schema.Type.STRING))));
+    Schema withMetaFieldsAndIdTracking = HoodieAvroUtils.addIdTracking(withMetaFields, Option.of(initialWithIdTracking), true);
+    IdTracking actual = HoodieAvroUtils.getIdTracking(withMetaFieldsAndIdTracking).get();
+    IdTracking expected = new IdTracking(Arrays.asList(
+        new IdMapping("_hoodie_commit_time", 1),
+        new IdMapping("field1", 2),
+        new IdMapping("_hoodie_commit_seqno", 3),
+        new IdMapping("_hoodie_record_key", 4),
+        new IdMapping("_hoodie_partition_path", 5),
+        new IdMapping("_hoodie_file_name", 6)), 6);
+    assertEquals(expected, actual);
+  }
 
   @Test
   public void testPropsPresent() {
@@ -426,5 +530,123 @@ public class TestHoodieAvroUtils {
     Date now = new Date(System.currentTimeMillis());
     int days = HoodieAvroUtils.fromJavaDate(now);
     assertEquals(now.toLocalDate(), HoodieAvroUtils.toJavaDate(days).toLocalDate());
+  }
+
+  private static IdTracking getExpectTrackingForComplexSchema() {
+    List<IdMapping> idMappings = Arrays.asList(
+        new IdMapping("_hoodie_commit_time", 1),
+        new IdMapping("_hoodie_commit_seqno", 2),
+        new IdMapping("_hoodie_record_key", 3),
+        new IdMapping("_hoodie_partition_path", 4),
+        new IdMapping("_hoodie_file_name", 5),
+        new IdMapping("key", 6),
+        new IdMapping("ts", 7),
+        new IdMapping("level", 8),
+        new IdMapping("nested_record", 9, Arrays.asList(
+            new IdMapping("nested_int", 14),
+            new IdMapping("double_nested", 15, Arrays.asList(
+                new IdMapping("double_nested_int", 17)
+            )),
+            new IdMapping("level", 16)
+        )),
+        new IdMapping("nullable_map_field", 10, Arrays.asList(
+            new IdMapping("key", 18),
+            new IdMapping("value", 19, Arrays.asList(
+                new IdMapping("nested_int", 20),
+                new IdMapping("double_nested", 21, Arrays.asList(
+                    new IdMapping("double_nested_int", 23)
+                )),
+                new IdMapping("level", 22)
+            ))
+        )),
+        new IdMapping("primitive_map_field", 11),
+        new IdMapping("array_field", 12, Arrays.asList(
+            new IdMapping("element", 24, Arrays.asList(
+                new IdMapping("nested_int", 25),
+                new IdMapping("double_nested", 26, Arrays.asList(
+                    new IdMapping("double_nested_int", 28)
+                )),
+                new IdMapping("level", 27)
+            ))
+        )),
+        new IdMapping("primitive_array_field", 13));
+    return new IdTracking(idMappings, 28);
+  }
+
+  private static IdTracking getExpectTrackingForComplexSchemaEvolved() {
+    List<IdMapping> idMappings = Arrays.asList(
+        new IdMapping("_hoodie_commit_time", 1),
+        new IdMapping("_hoodie_commit_seqno", 2),
+        new IdMapping("_hoodie_record_key", 3),
+        new IdMapping("_hoodie_partition_path", 4),
+        new IdMapping("_hoodie_file_name", 5),
+        new IdMapping("key", 6),
+        new IdMapping("ts", 7),
+        new IdMapping("level", 8),
+        new IdMapping("nested_record", 9, Arrays.asList(
+            new IdMapping("nested_int", 12),
+            new IdMapping("double_nested", 13, Arrays.asList(
+                new IdMapping("double_nested_int", 14)
+            )),
+            new IdMapping("level", 22)
+        )),
+        new IdMapping("nullable_map_field", 10, Arrays.asList(
+            new IdMapping("key", 15),
+            new IdMapping("value", 16, Arrays.asList(
+                new IdMapping("nested_int", 17),
+                new IdMapping("double_nested", 18, Arrays.asList(
+                    new IdMapping("double_nested_int", 19)
+                )),
+                new IdMapping("level", 23)
+            ))
+        )),
+        new IdMapping("primitive_map_field", 11),
+        new IdMapping("array_field", 20, Arrays.asList(
+            new IdMapping("element", 24, Arrays.asList(
+                new IdMapping("nested_int", 25),
+                new IdMapping("double_nested", 26, Arrays.asList(
+                    new IdMapping("double_nested_int", 28)
+                )),
+                new IdMapping("level", 27)
+            ))
+        )),
+        new IdMapping("primitive_array_field", 21));
+    return new IdTracking(idMappings, 28);
+  }
+
+  private static IdTracking getExpectTrackingForComplexSchemaEvolvedNoMetaFields() {
+    List<IdMapping> idMappings = Arrays.asList(
+        new IdMapping("key", 1),
+        new IdMapping("ts", 2),
+        new IdMapping("level", 3),
+        new IdMapping("nested_record", 4, Arrays.asList(
+            new IdMapping("nested_int", 7),
+            new IdMapping("double_nested", 8, Arrays.asList(
+                new IdMapping("double_nested_int", 9)
+            )),
+            new IdMapping("level", 17)
+        )),
+        new IdMapping("nullable_map_field", 5, Arrays.asList(
+            new IdMapping("key", 10),
+            new IdMapping("value", 11, Arrays.asList(
+                new IdMapping("nested_int", 12),
+                new IdMapping("double_nested", 13, Arrays.asList(
+                    new IdMapping("double_nested_int", 14)
+                )),
+                new IdMapping("level", 18)
+            ))
+        )),
+        new IdMapping("primitive_map_field", 6),
+        new IdMapping("array_field", 15, Arrays.asList(
+            new IdMapping("element", 19, Arrays.asList(
+                new IdMapping("nested_int", 20),
+                new IdMapping("double_nested", 21, Arrays.asList(
+                    new IdMapping("double_nested_int", 23)
+                )),
+                new IdMapping("level", 22)
+            ))
+        )),
+        new IdMapping("primitive_array_field", 16));
+    return new IdTracking(idMappings, 23);
   }
 }

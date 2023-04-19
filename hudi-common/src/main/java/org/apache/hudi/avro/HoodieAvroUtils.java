@@ -29,6 +29,8 @@ import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.exception.SchemaCompatibilityException;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.AvroRuntimeException;
 import org.apache.avro.Conversions;
 import org.apache.avro.Conversions.DecimalConversion;
@@ -71,6 +73,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -79,6 +82,8 @@ import java.util.Deque;
 import java.util.LinkedList;
 import java.util.Set;
 import java.util.TimeZone;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -93,6 +98,8 @@ import static org.apache.hudi.common.util.ValidationUtils.checkState;
  * Helper class to do common stuff across Avro.
  */
 public class HoodieAvroUtils {
+  private static final String ID_TRACKING = "hudi_id_tracking";
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
   public static final String AVRO_VERSION = Schema.class.getPackage().getImplementationVersion();
   private static final ThreadLocal<BinaryEncoder> BINARY_ENCODER = ThreadLocal.withInitial(() -> null);
@@ -107,11 +114,114 @@ public class HoodieAvroUtils {
   private static final Pattern INVALID_AVRO_CHARS_IN_NAMES_PATTERN = Pattern.compile("[^A-Za-z0-9_]");
   private static final Pattern INVALID_AVRO_FIRST_CHAR_IN_NAMES_PATTERN = Pattern.compile("[^A-Za-z_]");
   private static final String MASK_FOR_INVALID_CHARS_IN_NAMES = "__";
+  private static final String ARRAY_FIELD = "element";
+  private static final String KEY_FIELD = "key";
+  private static final String VALUE_FIELD = "value";
 
   // All metadata fields are optional strings.
   public static final Schema METADATA_FIELD_SCHEMA = createNullableSchema(Schema.Type.STRING);
 
   public static final Schema RECORD_KEY_SCHEMA = initRecordKeySchema();
+
+  /**
+   * Adds IdTracking information to the properties of a schema and returns a schema with the property set.
+   * @param schema The schema to update the IdTracking property
+   * @param previousSchema Schema previously used, if any, to ensure that IDs are consistent between commits.
+   * @param includeMetaFields Whether hoodie meta fields will be included in the table
+   * @return a new or updated schema
+   */
+  public static Schema addIdTracking(Schema schema, Option<Schema> previousSchema, boolean includeMetaFields) {
+    IdTracking existingState = previousSchema.flatMap(HoodieAvroUtils::getIdTracking).orElse(IdTracking.EMPTY);
+    AtomicInteger currentId = new AtomicInteger(existingState.getLastIdUsed());
+    // add meta fields to the schema in order to ensure they will be assigned IDs
+    Schema schemaForIdMapping = includeMetaFields ? addMetadataFields(schema) : schema;
+    List<IdMapping> newMappings = generateIdMappings(schemaForIdMapping, currentId, existingState.getIdMappings());
+    IdTracking newIdTracking = new IdTracking(newMappings, currentId.get());
+    return addIdMappings(schema, newIdTracking);
+  }
+
+  private static Schema addIdMappings(Schema schema, IdTracking idTracking) {
+    Schema updatedSchema = schema;
+    if (schema.getObjectProps().containsKey(ID_TRACKING)) {
+      updatedSchema = copySchemaWithoutIdTrackingProp(schema);
+    }
+    updatedSchema.addProp(ID_TRACKING, OBJECT_MAPPER.valueToTree(idTracking));
+    return updatedSchema;
+  }
+
+  private static Schema copySchemaWithoutIdTrackingProp(Schema input) {
+    List<Schema.Field> parentFields = new ArrayList<>();
+
+    for (Schema.Field field : input.getFields()) {
+      Schema.Field newField = new Schema.Field(field.name(), field.schema(), field.doc(), field.defaultVal());
+      for (Map.Entry<String, Object> prop : field.getObjectProps().entrySet()) {
+        newField.addProp(prop.getKey(), prop.getValue());
+      }
+      parentFields.add(newField);
+    }
+
+    Schema mergedSchema = Schema.createRecord(input.getName(), input.getDoc(), input.getNamespace(), false);
+    if (input.hasProps()) {
+      input.getObjectProps().forEach((key, value) -> {
+        if (!key.equals(ID_TRACKING)) {
+          mergedSchema.addProp(key, value);
+        }
+      });
+    }
+    mergedSchema.setFields(parentFields);
+    return mergedSchema;
+  }
+
+  private static List<IdMapping> generateIdMappings(Schema schema, AtomicInteger lastFieldId, List<IdMapping> existingMappings) {
+    Map<String, IdMapping> fieldNameToExistingMapping = existingMappings == null ? new HashMap<>() : existingMappings.stream().collect(Collectors.toMap(IdMapping::getName, Function.identity()));
+    List<IdMapping> mappings = new ArrayList<>();
+    List<Pair<IdMapping, Schema>> nested = new ArrayList<>();
+    if (schema.getType() == Schema.Type.ARRAY) {
+      // add a single field "element"
+      IdMapping fieldMapping = fieldNameToExistingMapping.computeIfAbsent(ARRAY_FIELD, key -> new IdMapping(key, lastFieldId.incrementAndGet()));
+      mappings.add(fieldMapping);
+      nested.add(Pair.of(fieldMapping, schema.getElementType()));
+    } else if (schema.getType() == Schema.Type.MAP) {
+      // add a field for the key and value
+      IdMapping keyFieldMapping = fieldNameToExistingMapping.computeIfAbsent(KEY_FIELD, key -> new IdMapping(key, lastFieldId.incrementAndGet()));
+      IdMapping valueFieldMapping = fieldNameToExistingMapping.computeIfAbsent(VALUE_FIELD, key -> new IdMapping(key, lastFieldId.incrementAndGet()));
+      mappings.add(keyFieldMapping);
+      mappings.add(valueFieldMapping);
+      nested.add(Pair.of(valueFieldMapping, schema.getValueType()));
+    } else if (schema.getType() == Schema.Type.RECORD) {
+      for (Schema.Field field : schema.getFields()) {
+        Schema fieldSchema = field.schema();
+        IdMapping fieldMapping = fieldNameToExistingMapping.computeIfAbsent(field.name(), key -> new IdMapping(key, lastFieldId.incrementAndGet()));
+        mappings.add(fieldMapping);
+        if (fieldSchema.isUnion()) {
+          // assumes union for nullable
+          fieldSchema = fieldSchema.getTypes().get(0).getType() == Schema.Type.NULL ? fieldSchema.getTypes().get(1) : fieldSchema.getTypes().get(0);
+        }
+        if (fieldSchema.getType() == Schema.Type.RECORD || fieldSchema.getType() == Schema.Type.ARRAY || fieldSchema.getType() == Schema.Type.MAP) {
+          nested.add(Pair.of(fieldMapping, fieldSchema));
+        }
+      }
+    }
+    nested.forEach(pair -> pair.getLeft().setFields(generateIdMappings(pair.getRight(), lastFieldId, pair.getLeft().getFields())));
+    return mappings.stream().sorted(Comparator.comparing(IdMapping::getId)).collect(Collectors.toList());
+  }
+
+  /**
+   * Reads the IdTracking information from the provided schema if it is present.
+   * @param schema to get IdTracking information from
+   * @return Option containing the IdTracking if it is present in the schema properties, otherwise returns an empty Option.
+   */
+  public static Option<IdTracking> getIdTracking(Schema schema) {
+    try {
+      Object propValue = schema.getObjectProp(ID_TRACKING);
+      if (propValue == null) {
+        return Option.empty();
+      }
+      return Option.of(OBJECT_MAPPER.readerFor(IdTracking.class).readValue((JsonNode) OBJECT_MAPPER.valueToTree(propValue)));
+    } catch (IOException ex) {
+      throw new RuntimeException(ex);
+    }
+  }
 
   /**
    * Convert a given avro record to bytes.
@@ -243,6 +353,9 @@ public class HoodieAvroUtils {
     }
 
     Schema mergedSchema = Schema.createRecord(schema.getName(), schema.getDoc(), schema.getNamespace(), false);
+    if (schema.hasProps()) {
+      mergedSchema.putAll(schema);
+    }
     mergedSchema.setFields(parentFields);
     return mergedSchema;
   }
@@ -602,7 +715,6 @@ public class HoodieAvroUtils {
     throw new HoodieException("Failed to get schema. Not a valid field name: " + fieldName);
   }
 
-
   /**
    * Get schema for the given field and write schema. Field can be nested, denoted by dot notation. e.g: a.b.c
    * Use this method when record is not available. Otherwise, prefer to use {@link #getNestedFieldSchemaFromRecord(GenericRecord, String)}
@@ -862,7 +974,7 @@ public class HoodieAvroUtils {
         }
         Collection array = (Collection)oldRecord;
         List<Object> newArray = new ArrayList();
-        fieldNames.push("element");
+        fieldNames.push(ARRAY_FIELD);
         for (Object element : array) {
           newArray.add(rewriteRecordWithNewSchema(element, oldSchema.getElementType(), newSchema.getElementType(), renameCols, fieldNames, validate));
         }
@@ -874,7 +986,7 @@ public class HoodieAvroUtils {
         }
         Map<Object, Object> map = (Map<Object, Object>) oldRecord;
         Map<Object, Object> newMap = new HashMap<>();
-        fieldNames.push("value");
+        fieldNames.push(VALUE_FIELD);
         for (Map.Entry<Object, Object> entry : map.entrySet()) {
           newMap.put(entry.getKey(), rewriteRecordWithNewSchema(entry.getValue(), oldSchema.getValueType(), newSchema.getValueType(), renameCols, fieldNames, validate));
         }

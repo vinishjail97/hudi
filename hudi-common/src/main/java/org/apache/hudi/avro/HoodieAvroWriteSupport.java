@@ -22,6 +22,11 @@ import org.apache.avro.Schema;
 import org.apache.hudi.common.bloom.BloomFilter;
 import org.apache.hudi.common.util.CollectionUtils;
 import org.apache.hudi.common.util.Option;
+
+import org.apache.iceberg.mapping.MappedField;
+import org.apache.iceberg.mapping.MappedFields;
+import org.apache.iceberg.mapping.NameMapping;
+import org.apache.iceberg.parquet.ParquetSchemaUtil;
 import org.apache.parquet.avro.AvroWriteSupport;
 import org.apache.parquet.hadoop.api.WriteSupport;
 import org.apache.parquet.schema.MessageType;
@@ -29,7 +34,9 @@ import org.apache.parquet.schema.MessageType;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Wrap AvroWriterSupport for plugging in the bloom filter.
@@ -38,13 +45,15 @@ public class HoodieAvroWriteSupport extends AvroWriteSupport {
 
   private final Option<HoodieBloomFilterWriteSupport<String>> bloomFilterWriteSupportOpt;
   private final Map<String, String> footerMetadata = new HashMap<>();
+  private final Schema schema;
 
   public static final String OLD_HOODIE_AVRO_BLOOM_FILTER_METADATA_KEY = "com.uber.hoodie.bloomfilter";
   public static final String HOODIE_AVRO_BLOOM_FILTER_METADATA_KEY = "org.apache.hudi.bloomfilter";
 
   public HoodieAvroWriteSupport(MessageType schema, Schema avroSchema, Option<BloomFilter> bloomFilterOpt) {
-    super(schema, avroSchema, ConvertingGenericData.INSTANCE);
+    super(addFieldIdsToParquetSchema(schema, avroSchema), avroSchema, ConvertingGenericData.INSTANCE);
     this.bloomFilterWriteSupportOpt = bloomFilterOpt.map(HoodieBloomFilterAvroWriteSupport::new);
+    this.schema = avroSchema;
   }
 
   @Override
@@ -76,5 +85,19 @@ public class HoodieAvroWriteSupport extends AvroWriteSupport {
     protected byte[] getUTF8Bytes(String key) {
       return key.getBytes(StandardCharsets.UTF_8);
     }
+  }
+
+  private static MessageType addFieldIdsToParquetSchema(MessageType messageType, Schema schema) {
+    // apply field IDs if present
+    return HoodieAvroUtils.getIdTracking(schema).map(idTracking -> {
+      List<IdMapping> idMappings = idTracking.getIdMappings();
+      NameMapping nameMapping = NameMapping.of(idMappings.stream().map(HoodieAvroWriteSupport::toMappedField).collect(Collectors.toList()));
+      return ParquetSchemaUtil.applyNameMapping(messageType, nameMapping);
+    }).orElse(messageType);
+  }
+
+  private static MappedField toMappedField(IdMapping idMapping) {
+    return MappedField.of(idMapping.getId(), idMapping.getName(),
+        idMapping.getFields() == null ? null : MappedFields.of(idMapping.getFields().stream().map(HoodieAvroWriteSupport::toMappedField).collect(Collectors.toList())));
   }
 }
