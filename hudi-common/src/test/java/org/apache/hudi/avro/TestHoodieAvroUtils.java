@@ -116,13 +116,14 @@ public class TestHoodieAvroUtils {
       + "{\"name\":\"ts\",\"type\":\"long\"},{\"name\":\"level\",\"type\":\"string\"},{\"name\":\"nested_record\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"Nested\","
       + "\"fields\":[{\"name\":\"nested_int\",\"type\":\"int\",\"default\":0},{\"name\":\"double_nested\",\"type\":{\"type\":\"record\",\"name\":\"DoubleNested\","
       + "\"fields\":[{\"name\":\"double_nested_int\",\"type\":\"int\",\"default\":0}]}}]}],\"default\":null},{\"name\":\"nullable_map_field\","
-      + "\"type\":[\"null\",{\"type\":\"map\",\"values\":\"Nested\"}],\"default\":null},{\"name\":\"primitive_map_field\",\"type\":\"string\"}]}";
+      + "\"type\":[\"null\",{\"type\":\"map\",\"values\":\"Nested\"}],\"default\":null},{\"name\":\"primitive_map_field\",\"type\":{\"type\":\"map\",\"values\":\"string\"}}]}";
   private static final String COMPLEX_SCHEMA = "{\"type\":\"record\",\"name\":\"Sample\",\"namespace\":\"test\",\"fields\":[{\"name\":\"key\",\"type\":\"string\"},{\"name\":\"ts\",\"type\":\"long\"},"
       + "{\"name\":\"level\",\"type\":\"string\"},{\"name\":\"nested_record\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"Nested\","
       + "\"fields\":[{\"name\":\"nested_int\",\"type\":\"int\",\"default\":0},{\"name\":\"double_nested\",\"type\":{\"type\":\"record\",\"name\":\"DoubleNested\","
       + "\"fields\":[{\"name\":\"double_nested_int\",\"type\":\"int\",\"default\":0}]}},{\"name\":\"level\",\"type\":\"string\"}]}],\"default\":null},"
-      + "{\"name\":\"nullable_map_field\",\"type\":[\"null\",{\"type\":\"map\",\"values\":\"Nested\"}],\"default\":null},{\"name\":\"primitive_map_field\",\"type\":\"string\"},"
-      + "{\"name\":\"array_field\",\"type\":{\"type\":\"array\",\"items\":\"Nested\"},\"default\":[]},{\"name\":\"primitive_array_field\",\"type\":\"string\"}]}";
+      + "{\"name\":\"nullable_map_field\",\"type\":[\"null\",{\"type\":\"map\",\"values\":\"Nested\"}],\"default\":null},"
+      + "{\"name\":\"primitive_map_field\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},"
+      + "{\"name\":\"array_field\",\"type\":{\"type\":\"array\",\"items\":\"Nested\"},\"default\":[]},{\"name\":\"primitive_array_field\",\"type\":{\"type\":\"array\",\"items\":\"string\"}}]}";
 
   @Test
   public void testIdTrackingBootstrapWithSchema() {
@@ -559,18 +560,18 @@ public class TestHoodieAvroUtils {
                 new IdMapping("level", 22)
             ))
         )),
-        new IdMapping("primitive_map_field", 11),
+        new IdMapping("primitive_map_field", 11, Arrays.asList(new IdMapping("key", 24), new IdMapping("value", 25))),
         new IdMapping("array_field", 12, Arrays.asList(
-            new IdMapping("element", 24, Arrays.asList(
-                new IdMapping("nested_int", 25),
-                new IdMapping("double_nested", 26, Arrays.asList(
-                    new IdMapping("double_nested_int", 28)
+            new IdMapping("element", 26, Arrays.asList(
+                new IdMapping("nested_int", 27),
+                new IdMapping("double_nested", 28, Arrays.asList(
+                    new IdMapping("double_nested_int", 30)
                 )),
-                new IdMapping("level", 27)
+                new IdMapping("level", 29)
             ))
         )),
-        new IdMapping("primitive_array_field", 13));
-    return new IdTracking(idMappings, 28);
+        new IdMapping("primitive_array_field", 13, Arrays.asList(new IdMapping("element", 31))));
+    return new IdTracking(idMappings, 31);
   }
 
   private static IdTracking getExpectTrackingForComplexSchemaEvolved() {
@@ -588,7 +589,7 @@ public class TestHoodieAvroUtils {
             new IdMapping("double_nested", 13, Arrays.asList(
                 new IdMapping("double_nested_int", 14)
             )),
-            new IdMapping("level", 22)
+            new IdMapping("level", 24)
         )),
         new IdMapping("nullable_map_field", 10, Arrays.asList(
             new IdMapping("key", 15),
@@ -597,21 +598,21 @@ public class TestHoodieAvroUtils {
                 new IdMapping("double_nested", 18, Arrays.asList(
                     new IdMapping("double_nested_int", 19)
                 )),
-                new IdMapping("level", 23)
+                new IdMapping("level", 25)
             ))
         )),
-        new IdMapping("primitive_map_field", 11),
-        new IdMapping("array_field", 20, Arrays.asList(
-            new IdMapping("element", 24, Arrays.asList(
-                new IdMapping("nested_int", 25),
-                new IdMapping("double_nested", 26, Arrays.asList(
-                    new IdMapping("double_nested_int", 28)
+        new IdMapping("primitive_map_field", 11, Arrays.asList(new IdMapping("key", 20), new IdMapping("value", 21))),
+        new IdMapping("array_field", 22, Arrays.asList(
+            new IdMapping("element", 26, Arrays.asList(
+                new IdMapping("nested_int", 27),
+                new IdMapping("double_nested", 28, Arrays.asList(
+                    new IdMapping("double_nested_int", 30)
                 )),
-                new IdMapping("level", 27)
+                new IdMapping("level", 29)
             ))
         )),
-        new IdMapping("primitive_array_field", 21));
-    return new IdTracking(idMappings, 28);
+        new IdMapping("primitive_array_field", 23, Arrays.asList(new IdMapping("element", 31))));
+    return new IdTracking(idMappings, 31);
   }
 
   private static IdTracking getExpectTrackingForComplexSchemaEvolvedNoMetaFields() {
@@ -624,7 +625,7 @@ public class TestHoodieAvroUtils {
             new IdMapping("double_nested", 8, Arrays.asList(
                 new IdMapping("double_nested_int", 9)
             )),
-            new IdMapping("level", 17)
+            new IdMapping("level", 19)
         )),
         new IdMapping("nullable_map_field", 5, Arrays.asList(
             new IdMapping("key", 10),
@@ -633,20 +634,20 @@ public class TestHoodieAvroUtils {
                 new IdMapping("double_nested", 13, Arrays.asList(
                     new IdMapping("double_nested_int", 14)
                 )),
-                new IdMapping("level", 18)
+                new IdMapping("level", 20)
             ))
         )),
-        new IdMapping("primitive_map_field", 6),
-        new IdMapping("array_field", 15, Arrays.asList(
-            new IdMapping("element", 19, Arrays.asList(
-                new IdMapping("nested_int", 20),
-                new IdMapping("double_nested", 21, Arrays.asList(
-                    new IdMapping("double_nested_int", 23)
+        new IdMapping("primitive_map_field", 6, Arrays.asList(new IdMapping("key", 15), new IdMapping("value", 16))),
+        new IdMapping("array_field", 17, Arrays.asList(
+            new IdMapping("element", 21, Arrays.asList(
+                new IdMapping("nested_int", 22),
+                new IdMapping("double_nested", 23, Arrays.asList(
+                    new IdMapping("double_nested_int", 25)
                 )),
-                new IdMapping("level", 22)
+                new IdMapping("level", 24)
             ))
         )),
-        new IdMapping("primitive_array_field", 16));
-    return new IdTracking(idMappings, 23);
+        new IdMapping("primitive_array_field", 18, Arrays.asList(new IdMapping("element", 26))));
+    return new IdTracking(idMappings, 26);
   }
 }
