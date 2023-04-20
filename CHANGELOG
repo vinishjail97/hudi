@@ -960,3 +960,9 @@ c0be63f40 Upgrade to version release-v0.12.5 (#215)
 790738758 Fix NPE due to ex.getCause call (#250)
 f53beaa87 Upstream json schema converter along with handling for union record.  (#238)
 431728093 Upgrade to version release-v0.13.2 (#248)
+
+---[2023-04-19 15:24:25] [release-v0.13.4] Adding release tag for hudi internal release-v0.13.4
+---
+44368a155 [ONHS-7449] Add regex support (#255)
+db1eb62d9 [ONHS-7445]/[ONHS-74456] Add field IDs to the parquet schema and store history (#249)
+51d656ff0 Upgrade to version release-v0.13.3 (#253)
