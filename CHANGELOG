@@ -966,3 +966,6 @@ f53beaa87 Upstream json schema converter along with handling for union record.  
 44368a155 [ONHS-7449] Add regex support (#255)
 db1eb62d9 [ONHS-7445]/[ONHS-74456] Add field IDs to the parquet schema and store history (#249)
 51d656ff0 Upgrade to version release-v0.13.3 (#253)
+
+---[2023-04-20 23:16:41] [release-v0.14.1] Adding release tag for hudi-internal release-v0.14.1---
+baceaecb3 update code to match multiple regex (#260)
