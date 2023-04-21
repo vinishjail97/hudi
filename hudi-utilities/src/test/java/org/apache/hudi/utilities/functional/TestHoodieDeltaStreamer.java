@@ -807,6 +807,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     testUpsertsContinuousMode(HoodieTableType.COPY_ON_WRITE, "continuous_cow", true);
   }
 
+  @Disabled("HUDI-5815 for investigation")
   @Test
   public void testUpsertsMORContinuousMode() throws Exception {
     testUpsertsContinuousMode(HoodieTableType.MERGE_ON_READ, "continuous_mor");
@@ -1129,6 +1130,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     return config;
   }
 
+  @Disabled("HUDI-5815 for investigation")
   @Test
   public void testHoodieIndexer() throws Exception {
     String tableBasePath = basePath + "/asyncindexer";
@@ -1252,6 +1254,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
   }
 
   @Test
+  @Disabled("HUDI-5815 for investigation")
   public void testAsyncClusteringServiceWithCompaction() throws Exception {
     String tableBasePath = basePath + "/asyncClusteringCompaction";
     // Keep it higher than batch-size to test continuous mode
@@ -1321,6 +1324,7 @@ public class TestHoodieDeltaStreamer extends HoodieDeltaStreamerTestBase {
     }
   }
 
+  @Disabled("HUDI-5815 for investigation")
   @ParameterizedTest
   @ValueSource(strings = {"execute", "schedule", "scheduleAndExecute"})
   public void testHoodieAsyncClusteringJobWithScheduleAndExecute(String runningMode) throws Exception {

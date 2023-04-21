@@ -36,10 +36,11 @@ import org.apache.hudi.keygen.constant.KeyGeneratorOptions.Config
 import org.apache.hudi.metrics.Metrics
 import org.apache.hudi.testutils.HoodieClientTestBase
 import org.apache.hudi.util.JFunction
-import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers, QuickstartUtils}
+import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers, QuickstartUtils, ScalaAssertionSupport}
 import org.apache.spark.sql
+import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.{col, concat, lit, udf}
+import org.apache.spark.sql.functions.{col, concat, lit, udf, when}
 import org.apache.spark.sql.hudi.HoodieSparkSessionExtension
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -1070,12 +1071,12 @@ class TestCOWDataSource extends HoodieClientTestBase {
     val records = recordsToStrings(dataGen.generateInserts("000", 100)).toList
     val inputDF = spark.read.json(spark.sparkContext.parallelize(records, 2))
     // clone the df so that we can use it to validate later for persistance.
-    val inputDfCloned : sql.DataFrame = spark.createDataFrame(inputDF.rdd, inputDF.schema)
+    val inputDfCloned: sql.DataFrame = spark.createDataFrame(inputDF.rdd, inputDF.schema)
     inputDfCloned.rdd.persist(StorageLevel.MEMORY_ONLY)
     inputDF.write.format("hudi")
       .options(commonOpts)
       .option(DataSourceWriteOptions.OPERATION.key, DataSourceWriteOptions.INSERT_OPERATION_OPT_VAL)
-      .option("hoodie.metadata.enable","false")
+      .option("hoodie.metadata.enable", "false")
       .mode(SaveMode.Overwrite)
       .save(basePath)
 
@@ -1084,5 +1085,67 @@ class TestCOWDataSource extends HoodieClientTestBase {
     assertEquals(1, spark.sparkContext.getPersistentRDDs.values.filter(rdd => rdd.id == inputDfCloned.rdd.id).size)
     // verify that there are no other persisted Rdds
     assertEquals(1, spark.sparkContext.getPersistentRDDs.values.size)
+  }
+
+  /**
+   * Validates that clustering dag is triggered only once.
+   * We leverage spark event listener to validate it.
+   */
+  @Test
+  def testValidateClusteringForRepeatedDag(): Unit = {
+    // register stage event listeners
+    val sm = new StageEventManager("org.apache.hudi.table.action.commit.BaseCommitActionExecutor.executeClustering")
+    spark.sparkContext.addSparkListener(sm)
+
+    var structType : StructType = null
+    for (i <- 1 to 2) {
+      val records = recordsToStrings(dataGen.generateInserts("%05d".format(i), 100)).toList
+      val inputDF = spark.read.json(spark.sparkContext.parallelize(records, 2))
+      structType = inputDF.schema
+      inputDF.write.format("hudi")
+        .options(commonOpts)
+        .option(DataSourceWriteOptions.OPERATION.key, DataSourceWriteOptions.BULK_INSERT_OPERATION_OPT_VAL)
+        .option("hoodie.metadata.enable","false")
+        .mode(if (i == 0) SaveMode.Overwrite else SaveMode.Append)
+        .save(basePath)
+    }
+
+    // trigger clustering.
+    val records = recordsToStrings(dataGen.generateInserts("%05d".format(4), 100)).toList
+    val inputDF = spark.read.json(spark.sparkContext.parallelize(records, 2))
+    structType = inputDF.schema
+    inputDF.write.format("hudi")
+      .options(commonOpts)
+      .option("hoodie.cleaner.commits.retained", "0")
+      .option("hoodie.parquet.small.file.limit", "0")
+      .option("hoodie.clustering.inline", "true")
+      .option("hoodie.clustering.inline.max.commits", "2")
+      .option("hoodie.metadata.enable","false")
+      .mode(SaveMode.Append)
+      .save(basePath)
+
+    // verify that clustering is not trigered more than once.
+    assertEquals(sm.triggerCount, 1)
+  }
+
+  /************** Stage Event Listener **************/
+  class StageEventManager(eventToTrack: String) extends SparkListener() {
+    var triggerCount = 0
+
+    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+      if (stageCompleted.stageInfo.details.contains(eventToTrack)) {
+        triggerCount += 1
+      }
+    }
+  }
+}
+
+object TestCOWDataSource {
+  def convertColumnsToNullable(df: DataFrame, cols: String*): DataFrame = {
+    cols.foldLeft(df) { (df, c) =>
+      // NOTE: This is the trick to make Spark convert a non-null column "c" into a nullable
+      //       one by pretending its value could be null in some execution paths
+      df.withColumn(c, when(col(c).isNotNull, col(c)).otherwise(lit(null)))
+    }
   }
 }

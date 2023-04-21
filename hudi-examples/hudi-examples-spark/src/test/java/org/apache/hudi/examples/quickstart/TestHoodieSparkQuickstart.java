@@ -21,6 +21,7 @@ package org.apache.hudi.examples.quickstart;
 import org.apache.hudi.client.SparkRDDReadClient;
 import org.apache.hudi.client.SparkRDDWriteClient;
 import org.apache.hudi.client.common.HoodieSparkEngineContext;
+import org.apache.hudi.testutils.SparkClientFunctionalTestHarness;
 import org.apache.hudi.testutils.providers.SparkProvider;
 
 import org.apache.spark.SparkConf;
@@ -54,6 +55,11 @@ public class TestHoodieSparkQuickstart implements SparkProvider {
   @Override
   public SparkSession spark() {
     return spark;
+  }
+
+  @Override
+  public SparkConf conf() {
+    return conf(SparkClientFunctionalTestHarness.getSparkSqlConf());
   }
 
   @Override

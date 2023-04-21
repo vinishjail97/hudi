@@ -23,10 +23,12 @@ import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.schema.SchemaProvider;
+import org.apache.hudi.utilities.sources.helpers.CloudObjectMetadata;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.MissingCheckpointStrategy;
-import org.apache.hudi.utilities.sources.helpers.gcs.FileDataFetcher;
-import org.apache.hudi.utilities.sources.helpers.gcs.FilePathsFetcher;
+import org.apache.hudi.utilities.sources.helpers.gcs.GcsDataFetcher;
+import org.apache.hudi.utilities.sources.helpers.gcs.GcsObjectMetadataFetcher;
 import org.apache.hudi.utilities.sources.helpers.gcs.QueryInfo;
+
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -36,7 +38,6 @@ import org.apache.spark.sql.SparkSession;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import static org.apache.hudi.common.util.StringUtils.isNullOrEmpty;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.DEFAULT_NUM_INSTANTS_PER_FETCH;
@@ -104,8 +105,8 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
   private final int numInstantsPerFetch;
 
   private final MissingCheckpointStrategy missingCheckpointStrategy;
-  private final FilePathsFetcher filePathsFetcher;
-  private final FileDataFetcher fileDataFetcher;
+  private final GcsObjectMetadataFetcher gcsObjectMetadataFetcher;
+  private final GcsDataFetcher gcsObjectDataFetcher;
 
   private static final Logger LOG = LogManager.getLogger(GcsEventsHoodieIncrSource.class);
 
@@ -113,13 +114,13 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
                                    SchemaProvider schemaProvider) {
 
     this(props, jsc, spark, schemaProvider,
-            new FilePathsFetcher(props, getSourceFileFormat(props)),
-            new FileDataFetcher(props, props.getString(DATAFILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT))
+        new GcsObjectMetadataFetcher(props, getSourceFileFormat(props)),
+        new GcsDataFetcher(props, props.getString(DATAFILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT))
     );
   }
 
   GcsEventsHoodieIncrSource(TypedProperties props, JavaSparkContext jsc, SparkSession spark,
-                            SchemaProvider schemaProvider, FilePathsFetcher filePathsFetcher, FileDataFetcher fileDataFetcher) {
+                            SchemaProvider schemaProvider, GcsObjectMetadataFetcher gcsObjectMetadataFetcher, GcsDataFetcher gcsObjectDataFetcher) {
     super(props, jsc, spark, schemaProvider);
 
     DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(HOODIE_SRC_BASE_PATH));
@@ -128,8 +129,8 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
     numInstantsPerFetch = props.getInteger(NUM_INSTANTS_PER_FETCH, DEFAULT_NUM_INSTANTS_PER_FETCH);
     checkIfFileExists = props.getBoolean(ENABLE_EXISTS_CHECK, DEFAULT_ENABLE_EXISTS_CHECK);
 
-    this.filePathsFetcher = filePathsFetcher;
-    this.fileDataFetcher = fileDataFetcher;
+    this.gcsObjectMetadataFetcher = gcsObjectMetadataFetcher;
+    this.gcsObjectDataFetcher = gcsObjectDataFetcher;
 
     LOG.info("srcPath: " + srcPath);
     LOG.info("missingCheckpointStrategy: " + missingCheckpointStrategy);
@@ -146,24 +147,20 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
       return Pair.of(Option.empty(), queryInfo.getStartInstant());
     }
 
-    Dataset<Row> sourceForFilenames = queryInfo.initializeSourceForFilenames(srcPath, sparkSession);
+    Dataset<Row> cloudObjectMetadataDF = queryInfo.initCloudObjectMetadata(srcPath, sparkSession);
 
-    if (sourceForFilenames.isEmpty()) {
+    if (cloudObjectMetadataDF.isEmpty()) {
       LOG.info("Source of file names is empty. Returning empty result and endInstant: "
               + queryInfo.getEndInstant());
       return Pair.of(Option.empty(), queryInfo.getEndInstant());
     }
 
-    return extractData(queryInfo, sourceForFilenames);
+    return extractData(queryInfo, cloudObjectMetadataDF);
   }
 
-  private Pair<Option<Dataset<Row>>, String> extractData(QueryInfo queryInfo, Dataset<Row> sourceForFilenames) {
-    List<String> filepaths = filePathsFetcher.getGcsFilePaths(sparkContext, sourceForFilenames, checkIfFileExists);
-
-    LOG.debug("Extracted " + filepaths.size() + " distinct files."
-            + " Some samples " + filepaths.stream().limit(10).collect(Collectors.toList()));
-
-    Option<Dataset<Row>> fileDataRows = fileDataFetcher.fetchFileData(sparkSession, filepaths, props);
+  private Pair<Option<Dataset<Row>>, String> extractData(QueryInfo queryInfo, Dataset<Row> cloudObjectMetadataDF) {
+    List<CloudObjectMetadata> cloudObjectMetadata = gcsObjectMetadataFetcher.getGcsObjectMetadata(sparkContext, cloudObjectMetadataDF, checkIfFileExists);
+    Option<Dataset<Row>> fileDataRows = gcsObjectDataFetcher.getCloudObjectDataDF(sparkSession, cloudObjectMetadata, props);
     return Pair.of(fileDataRows, queryInfo.getEndInstant());
   }
 
