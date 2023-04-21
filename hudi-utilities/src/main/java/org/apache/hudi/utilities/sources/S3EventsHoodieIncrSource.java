@@ -179,16 +179,18 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     filter = filter + " and s3.object.key like '%" + fileExtensionFilter + "'";
 
     if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_PATH_REGEX, null))) {
-      String updatedPathRegex;
-      if (StringUtils.isNullOrEmpty(s3KeyPrefix)) {
-        updatedPathRegex = props.getString(Config.S3_PATH_REGEX);
-      } else {
-        updatedPathRegex = s3KeyPrefix.endsWith("/")
-            ? s3KeyPrefix + props.getString(Config.S3_PATH_REGEX) :
-            s3KeyPrefix + "/" + props.getString(Config.S3_PATH_REGEX);
-      }
-      filter = filter + " and s3.object.key rlike '" + updatedPathRegex + "'";
+      filter = filter + generateS3KeyRegexFilter(s3KeyPrefix, props.getString(Config.S3_PATH_REGEX));
     }
     return source.filter(filter);
+  }
+
+  String generateS3KeyRegexFilter(String s3KeyPrefix, String s3PathRegex) {
+    if (StringUtils.isNullOrEmpty(s3KeyPrefix)) {
+      return " and s3.object.key rlike '^" + s3PathRegex + "'";
+    } else {
+      String regexFormat = " and regexp_replace(s3.object.key, '^%s', '') rlike '^%s'";
+      String prefixRegexWithSlash = s3KeyPrefix.endsWith("/") ? s3KeyPrefix : s3KeyPrefix + "/";
+      return String.format(regexFormat, prefixRegexWithSlash, s3PathRegex);
+    }
   }
 }

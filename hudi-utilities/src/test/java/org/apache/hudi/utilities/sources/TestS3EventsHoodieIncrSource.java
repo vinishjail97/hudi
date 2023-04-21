@@ -36,6 +36,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -47,6 +48,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarness {
   private static final String MY_BUCKET = "some-bucket";
   private static final String PATH_ONE = "path/to/";
+  private static final String PATH_ONE_WITHOUT_TRAILING_SLASH = "path/to";
   private static final List<String> PATH_ONE_FILES =
       Arrays.asList(
           PATH_ONE + "customers_2023.csv",
@@ -59,10 +61,18 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
           PATH_ONE + "subpath2/Q3_2023/invoice.txt",
           PATH_ONE + "subpath2/Q3_2023/costs.csv",
           PATH_ONE + "subpath2/Q4_2021/expenses.parquet",
-          PATH_ONE + "subpath2/Q4_2021/forecast.gz");
+          PATH_ONE + "subpath2/Q4_2021/forecast.gz",
+          PATH_ONE + "subpath3/Q4_2021/summary.txt",
+          PATH_ONE + "subpath4/subpath3/Q4_2021/summary.txt");
 
   @Mock
   private SchemaProvider mockSchemaProvider;
+  private JavaSparkContext jsc;
+
+  @BeforeEach
+  public void setUp() {
+    jsc = JavaSparkContext.fromSparkContext(spark().sparkContext());
+  }
 
   @ParameterizedTest
   @MethodSource("generateFiltersForS3EventsHoodieIncrSource")
@@ -73,7 +83,6 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
                                                     Long objectSize,
                                                     String fileFormat,
                                                     List<String> expectedFilePaths) {
-    JavaSparkContext jsc = JavaSparkContext.fromSparkContext(spark().sparkContext());
     JavaRDD<String> testRdd = jsc.parallelize(getSampleS3ObjectKeys(objectSize, filePaths), 2);
     Dataset<Row> inputDs = spark().read().json(testRdd);
 
@@ -86,7 +95,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
     assertEquals(expectedFilePaths, resultKeys);
   }
 
-  public static Stream<Arguments> generateFiltersForS3EventsHoodieIncrSource() {
+  private static Stream<Arguments> generateFiltersForS3EventsHoodieIncrSource() {
     return Stream.of(
          // s3.object.size is 0, expect no files
          Arguments.of(PATH_ONE_FILES, PATH_ONE, ".csv", ".*", 0L, ".csv", Collections.emptyList()),
@@ -110,9 +119,54 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
                     getSortedFilePathsByExtension(PATH_ONE_FILES, ".gz")
                         .stream()
                         .filter(path -> path.contains("subpath1")).sorted().collect(Collectors.toList())),
+         // match all txt files by extension and prefix with no backslash
+         Arguments.of(PATH_ONE_FILES, PATH_ONE_WITHOUT_TRAILING_SLASH, ".txt", ".*", 100L, null,
+                    getSortedFilePathsByExtension(PATH_ONE_FILES, ".txt")),
+         // match all txt files by extension but pick those starting with subpath3 only by regex.
+         Arguments.of(PATH_ONE_FILES, PATH_ONE_WITHOUT_TRAILING_SLASH, ".txt", "subpath3/.*\\.txt", 100L, null,
+                        Arrays.asList(PATH_ONE + "subpath3/Q4_2021/summary.txt")),
+         // match all parquet files under under subpath1
+         Arguments.of(PATH_ONE_FILES, PATH_ONE, ".parquet", "subpath1/.*\\.parquet", 100L, null,
+                        getSortedFilePathsByExtension(PATH_ONE_FILES, ".parquet")
+                            .stream()
+                            .filter(path -> path.contains("subpath1"))
+                            .sorted().collect(Collectors.toList())),
+         // match all parquet files under subpath1 and subpath2 by using "|" in regex
+         Arguments.of(PATH_ONE_FILES, PATH_ONE, ".parquet",
+             "subpath1/.*\\.parquet|subpath2/.*\\.parquet", 100L, null,
+                        getSortedFilePathsByExtension(PATH_ONE_FILES, ".parquet")
+                            .stream()
+                            .filter(path -> path.contains("subpath1") || path.contains("subpath2"))
+                            .sorted().collect(Collectors.toList())),
          // conflicting extension and regex to not return any files
          Arguments.of(PATH_ONE_FILES, PATH_ONE, ".csv", "subpath1/.*\\.gz", 100L, null,
                 Collections.emptyList()));
+  }
+
+  @ParameterizedTest
+  @MethodSource("generateS3RegexFilters")
+  public void testGenerateS3RegexFilters(String keyPrefix, String pathRegex, String expectedFilter) {
+    S3EventsHoodieIncrSource s3EventsHoodieIncrSource = new S3EventsHoodieIncrSource(
+        createPropsForS3EventsHoodieIncrSource(keyPrefix, ".unused", pathRegex),
+        jsc, spark(), mockSchemaProvider);
+    assertEquals(expectedFilter, s3EventsHoodieIncrSource.generateS3KeyRegexFilter(keyPrefix,
+        pathRegex));
+  }
+
+  private static Stream<Arguments> generateS3RegexFilters() {
+    return Stream.of(
+        // Key prefix is null, path regex is ".*"
+        Arguments.of(null, ".*", " and s3.object.key rlike '^.*'"),
+        // key prefix is empty, path regex is ".*\\.parquet"
+        Arguments.of("", ".*\\.parquet", " and s3.object.key rlike '^.*\\.parquet'"),
+        // key prefix is "path/to/", path regex is ".*"
+        Arguments.of("path/to/", ".*", " and regexp_replace(s3.object.key, '^path/to/', '') rlike '^.*'"),
+        // key prefix is "path/to/another", path regex is ".*\\.parquet"
+        Arguments.of("path/to/another", ".*\\.parquet", " and regexp_replace(s3.object.key, '^path/to/another/', '') rlike '^.*\\.parquet'"),
+        // key prefix is "path/to/another", path regex is "subpath1/.*\\.gz"
+        Arguments.of("path/to/another", "subpath1/.*\\.gz", " and regexp_replace(s3.object.key, '^path/to/another/', '') rlike '^subpath1/.*\\.gz'"),
+        // key prefix is "path/to/another", path regex is "subpath1/.*|subpath2/.*"
+        Arguments.of("path/to/another", "subpath1/.*|subpath2/.*", " and regexp_replace(s3.object.key, '^path/to/another/', '') rlike '^subpath1/.*|subpath2/.*'"));
   }
 
   static TypedProperties createPropsForS3EventsHoodieIncrSource(String keyPrefix,
