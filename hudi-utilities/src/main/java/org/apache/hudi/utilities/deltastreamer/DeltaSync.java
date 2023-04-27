@@ -104,7 +104,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -830,11 +829,13 @@ public class DeltaSync implements Serializable, Closeable {
   }
 
   public void runMetaSync() {
-    Set<String> syncClientToolClasses = new HashSet<>(Arrays.asList(cfg.syncClientToolClassNames.split(",")));
+    List<String> syncClientToolClasses = Arrays.stream(cfg.syncClientToolClassNames.split(",")).distinct().collect(Collectors.toList());
     // for backward compatibility
     if (cfg.enableHiveSync) {
       cfg.enableMetaSync = true;
-      syncClientToolClasses.add(HiveSyncTool.class.getName());
+      if (!syncClientToolClasses.contains(HiveSyncTool.class.getName())) {
+        syncClientToolClasses.add(HiveSyncTool.class.getName());
+      }
       LOG.info("When set --enable-hive-sync will use HiveSyncTool for backward compatibility");
     }
     if (cfg.enableMetaSync) {
