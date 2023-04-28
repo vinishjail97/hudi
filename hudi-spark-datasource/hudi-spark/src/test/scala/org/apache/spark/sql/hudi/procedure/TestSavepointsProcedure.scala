@@ -216,13 +216,11 @@ class TestSavepointsProcedure extends HoodieSparkProcedureTestBase {
       checkAnswer(s"""call rollback_to_savepoint('$tableName', '${commits(1)}')""")(Seq(true))
       assertCached(spark.table(s"$tableName").select("id"), 0)
       checkAnswer(
-        s"""call delete_savepoint(path => '$tablePath',
-           | instant_time => '${commits(1)}')""".stripMargin)(Seq(true))
+        s"""call delete_savepoint('$tableName', '${commits(1)}')""".stripMargin)(Seq(true))
 
       // rollback to the first savepoint with the table base path
       checkAnswer(
-        s"""call rollback_to_savepoint(path => '$tablePath',
-           | instant_time => '${commits(0)}')""".stripMargin)(Seq(true))
+        s"""call rollback_to_savepoint('$tableName', '${commits(0)}')""".stripMargin)(Seq(true))
       // Check cache whether invalidate
       assertCached(spark.table(s"$tableName").select("id"), 0)
     }
