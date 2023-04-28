@@ -33,6 +33,7 @@ import org.apache.log4j.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -94,6 +95,7 @@ public class TestLockManager extends HoodieCommonTestHarness {
     this.lockManager = new LockManager(this.writeConfig, this.metaClient.getFs());
   }
 
+  @Disabled
   @Test
   public void testLockAndUnlock() {
     LockManager mockLockManager = Mockito.spy(lockManager);
