@@ -19,7 +19,10 @@ package org.apache.spark.sql.hudi
 
 import org.apache.hadoop.fs.Path
 import org.apache.hudi.HoodieSparkUtils
+import org.apache.hudi.avro.model.HoodieCleanMetadata
 import org.apache.hudi.common.fs.FSUtils
+import org.apache.hudi.common.table.HoodieTableMetaClient
+import org.apache.hudi.common.table.timeline.TimelineMetadataUtils
 import org.apache.log4j.Level
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -169,5 +172,16 @@ class HoodieSparkSqlTestBase extends FunSuite with BeforeAndAfterAll {
     val path = new Path(filePath)
     val fs = FSUtils.getFs(filePath, spark.sparkContext.hadoopConfiguration)
     fs.exists(path)
+  }
+
+  def getLastCleanMetadata(spark: SparkSession, tablePath: String) = {
+    val metaClient = HoodieTableMetaClient.builder()
+      .setConf(spark.sparkContext.hadoopConfiguration)
+      .setBasePath(tablePath)
+      .build()
+
+    val cleanInstant = metaClient.reloadActiveTimeline().getCleanerTimeline.filterCompletedInstants().lastInstant().get()
+    TimelineMetadataUtils.deserializeHoodieCleanMetadata(metaClient
+      .getActiveTimeline.getInstantDetails(cleanInstant).get)
   }
 }

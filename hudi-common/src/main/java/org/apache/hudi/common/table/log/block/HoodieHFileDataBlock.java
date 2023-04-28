@@ -161,11 +161,8 @@ public class HoodieHFileDataBlock extends HoodieDataBlock {
   protected ClosableIterator<IndexedRecord> deserializeRecords(byte[] content) throws IOException {
     checkState(readerSchema != null, "Reader's schema has to be non-null");
 
-    // Get schema from the header
-    Schema writerSchema = new Schema.Parser().parse(super.getLogBlockHeader().get(HeaderMetadataType.SCHEMA));
-
     // Read the content
-    HoodieHFileReader<IndexedRecord> reader = new HoodieHFileReader<>(null, pathForReader, content, Option.of(writerSchema));
+    HoodieHFileReader<IndexedRecord> reader = new HoodieHFileReader<>(null, pathForReader, content, Option.of(getSchemaFromHeader()));
     Iterator<IndexedRecord> recordIterator = reader.getRecordIterator(readerSchema);
     return new ClosableIterator<IndexedRecord>() {
       @Override
@@ -208,7 +205,8 @@ public class HoodieHFileDataBlock extends HoodieDataBlock {
     Collections.sort(sortedKeys);
 
     final HoodieHFileReader<IndexedRecord> reader =
-             new HoodieHFileReader<>(inlineConf, inlinePath, new CacheConfig(inlineConf), inlinePath.getFileSystem(inlineConf));
+             new HoodieHFileReader<>(inlineConf, inlinePath, new CacheConfig(inlineConf), inlinePath.getFileSystem(inlineConf),
+                 Option.of(getSchemaFromHeader()));
 
     // Get writer's schema from the header
     final ClosableIterator<IndexedRecord> recordIterator =

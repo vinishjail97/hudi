@@ -112,7 +112,7 @@ public class TestHoodieHFileReaderWriter extends TestHoodieReaderWriterBase {
   protected HoodieFileReader<GenericRecord> createReader(
       Configuration conf) throws Exception {
     CacheConfig cacheConfig = new CacheConfig(conf);
-    return new HoodieHFileReader<>(conf, getFilePath(), cacheConfig, getFilePath().getFileSystem(conf));
+    return new HoodieHFileReader<>(conf, getFilePath(), cacheConfig, getFilePath().getFileSystem(conf), Option.empty());
   }
 
   @Override

@@ -33,6 +33,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
 import static org.apache.hudi.common.util.ValidationUtils.checkState;
@@ -62,6 +63,9 @@ public abstract class HoodieDataBlock extends HoodieLogBlock {
   protected final Schema readerSchema;
 
   protected InternalSchema internalSchema = InternalSchema.getEmptyInternalSchema();
+
+  //  Map of string schema to parsed schema.
+  private static ConcurrentHashMap<String, Schema> schemaMap = new ConcurrentHashMap<>();
 
   /**
    * NOTE: This ctor is used on the write-path (ie when records ought to be written into the log)
@@ -213,6 +217,12 @@ public abstract class HoodieDataBlock extends HoodieLogBlock {
     return getKeyField(record.getSchema())
         .map(keyField -> record.get(keyField.pos()))
         .map(Object::toString);
+  }
+
+  protected Schema getSchemaFromHeader() {
+    String schemaStr = getLogBlockHeader().get(HeaderMetadataType.SCHEMA);
+    schemaMap.computeIfAbsent(schemaStr, (schemaString) -> new Schema.Parser().parse(schemaString));
+    return schemaMap.get(schemaStr);
   }
 
   /**
