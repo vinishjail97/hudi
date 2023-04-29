@@ -971,3 +971,12 @@ db1eb62d9 [ONHS-7445]/[ONHS-74456] Add field IDs to the parquet schema and store
 ef092144d Oss cherry picks From Feb 1 to April 16 2023 (#259)
 f5cc7f56a [ONHS-7445] fix schema in tests (#257)
 a20896f1f Upgrade to version release-v0.13.4 (#258)
+
+---[2023-04-28 09:33:55] [release-v0.15.0] Adding release tag for hudi-internal release-v0.15.0---
+936591a90 OSS cherry picks 2023-04-17 to 2023-04-27 (#268)
+c5491c703 [ONHS-7889] guarantee ordering of meta syncs (#267)
+88c65a204 [ONHS-7723] Optimise payload size for list of FileGroupDTO (#8480) (#265)
+
+---[2023-04-28 18:33:51] [release-v0.15.1] Adding release tag for hudi-internal release-v0.15.1---
+60124f849 [ONHS-7925] Fix savepoint test due to cherry-picking (#272)
+12bc4d9df [ONHS-7924] Disable TestLockManager which causes CI timeout (#271)
