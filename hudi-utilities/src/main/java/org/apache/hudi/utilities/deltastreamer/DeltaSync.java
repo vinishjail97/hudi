@@ -203,11 +203,11 @@ public class DeltaSync implements Serializable, Closeable {
   private transient Function<SparkRDDWriteClient, Boolean> onInitializingHoodieWriteClient;
 
   /**
-   * Timeline with completed commits.
+   * Timeline with completed commits, including both .commit and .deltacommit.
    */
-  private transient Option<HoodieTimeline> commitTimelineOpt;
+  private transient Option<HoodieTimeline> commitsTimelineOpt;
 
-  // all commits timeline
+  // all commits timeline, including all (commits, delta commits, compaction, clean, savepoint, rollback, replace commits, index)
   private transient Option<HoodieTimeline> allCommitsTimelineOpt;
 
   /**
@@ -284,11 +284,9 @@ public class DeltaSync implements Serializable, Closeable {
         HoodieTableMetaClient meta = HoodieTableMetaClient.builder().setConf(new Configuration(fs.getConf())).setBasePath(cfg.targetBasePath).setPayloadClassName(cfg.payloadClassName).build();
         switch (meta.getTableType()) {
           case COPY_ON_WRITE:
-            this.commitTimelineOpt = Option.of(meta.getActiveTimeline().getCommitTimeline().filterCompletedInstants());
-            this.allCommitsTimelineOpt = Option.of(meta.getActiveTimeline().getAllCommitsTimeline());
-            break;
           case MERGE_ON_READ:
-            this.commitTimelineOpt = Option.of(meta.getActiveTimeline().getDeltaCommitTimeline().filterCompletedInstants());
+            // we can use getCommitsTimeline for both COW and MOR here, because for COW there is no deltacommit
+            this.commitsTimelineOpt = Option.of(meta.getActiveTimeline().getCommitsTimeline().filterCompletedInstants());
             this.allCommitsTimelineOpt = Option.of(meta.getActiveTimeline().getAllCommitsTimeline());
             break;
           default:
@@ -325,7 +323,7 @@ public class DeltaSync implements Serializable, Closeable {
   }
 
   private void initializeEmptyTable() throws IOException {
-    this.commitTimelineOpt = Option.empty();
+    this.commitsTimelineOpt = Option.empty();
     this.allCommitsTimelineOpt = Option.empty();
     String partitionColumns = SparkKeyGenUtils.getPartitionColumns(keyGenerator, props);
     HoodieTableMetaClient.withPropertyBuilder()
@@ -360,7 +358,7 @@ public class DeltaSync implements Serializable, Closeable {
     // Refresh Timeline
     refreshTimeline();
 
-    Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> srcRecordsWithCkpt = readFromSource(commitTimelineOpt);
+    Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> srcRecordsWithCkpt = readFromSource(commitsTimelineOpt);
 
     if (null != srcRecordsWithCkpt) {
       try {
@@ -414,16 +412,16 @@ public class DeltaSync implements Serializable, Closeable {
   /**
    * Read from Upstream Source and apply transformation if needed.
    *
-   * @param commitTimelineOpt Timeline with completed commits
+   * @param commitsTimelineOpt Timeline with completed commits, including .commit and .deltacommit
    * @return Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> Input data read from upstream source, consists
    * of schemaProvider, checkpointStr and hoodieRecord
    * @throws Exception in case of any Exception
    */
-  public Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> readFromSource(Option<HoodieTimeline> commitTimelineOpt) throws IOException {
+  public Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> readFromSource(Option<HoodieTimeline> commitsTimelineOpt) throws IOException {
     // Retrieve the previous round checkpoints, if any
     Option<String> resumeCheckpointStr = Option.empty();
-    if (commitTimelineOpt.isPresent()) {
-      resumeCheckpointStr = getCheckpointToResume(commitTimelineOpt);
+    if (commitsTimelineOpt.isPresent()) {
+      resumeCheckpointStr = getCheckpointToResume(commitsTimelineOpt);
     } else {
       // initialize the table for the first time.
       String partitionColumns = SparkKeyGenUtils.getPartitionColumns(keyGenerator, props);
@@ -609,16 +607,24 @@ public class DeltaSync implements Serializable, Closeable {
 
   /**
    * Process previous commit metadata and checkpoint configs set by user to determine the checkpoint to resume from.
-   * @param commitTimelineOpt commit timeline of interest.
+   *
+   * @param commitsTimelineOpt commits timeline of interest, including .commit and .deltacommit.
    * @return the checkpoint to resume from if applicable.
    * @throws IOException
    */
-  private Option<String> getCheckpointToResume(Option<HoodieTimeline> commitTimelineOpt) throws IOException {
+  private Option<String> getCheckpointToResume(Option<HoodieTimeline> commitsTimelineOpt) throws IOException {
     Option<String> resumeCheckpointStr = Option.empty();
-    Option<HoodieInstant> lastCommit = commitTimelineOpt.get().lastInstant();
+    // try get checkpoint from commits(including commit and deltacommit)
+    // in COW migrating to MOR case, the first batch of the deltastreamer will lost the checkpoint from COW table, cause the dataloss
+    HoodieTimeline deltaCommitTimeline = commitsTimelineOpt.get().filter(instant -> instant.getAction().equals(HoodieTimeline.DELTA_COMMIT_ACTION));
+    // has deltacommit means this is a MOR table, we should get .deltacommit as before
+    if (!deltaCommitTimeline.empty()) {
+      commitsTimelineOpt = Option.of(deltaCommitTimeline);
+    }
+    Option<HoodieInstant> lastCommit = commitsTimelineOpt.get().lastInstant();
     if (lastCommit.isPresent()) {
       // if previous commit metadata did not have the checkpoint key, try traversing previous commits until we find one.
-      Option<HoodieCommitMetadata> commitMetadataOption = getLatestCommitMetadataWithValidCheckpointInfo(commitTimelineOpt.get());
+      Option<HoodieCommitMetadata> commitMetadataOption = getLatestCommitMetadataWithValidCheckpointInfo(commitsTimelineOpt.get());
       if (commitMetadataOption.isPresent()) {
         HoodieCommitMetadata commitMetadata = commitMetadataOption.get();
         LOG.debug("Checkpoint reset from metadata: " + commitMetadata.getMetadata(CHECKPOINT_RESET_KEY));
@@ -633,7 +639,7 @@ public class DeltaSync implements Serializable, Closeable {
           throw new HoodieDeltaStreamerException(
               "Unable to find previous checkpoint. Please double check if this table "
                   + "was indeed built via delta streamer. Last Commit :" + lastCommit + ", Instants :"
-                  + commitTimelineOpt.get().getInstants().collect(Collectors.toList()) + ", CommitMetadata="
+                  + commitsTimelineOpt.get().getInstants().collect(Collectors.toList()) + ", CommitMetadata="
                   + commitMetadata.toJsonString());
         }
         // KAFKA_CHECKPOINT_TYPE will be honored only for first batch.
@@ -746,7 +752,7 @@ public class DeltaSync implements Serializable, Closeable {
       }
       String commitActionType = CommitUtils.getCommitActionType(cfg.operation, HoodieTableType.valueOf(cfg.tableType));
       if (quarantineTableWriterInterfaceImpl.isPresent()) {
-        Option<String> commitedInstantTime = getLatestInstantWithValidCheckpointInfo(commitTimelineOpt);
+        Option<String> commitedInstantTime = getLatestInstantWithValidCheckpointInfo(commitsTimelineOpt);
         boolean quarantineTableSuccess = quarantineTableWriterInterfaceImpl.get().upsertAndCommit(instantTime, commitedInstantTime);
         if (!quarantineTableSuccess) {
           LOG.info("Commit " + instantTime + " failed!");
@@ -1074,8 +1080,8 @@ public class DeltaSync implements Serializable, Closeable {
     return cfg;
   }
 
-  public Option<HoodieTimeline> getCommitTimelineOpt() {
-    return commitTimelineOpt;
+  public Option<HoodieTimeline> getCommitsTimelineOpt() {
+    return commitsTimelineOpt;
   }
 
   public HoodieIngestionMetrics getMetrics() {

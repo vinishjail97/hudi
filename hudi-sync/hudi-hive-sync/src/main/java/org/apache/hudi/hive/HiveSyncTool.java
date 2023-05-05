@@ -267,7 +267,7 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
     boolean schemaChanged = false;
     // Check and sync schema
     if (!tableExists) {
-      LOG.info("Hive table " + tableName + " is not found. Creating it");
+      LOG.info(String.format("Hive table %s is not found. Creating it with schema %s.", tableName, schema));
       HoodieFileFormat baseFileFormat = HoodieFileFormat.valueOf(config.getStringOrDefault(META_SYNC_BASE_FILE_FORMAT).toUpperCase());
       String inputFormatClassName = HoodieInputFormatUtils.getInputFormatClassName(baseFileFormat, useRealTimeInputFormat);
 
@@ -293,7 +293,7 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
       SchemaDifference schemaDiff = HiveSchemaUtil.getSchemaDifference(schema, tableSchema, config.getSplitStrings(META_SYNC_PARTITION_FIELDS),
           config.getBooleanOrDefault(HIVE_SUPPORT_TIMESTAMP_TYPE));
       if (!schemaDiff.isEmpty()) {
-        LOG.info("Schema difference found for " + tableName);
+        LOG.info(String.format("Schema difference found for %s. Updated schema: %s", tableName, schema));
         syncClient.updateTableSchema(tableName, schema);
         // Sync the table properties if the schema has changed
         if (config.getString(HIVE_TABLE_PROPERTIES) != null || config.getBoolean(HIVE_SYNC_AS_DATA_SOURCE_TABLE)) {
@@ -303,7 +303,7 @@ public class HiveSyncTool extends HoodieSyncTool implements AutoCloseable {
         }
         schemaChanged = true;
       } else {
-        LOG.info("No Schema difference for " + tableName);
+        LOG.info(String.format("No Schema difference for %s. Schema: %s", tableName, schema));
       }
     }
 
