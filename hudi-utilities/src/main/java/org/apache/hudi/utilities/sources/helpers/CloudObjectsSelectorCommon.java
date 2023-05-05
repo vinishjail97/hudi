@@ -31,13 +31,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.DataFrameReader;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URLDecoder;
@@ -49,6 +49,9 @@ import java.util.stream.Collectors;
 
 import static org.apache.hudi.common.util.CollectionUtils.isNullOrEmpty;
 import static org.apache.hudi.config.HoodieStorageConfig.PARQUET_MAX_FILE_SIZE;
+import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.PATH_BASED_PARTITION_FIELDS;
+import static org.apache.spark.sql.functions.input_file_name;
+import static org.apache.spark.sql.functions.split;
 
 /**
  * Generic helper methods to fetch from Cloud Storage during incremental fetch from cloud storage buckets.
@@ -57,7 +60,7 @@ import static org.apache.hudi.config.HoodieStorageConfig.PARQUET_MAX_FILE_SIZE;
  */
 public class CloudObjectsSelectorCommon {
 
-  private static final Logger LOG = LogManager.getLogger(CloudObjectsSelectorCommon.class);
+  private static final Logger LOG = LoggerFactory.getLogger(CloudObjectsSelectorCommon.class);
 
   /**
    * Return a function that extracts filepaths from a list of Rows.
@@ -175,6 +178,18 @@ public class CloudObjectsSelectorCommon {
     totalSize *= 1.1;
     long parquetMaxFileSize = props.getLong(PARQUET_MAX_FILE_SIZE.key(), Long.parseLong(PARQUET_MAX_FILE_SIZE.defaultValue()));
     int numPartitions = (int) Math.max(totalSize / parquetMaxFileSize, 1);
-    return Option.of(reader.load(paths.toArray(new String[cloudObjectMetadata.size()])).coalesce(numPartitions));
+    Dataset<Row> dataset = reader.load(paths.toArray(new String[cloudObjectMetadata.size()])).coalesce(numPartitions);
+
+    // add partition column from source path if configured
+    if (props.containsKey(PATH_BASED_PARTITION_FIELDS)) {
+      String[] partitionKeysToAdd = props.getString(PATH_BASED_PARTITION_FIELDS).split(",");
+      // Add partition column for all path-based partition keys. If key is not present in path, the value will be null.
+      for (String partitionKey : partitionKeysToAdd) {
+        String partitionPathPattern = String.format("%s=", partitionKey);
+        LOG.info(String.format("Adding column %s to dataset", partitionKey));
+        dataset = dataset.withColumn(partitionKey, split(split(input_file_name(), partitionPathPattern).getItem(1), "/").getItem(0));
+      }
+    }
+    return Option.of(dataset);
   }
 }

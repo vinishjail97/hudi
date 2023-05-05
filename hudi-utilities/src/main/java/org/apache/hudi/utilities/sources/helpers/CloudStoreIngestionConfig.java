@@ -94,8 +94,7 @@ public class CloudStoreIngestionConfig {
   public static final String DATAFILE_FORMAT = "hoodie.deltastreamer.source.cloud.data.datafile.format";
 
   /**
-   * A comma delimited list of path-based partition fields
+   * A comma delimited list of path-based partition fields in the source file structure
    */
   public static final String PATH_BASED_PARTITION_FIELDS = "hoodie.deltastreamer.source.cloud.data.partition.fields.from.path";
-
 }
