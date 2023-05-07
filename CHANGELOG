@@ -986,3 +986,6 @@ c5491c703 [ONHS-7889] guarantee ordering of meta syncs (#267)
 b7495c929d Oss cp 28apr eot (#277)
 a0cf4a86c2 [HUDI-6113] Support multiple transformers using the same config keys in DeltaStreamer (#8514) (#279)
 717fc9b91b Upgrade to version release-v0.15.1 (#274)
+
+---[2023-05-07 12:31:58] [release-v0.16.2] Adding release tag for hudi-internal release-v0.16.2---
+6b4a28dd55 [HUDI-5315] Use sample writes to estimate record size (#8390) (#284)
