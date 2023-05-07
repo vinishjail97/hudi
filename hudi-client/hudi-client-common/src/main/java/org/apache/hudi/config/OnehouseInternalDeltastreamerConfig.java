@@ -30,6 +30,8 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
+import static org.apache.hudi.config.HoodieCompactionConfig.COPY_ON_WRITE_RECORD_SIZE_ESTIMATE;
+
 /**
  * All internal configs used by the OnehouseDeltastreamer class.
  */
@@ -140,6 +142,18 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
       .defaultValue(false) // 1MB
       .withDocumentation("allow commits on errors in delta sync,"
           + " should be used along with quarantine enabled");
+
+  public static final ConfigProperty<Boolean> SAMPLE_WRITES_ENABLED = ConfigProperty
+      .key("hoodie.deltastreamer.sample.writes.enabled")
+      .defaultValue(false)
+      .withDocumentation("Set this to true to sample from the first batch of records and write to the auxiliary path, before writing to the table."
+          + "The sampled records are used to calculate the average record size. The relevant write client will have `" + COPY_ON_WRITE_RECORD_SIZE_ESTIMATE.key()
+          + "` being overwritten by the calculated result.");
+  public static final ConfigProperty<Integer> SAMPLE_WRITES_SIZE = ConfigProperty
+      .key("hoodie.deltastreamer.sample.writes.size")
+      .defaultValue(5000)
+      .withDocumentation("Number of records to sample from the first write. To improve the estimation's accuracy, "
+          + "for smaller or more compressable record size, set the sample size bigger. For bigger or less compressable record size, set smaller.");
 
   private OnehouseInternalDeltastreamerConfig() {
     super();

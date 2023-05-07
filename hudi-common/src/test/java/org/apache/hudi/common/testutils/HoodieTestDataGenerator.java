@@ -30,6 +30,7 @@ import org.apache.hudi.common.model.HoodiePartitionMetadata;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
+import org.apache.hudi.common.table.timeline.HoodieInstantTimeGenerator;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.timeline.TimelineMetadataUtils;
 import org.apache.hudi.common.util.AvroOrcUtils;
@@ -194,6 +195,10 @@ public class HoodieTestDataGenerator implements AutoCloseable {
     this(System.nanoTime(), partitionPaths, keyPartitionMap);
   }
 
+  public static String getCommitTimeAtUTC(long epochSecond) {
+    return HoodieInstantTimeGenerator.getInstantFromTemporalAccessor(Instant.ofEpochSecond(epochSecond).atZone(ZoneOffset.UTC));
+  }
+  
   /**
    * @deprecated please use non-static version
    */
