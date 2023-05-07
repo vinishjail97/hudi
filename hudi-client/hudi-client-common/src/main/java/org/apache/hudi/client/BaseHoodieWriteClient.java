@@ -193,24 +193,30 @@ public abstract class BaseHoodieWriteClient<T extends HoodieRecordPayload, I, K,
   private void addFieldIds() {
     if (config.getSchema() != null || config.getWriteSchema() != null) {
       try {
-        Option<Schema> currentSchema;
-        if (FSUtils.isTableExists(config.getBasePath(), fs) && createMetaClient(true).getCommitsTimeline().countInstants() > 0) {
-          currentSchema = Option.of(new TableSchemaResolver(createMetaClient(true)).getTableAvroSchema());
-        } else {
-          currentSchema = Option.empty();
+        Option<Schema> currentSchema = Option.empty();
+        try {
+          if (FSUtils.isTableExists(config.getBasePath(), fs) && createMetaClient(true).getCommitsTimeline().countInstants() > 0) {
+            currentSchema = Option.of(new TableSchemaResolver(createMetaClient(true)).getTableAvroSchema());
+          }
+        } catch (Exception ex) {
+          LOG.error("Unable to fetch current schema for fieldIds", ex);
         }
         if (config.getSchema() != null) {
           Schema schema = new Schema.Parser().parse(config.getSchema());
-          Schema newSchema = HoodieAvroUtils.addIdTracking(schema, currentSchema, config.populateMetaFields());
-          config.setSchema(newSchema.toString());
+          if (schema.getType() != Schema.Type.NULL) {
+            Schema newSchema = HoodieAvroUtils.addIdTracking(schema, currentSchema, config.populateMetaFields());
+            config.setSchema(newSchema.toString());
+          }
         }
         if (config.getProps().containsKey(HoodieWriteConfig.WRITE_SCHEMA.key())) {
           Schema writeSchema = new Schema.Parser().parse(config.getWriteSchema());
-          Schema newWriteSchema = HoodieAvroUtils.addIdTracking(writeSchema, currentSchema, config.populateMetaFields());
-          config.getProps().setProperty(HoodieWriteConfig.WRITE_SCHEMA.key(), newWriteSchema.toString());
+          if (writeSchema.getType() != Schema.Type.NULL) {
+            Schema newWriteSchema = HoodieAvroUtils.addIdTracking(writeSchema, currentSchema, config.populateMetaFields());
+            config.getProps().setProperty(HoodieWriteConfig.WRITE_SCHEMA.key(), newWriteSchema.toString());
+          }
         }
       } catch (Exception ex) {
-        throw new HoodieException("Unable to initialize fieldIds", ex);
+        throw new HoodieException("Unable to initialize fieldIds schema " + config.getSchema() + " write " + config.getWriteSchema(), ex);
       }
     }
   }
