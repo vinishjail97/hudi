@@ -989,3 +989,7 @@ a0cf4a86c2 [HUDI-6113] Support multiple transformers using the same config keys 
 
 ---[2023-05-07 12:31:58] [release-v0.16.2] Adding release tag for hudi-internal release-v0.16.2---
 6b4a28dd55 [HUDI-5315] Use sample writes to estimate record size (#8390) (#284)
+
+---[2023-05-08 17:04:50] [release-v0.16.3] ---
+185321e36c [ONHS-6678] handle no schema found for table due to no commits with data/schema (#286)
+8670534700 Upgrade to version release-v0.16.2 (#285)
