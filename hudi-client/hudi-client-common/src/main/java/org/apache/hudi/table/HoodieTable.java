@@ -818,8 +818,12 @@ public abstract class HoodieTable<T extends HoodieRecordPayload, I, K, O> implem
     boolean isValid;
     try {
       TableSchemaResolver schemaResolver = new TableSchemaResolver(getMetaClient());
+      Option<Schema> existingTableSchema = schemaResolver.getTableAvroSchemaWithoutMetadataFieldsIfPresent();
+      if (!existingTableSchema.isPresent()) {
+        return;
+      }
       writerSchema = HoodieAvroUtils.createHoodieWriteSchema(config.getSchema());
-      tableSchema = HoodieAvroUtils.createHoodieWriteSchema(schemaResolver.getTableAvroSchemaWithoutMetadataFields());
+      tableSchema = HoodieAvroUtils.createHoodieWriteSchema(existingTableSchema.get());
       isValid = TableSchemaResolver.isSchemaCompatible(tableSchema, writerSchema);
     } catch (Exception e) {
       throw new HoodieException("Failed to read schema/check compatibility for base path " + metaClient.getBasePath(), e);
