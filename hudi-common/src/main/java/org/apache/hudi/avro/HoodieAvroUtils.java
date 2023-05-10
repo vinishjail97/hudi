@@ -181,23 +181,19 @@ public class HoodieAvroUtils {
       // add a single field "element"
       IdMapping fieldMapping = fieldNameToExistingMapping.computeIfAbsent(ARRAY_FIELD, key -> new IdMapping(key, lastFieldId.incrementAndGet()));
       mappings.add(fieldMapping);
-      nested.add(Pair.of(fieldMapping, schema.getElementType()));
+      nested.add(Pair.of(fieldMapping, getFieldSchema(schema.getElementType())));
     } else if (schema.getType() == Schema.Type.MAP) {
       // add a field for the key and value
       IdMapping keyFieldMapping = fieldNameToExistingMapping.computeIfAbsent(KEY_FIELD, key -> new IdMapping(key, lastFieldId.incrementAndGet()));
       IdMapping valueFieldMapping = fieldNameToExistingMapping.computeIfAbsent(VALUE_FIELD, key -> new IdMapping(key, lastFieldId.incrementAndGet()));
       mappings.add(keyFieldMapping);
       mappings.add(valueFieldMapping);
-      nested.add(Pair.of(valueFieldMapping, schema.getValueType()));
+      nested.add(Pair.of(valueFieldMapping, getFieldSchema(schema.getValueType())));
     } else if (schema.getType() == Schema.Type.RECORD) {
       for (Schema.Field field : schema.getFields()) {
-        Schema fieldSchema = field.schema();
+        Schema fieldSchema = getFieldSchema(field.schema());
         IdMapping fieldMapping = fieldNameToExistingMapping.computeIfAbsent(field.name(), key -> new IdMapping(key, lastFieldId.incrementAndGet()));
         mappings.add(fieldMapping);
-        if (fieldSchema.isUnion()) {
-          // assumes union for nullable
-          fieldSchema = fieldSchema.getTypes().get(0).getType() == Schema.Type.NULL ? fieldSchema.getTypes().get(1) : fieldSchema.getTypes().get(0);
-        }
         if (fieldSchema.getType() == Schema.Type.RECORD || fieldSchema.getType() == Schema.Type.ARRAY || fieldSchema.getType() == Schema.Type.MAP) {
           nested.add(Pair.of(fieldMapping, fieldSchema));
         }
@@ -205,6 +201,14 @@ public class HoodieAvroUtils {
     }
     nested.forEach(pair -> pair.getLeft().setFields(generateIdMappings(pair.getRight(), lastFieldId, pair.getLeft().getFields())));
     return mappings.stream().sorted(Comparator.comparing(IdMapping::getId)).collect(Collectors.toList());
+  }
+
+  private static Schema getFieldSchema(Schema fieldSchema) {
+    if (fieldSchema.isUnion()) {
+      // assumes union for nullable
+      return fieldSchema.getTypes().get(0).getType() == Schema.Type.NULL ? fieldSchema.getTypes().get(1) : fieldSchema.getTypes().get(0);
+    }
+    return fieldSchema;
   }
 
   /**

@@ -118,12 +118,12 @@ public class TestHoodieAvroUtils {
       + "\"fields\":[{\"name\":\"double_nested_int\",\"type\":\"int\",\"default\":0}]}}]}],\"default\":null},{\"name\":\"nullable_map_field\","
       + "\"type\":[\"null\",{\"type\":\"map\",\"values\":\"Nested\"}],\"default\":null},{\"name\":\"primitive_map_field\",\"type\":{\"type\":\"map\",\"values\":\"string\"}}]}";
   private static final String COMPLEX_SCHEMA = "{\"type\":\"record\",\"name\":\"Sample\",\"namespace\":\"test\",\"fields\":[{\"name\":\"key\",\"type\":\"string\"},{\"name\":\"ts\",\"type\":\"long\"},"
-      + "{\"name\":\"level\",\"type\":\"string\"},{\"name\":\"nested_record\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"Nested\","
+      + "{\"name\":\"level\",\"type\":[\"string\", \"null\"]},{\"name\":\"nested_record\",\"type\":[\"null\",{\"type\":\"record\",\"name\":\"Nested\","
       + "\"fields\":[{\"name\":\"nested_int\",\"type\":\"int\",\"default\":0},{\"name\":\"double_nested\",\"type\":{\"type\":\"record\",\"name\":\"DoubleNested\","
       + "\"fields\":[{\"name\":\"double_nested_int\",\"type\":\"int\",\"default\":0}]}},{\"name\":\"level\",\"type\":\"string\"}]}],\"default\":null},"
-      + "{\"name\":\"nullable_map_field\",\"type\":[\"null\",{\"type\":\"map\",\"values\":\"Nested\"}],\"default\":null},"
-      + "{\"name\":\"primitive_map_field\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},"
-      + "{\"name\":\"array_field\",\"type\":{\"type\":\"array\",\"items\":\"Nested\"},\"default\":[]},{\"name\":\"primitive_array_field\",\"type\":{\"type\":\"array\",\"items\":\"string\"}}]}";
+      + "{\"name\":\"nullable_map_field\",\"type\":[\"null\",{\"type\":\"map\",\"values\":[\"Nested\", \"null\"]}],\"default\":null},"
+      + "{\"name\":\"primitive_map_field\",\"type\":{\"type\":\"map\",\"values\":\"string\"}},{\"name\":\"array_field\",\"type\":{\"type\":\"array\",\"items\":[\"null\", \"Nested\"]},\"default\":[]},"
+      + "{\"name\":\"primitive_array_field\",\"type\":[{\"type\":\"array\",\"items\":\"string\"}, \"null\"]}]}";
 
   @Test
   public void testIdTrackingBootstrapWithSchema() {
