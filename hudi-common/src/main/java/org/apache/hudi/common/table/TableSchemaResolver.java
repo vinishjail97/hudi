@@ -198,8 +198,8 @@ public class TableSchemaResolver {
     return getTableAvroSchemaInternal(false, Option.empty()).orElseThrow(schemaNotFoundError());
   }
 
-  public Option<Schema> getTableAvroSchemaWithoutMetadataFieldsIfPresent() {
-    return getTableAvroSchemaInternal(false, Option.empty());
+  public Option<Schema> getTableAvroSchemaIfPresent(boolean includeMetadataFields) {
+    return getTableAvroSchemaInternal(includeMetadataFields, Option.empty());
   }
 
   private Option<Schema> getTableAvroSchemaInternal(boolean includeMetadataFields, Option<HoodieInstant> instantOpt) {
@@ -698,6 +698,6 @@ public class TableSchemaResolver {
   }
 
   private Supplier<Exception> schemaNotFoundError() {
-    return () -> new HoodieException("No schema found for table at " + metaClient.getBasePathV2().toString());
+    return () -> new IllegalArgumentException("No schema found for table at " + metaClient.getBasePathV2().toString());
   }
 }

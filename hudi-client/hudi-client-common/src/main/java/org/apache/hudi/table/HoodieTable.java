@@ -818,7 +818,7 @@ public abstract class HoodieTable<T extends HoodieRecordPayload, I, K, O> implem
     boolean isValid;
     try {
       TableSchemaResolver schemaResolver = new TableSchemaResolver(getMetaClient());
-      Option<Schema> existingTableSchema = schemaResolver.getTableAvroSchemaWithoutMetadataFieldsIfPresent();
+      Option<Schema> existingTableSchema = schemaResolver.getTableAvroSchemaIfPresent(false);
       if (!existingTableSchema.isPresent()) {
         return;
       }

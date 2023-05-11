@@ -1002,10 +1002,11 @@ public class DeltaSync implements Serializable, Closeable {
           HoodieTableMetaClient meta = HoodieTableMetaClient.builder().setConf(new Configuration(fs.getConf())).setBasePath(cfg.targetBasePath).setPayloadClassName(cfg.payloadClassName).build();
           int totalCompleted = meta.getActiveTimeline().getCommitsTimeline().filterCompletedInstants().countInstants();
           if (totalCompleted > 0) {
-            try {
-              TableSchemaResolver schemaResolver = new TableSchemaResolver(meta);
-              newWriteSchema = schemaResolver.getTableAvroSchema(false);
-            } catch (IllegalArgumentException e) {
+            TableSchemaResolver schemaResolver = new TableSchemaResolver(meta);
+            Option<Schema> tableSchema = schemaResolver.getTableAvroSchemaIfPresent(false);
+            if (tableSchema.isPresent()) {
+              newWriteSchema = tableSchema.get();
+            } else {
               LOG.warn("Could not fetch schema from table. Falling back to using target schema from schema provider");
             }
           }
