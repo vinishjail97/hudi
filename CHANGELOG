@@ -993,3 +993,8 @@ a0cf4a86c2 [HUDI-6113] Support multiple transformers using the same config keys 
 ---[2023-05-08 17:04:50] [release-v0.16.3] ---
 185321e36c [ONHS-6678] handle no schema found for table due to no commits with data/schema (#286)
 8670534700 Upgrade to version release-v0.16.2 (#285)
+
+---[2023-05-12 12:29:24] [release-v0.16.4] Adding release tag for onehouse-dataplane -release-v0.16.4---
+6d689589a4 [ONHS-8255] handle case gracefully where table does not have a schema (#289)
+f9bfe71f2d [ONHS-8125] Field ID Gen: handle edge case of nullable fields in maps/arrays (#288)
+2db73527b4 Upgrade to version release-v0.16.3 (#287)
