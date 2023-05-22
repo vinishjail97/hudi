@@ -998,3 +998,7 @@ a0cf4a86c2 [HUDI-6113] Support multiple transformers using the same config keys 
 6d689589a4 [ONHS-8255] handle case gracefully where table does not have a schema (#289)
 f9bfe71f2d [ONHS-8125] Field ID Gen: handle edge case of nullable fields in maps/arrays (#288)
 2db73527b4 Upgrade to version release-v0.16.3 (#287)
+
+---[2023-05-22 20:00:08] [release-v0.16.5] Adding release tag for hudi-internal-release release-v0.16.5---
+709f6f3596 [HUDI-6240] Adding default value as CORRECTED for rebase modes in write and read for avro (#8764) (#294)
+11533b3663 Upgrade to version release-v0.16.4 (#290)
