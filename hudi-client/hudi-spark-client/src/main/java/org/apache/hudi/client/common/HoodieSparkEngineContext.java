@@ -36,6 +36,7 @@ import org.apache.hudi.data.HoodieJavaRDD;
 import org.apache.hudi.data.HoodieSparkLongAccumulator;
 import org.apache.hudi.exception.HoodieException;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -60,7 +61,11 @@ public class HoodieSparkEngineContext extends HoodieEngineContext {
   private SQLContext sqlContext;
 
   public HoodieSparkEngineContext(JavaSparkContext jsc) {
-    super(new SerializableConfiguration(jsc.hadoopConfiguration()), new SparkTaskContextSupplier());
+    this(jsc, jsc.hadoopConfiguration());
+  }
+
+  public HoodieSparkEngineContext(JavaSparkContext jsc, Configuration conf) {
+    super(new SerializableConfiguration(conf), new SparkTaskContextSupplier());
     this.javaSparkContext = jsc;
     this.sqlContext = SQLContext.getOrCreate(jsc.sc());
   }

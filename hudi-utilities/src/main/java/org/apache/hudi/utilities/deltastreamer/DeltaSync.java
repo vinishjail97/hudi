@@ -53,6 +53,7 @@ import org.apache.hudi.config.HoodieIndexConfig;
 import org.apache.hudi.config.HoodiePayloadConfig;
 import org.apache.hudi.config.HoodieQuarantineTableConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
+import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.hive.HiveSyncConfig;
@@ -90,6 +91,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.apache.parquet.avro.AvroWriteSupport;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.rdd.RDD;
@@ -911,7 +913,16 @@ public class DeltaSync implements Serializable, Closeable {
       // Close Write client.
       writeClient.close();
     }
-    writeClient = new SparkRDDWriteClient<>(new HoodieSparkEngineContext(jssc), writeConfig, embeddedTimelineService);
+
+    HoodieSparkEngineContext hoodieSparkEngineContext;
+    if (props.getBoolean(OnehouseInternalDeltastreamerConfig.DISABLE_OLD_PARQUET_LIST_STRUCTURE.key(), false)) {
+      Configuration updatedHadoopConf = new Configuration(jssc.hadoopConfiguration());
+      updatedHadoopConf.set(AvroWriteSupport.WRITE_OLD_LIST_STRUCTURE, "false");
+      hoodieSparkEngineContext = new HoodieSparkEngineContext(jssc, updatedHadoopConf);
+    } else {
+      hoodieSparkEngineContext = new HoodieSparkEngineContext(jssc);
+    }
+    writeClient = new SparkRDDWriteClient<>(hoodieSparkEngineContext, writeConfig, embeddedTimelineService);
     onInitializingHoodieWriteClient.apply(writeClient);
   }
 
