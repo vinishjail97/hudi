@@ -154,7 +154,7 @@ public final class SourceFormatAdapter implements Closeable {
   }
 
   // TODO: Rebase this to use InternalSchema when it is ready.
-  private static StructType sanitizeStructTypeForAvro(StructType structType, String invalidCharMask) {
+  public static StructType sanitizeStructTypeForAvro(StructType structType, String invalidCharMask) {
     StructType sanitizedStructType = new StructType();
     StructField[] structFields = structType.fields();
     for (StructField s : structFields) {
