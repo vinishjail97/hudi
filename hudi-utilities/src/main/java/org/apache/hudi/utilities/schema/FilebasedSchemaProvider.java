@@ -25,7 +25,7 @@ import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.util.FileIOUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
-import org.apache.hudi.exception.HoodieIOException;
+import org.apache.hudi.utilities.exception.HoodieSchemaProviderException;
 
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -140,7 +140,7 @@ public class FilebasedSchemaProvider extends SchemaProvider {
       in = fs.open(new Path(schemaPath));
       schemaStr = FileIOUtils.readAsUTFString(in);
     } catch (IOException ioe) {
-      throw new HoodieIOException(String.format("Error reading schema from file %s", schemaPath), ioe);
+      throw new HoodieSchemaProviderException(String.format("Error reading schema from file %s", schemaPath), ioe);
     } finally {
       if (in != null) {
         IOUtils.closeStream(in);

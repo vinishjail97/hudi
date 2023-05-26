@@ -19,8 +19,7 @@
 package org.apache.hudi.utilities.deltastreamer.multisync;
 
 import org.apache.hudi.common.model.WriteOperationType;
-import org.apache.hudi.exception.HoodieException;
-import org.apache.hudi.utilities.deltastreamer.DeltaSyncException;
+import org.apache.hudi.exception.HoodieMetaSyncException;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer;
 import org.apache.hudi.utilities.functional.HoodieDeltaStreamerTestBase;
 import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
@@ -41,7 +40,6 @@ import java.util.Collections;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -86,9 +84,8 @@ public class TestMultipleMetaSync extends HoodieDeltaStreamerTestBase {
     MockSyncTool1.syncSuccess = false;
     MockSyncTool2.syncSuccess = false;
     HoodieDeltaStreamer.Config cfg = getConfig(tableBasePath, syncClassNames);
-    Exception e = assertThrows(HoodieException.class, () -> new HoodieDeltaStreamer(cfg, jsc, fs, hiveServer.getHiveConf()).sync());
-    assertEquals(DeltaSyncException.Type.META_SYNC, ((DeltaSyncException) e).getType());
-    assertTrue(e.getCause().getMessage().contains(MockSyncToolException1.class.getName()));
+    Exception e = assertThrows(HoodieMetaSyncException.class, () -> new HoodieDeltaStreamer(cfg, jsc, fs, hiveServer.getHiveConf()).sync());
+    assertTrue(e.getMessage().contains(MockSyncToolException1.class.getName()));
     assertTrue(MockSyncTool1.syncSuccess);
     assertTrue(MockSyncTool2.syncSuccess);
   }
@@ -99,10 +96,9 @@ public class TestMultipleMetaSync extends HoodieDeltaStreamerTestBase {
     MockSyncTool1.syncSuccess = false;
     MockSyncTool2.syncSuccess = false;
     HoodieDeltaStreamer.Config cfg = getConfig(tableBasePath, getSyncNames("MockSyncTool1", "MockSyncTool2", "MockSyncToolException1", "MockSyncToolException2"));
-    Exception e = assertThrows(HoodieException.class, () -> new HoodieDeltaStreamer(cfg, jsc, fs, hiveServer.getHiveConf()).sync());
-    assertEquals(DeltaSyncException.Type.META_SYNC, ((DeltaSyncException) e).getType());
-    assertTrue(e.getCause().getMessage().contains(MockSyncToolException1.class.getName()));
-    assertTrue(e.getCause().getMessage().contains(MockSyncToolException2.class.getName()));
+    Exception e = assertThrows(HoodieMetaSyncException.class, () -> new HoodieDeltaStreamer(cfg, jsc, fs, hiveServer.getHiveConf()).sync());
+    assertTrue(e.getMessage().contains(MockSyncToolException1.class.getName()));
+    assertTrue(e.getMessage().contains(MockSyncToolException2.class.getName()));
     assertTrue(MockSyncTool1.syncSuccess);
     assertTrue(MockSyncTool2.syncSuccess);
   }

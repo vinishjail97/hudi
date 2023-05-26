@@ -71,8 +71,9 @@ import org.apache.hudi.utilities.callback.kafka.HoodieWriteCommitKafkaCallbackCo
 import org.apache.hudi.utilities.callback.pulsar.HoodieWriteCommitPulsarCallback;
 import org.apache.hudi.utilities.callback.pulsar.HoodieWriteCommitPulsarCallbackConfig;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.Config;
-import org.apache.hudi.utilities.deltastreamer.internal.StacktraceUtils;
 import org.apache.hudi.utilities.exception.HoodieDeltaStreamerException;
+import org.apache.hudi.utilities.exception.HoodieDeltaStreamerWriteException;
+import org.apache.hudi.utilities.exception.HoodieSchemaFetchException;
 import org.apache.hudi.utilities.exception.HoodieSourceTimeoutException;
 import org.apache.hudi.utilities.ingestion.HoodieIngestionMetrics;
 import org.apache.hudi.utilities.schema.DelegatingSchemaProvider;
@@ -107,6 +108,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -127,6 +129,7 @@ import static org.apache.hudi.config.HoodieWriteConfig.COMBINE_BEFORE_INSERT;
 import static org.apache.hudi.config.HoodieWriteConfig.COMBINE_BEFORE_UPSERT;
 import static org.apache.hudi.hive.HiveSyncConfigHolder.HIVE_SYNC_BUCKET_SYNC;
 import static org.apache.hudi.hive.HiveSyncConfigHolder.HIVE_SYNC_BUCKET_SYNC_SPEC;
+import static org.apache.hudi.sync.common.util.SyncUtilHelpers.getHoodieMetaSyncException;
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_FORCE_SKIP_PROP;
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_KEY;
 import static org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer.CHECKPOINT_RESET_KEY;
@@ -364,28 +367,24 @@ public class DeltaSync implements Serializable, Closeable {
 
     if (srcRecordsWithCkpt != null) {
       final JavaRDD<HoodieRecord> recordsFromSource = srcRecordsWithCkpt.getRight().getRight();
-      try {
-        // this is the first input batch. If schemaProvider not set, use it and register Avro Schema and start
-        // compactor
-        if (writeClient == null) {
-          this.schemaProvider = srcRecordsWithCkpt.getKey();
-          // Setup HoodieWriteClient and compaction now that we decided on schema
-          setupWriteClient(recordsFromSource);
-        } else {
-          Schema newSourceSchema = srcRecordsWithCkpt.getKey().getSourceSchema();
-          Schema newTargetSchema = srcRecordsWithCkpt.getKey().getTargetSchema();
-          if (!(processedSchema.isSchemaPresent(newSourceSchema))
-              || !(processedSchema.isSchemaPresent(newTargetSchema))) {
-            LOG.info("Seeing new schema. Source :" + newSourceSchema.toString(true)
-                + ", Target :" + newTargetSchema.toString(true));
-            // We need to recreate write client with new schema and register them.
-            reInitWriteClient(newSourceSchema, newTargetSchema, recordsFromSource);
-            processedSchema.addSchema(newSourceSchema);
-            processedSchema.addSchema(newTargetSchema);
-          }
+      // this is the first input batch. If schemaProvider not set, use it and register Avro Schema and start
+      // compactor
+      if (writeClient == null) {
+        this.schemaProvider = srcRecordsWithCkpt.getKey();
+        // Setup HoodieWriteClient and compaction now that we decided on schema
+        setupWriteClient(recordsFromSource);
+      } else {
+        Schema newSourceSchema = srcRecordsWithCkpt.getKey().getSourceSchema();
+        Schema newTargetSchema = srcRecordsWithCkpt.getKey().getTargetSchema();
+        if (!(processedSchema.isSchemaPresent(newSourceSchema))
+            || !(processedSchema.isSchemaPresent(newTargetSchema))) {
+          LOG.info("Seeing new schema. Source :" + newSourceSchema.toString(true)
+              + ", Target :" + newTargetSchema.toString(true));
+          // We need to recreate write client with new schema and register them.
+          reInitWriteClient(newSourceSchema, newTargetSchema, recordsFromSource);
+          processedSchema.addSchema(newSourceSchema);
+          processedSchema.addSchema(newTargetSchema);
         }
-      } catch (Exception ex) {
-        throw new DeltaSyncException(DeltaSyncException.Type.SCHEMA_FETCH, "Failed to fetch schema", ex);
       }
 
       // complete the pending clustering before writing to sink
@@ -482,18 +481,10 @@ public class DeltaSync implements Serializable, Closeable {
       // Transformation is needed. Fetch New rows in Row Format, apply transformation and then convert them
       // to generic records for writing
       InputBatch<Dataset<Row>> dataAndCheckpoint;
-      try {
-        dataAndCheckpoint = formatAdapter.fetchNewDataInRowFormat(resumeCheckpointStr, cfg.sourceLimit);
-      } catch (Exception ex) {
-        throw new DeltaSyncException(DeltaSyncException.Type.SCHEMA_FETCH, "Failed to fetch schema", ex);
-      }
+      dataAndCheckpoint = formatAdapter.fetchNewDataInRowFormat(resumeCheckpointStr, cfg.sourceLimit);
 
-      Option<Dataset<Row>> transformed;
-      try {
-        transformed = dataAndCheckpoint.getBatch().map(data -> transformer.get().apply(jssc, sparkSession, data, props));
-      } catch (Exception ex) {
-        throw new DeltaSyncException(DeltaSyncException.Type.TRANSFORM_PLAN, "Invalid transformation specified", ex);
-      }
+
+      Option<Dataset<Row>> transformed = dataAndCheckpoint.getBatch().map(data -> transformer.get().apply(jssc, sparkSession, data, props));
 
       transformed = formatAdapter.transformDatasetWithQuarantineEvents(transformed, QuarantineEvent.QuarantineReason.CUSTOM_TRANSFORMER_FAILURE);
 
@@ -550,12 +541,7 @@ public class DeltaSync implements Serializable, Closeable {
       }
     } else {
       // Pull the data from the source & prepare the write
-      InputBatch<JavaRDD<GenericRecord>> dataAndCheckpoint;
-      try {
-        dataAndCheckpoint = formatAdapter.fetchNewDataInAvroFormat(resumeCheckpointStr, cfg.sourceLimit);
-      } catch (Exception ex) {
-        throw new DeltaSyncException(DeltaSyncException.Type.SCHEMA_FETCH, "Failed to fetch schema", ex);
-      }
+      InputBatch<JavaRDD<GenericRecord>> dataAndCheckpoint = formatAdapter.fetchNewDataInAvroFormat(resumeCheckpointStr, cfg.sourceLimit);
       avroRDDOptional = dataAndCheckpoint.getBatch();
       checkpointStr = dataAndCheckpoint.getCheckpointForNextBatch();
       schemaProvider = dataAndCheckpoint.getSchemaProvider();
@@ -569,27 +555,13 @@ public class DeltaSync implements Serializable, Closeable {
       return null;
     }
 
-    try {
-      if ((!avroRDDOptional.isPresent()) || (avroRDDOptional.get().isEmpty())) {
-        if (!cfg.allowCommitOnNoData) {
-          LOG.info("No new data found, hence nothing to commit.");
-          return null;
-        }
-        LOG.info("No new data, perform empty commit.");
-        return Pair.of(schemaProvider, Pair.of(checkpointStr, jssc.emptyRDD()));
+    if ((!avroRDDOptional.isPresent()) || (avroRDDOptional.get().isEmpty())) {
+      if (!cfg.allowCommitOnNoData) {
+        LOG.info("No new data found, hence nothing to commit.");
+        return null;
       }
-    } catch (Exception ex) {
-      StackTraceElement[] causeStacktrace = ex.getCause() != null ? ex.getCause().getStackTrace() : ex.getStackTrace();
-      Class<?> transformerClass = StacktraceUtils.getTransformerClassFromStackTrace(causeStacktrace);
-      if (transformerClass != null) {
-        boolean isPlatformError = transformerClass.getName().startsWith("org.apache") || transformerClass.getName().startsWith("com.onehouse");
-        throw new DeltaSyncException(isPlatformError ? DeltaSyncException.Type.PLATFORM_TRANSFORM_EXECUTION : DeltaSyncException.Type.USER_TRANSFORM_EXECUTION, "Transformer failure", ex);
-      }
-      boolean isSchemaIssue = StacktraceUtils.isSchemaCompatibilityIssue(causeStacktrace);
-      if (isSchemaIssue) {
-        throw new DeltaSyncException(DeltaSyncException.Type.SCHEMA_COMPATIBILITY, "Failed to read data into schema", ex);
-      }
-      throw new DeltaSyncException(DeltaSyncException.Type.READ_FROM_SOURCE, "Failed to read data from source", ex);
+      LOG.info("No new data, perform empty commit.");
+      return Pair.of(schemaProvider, Pair.of(checkpointStr, jssc.emptyRDD()));
     }
 
     boolean shouldCombine = cfg.filterDupes || cfg.operation.equals(WriteOperationType.UPSERT);
@@ -760,7 +732,7 @@ public class DeltaSync implements Serializable, Closeable {
         if (!quarantineTableSuccess) {
           LOG.info("Commit " + instantTime + " failed!");
           writeClient.rollback(instantTime);
-          throw new DeltaSyncException(DeltaSyncException.Type.WRITE, "Quarantine Table Commit failed!");
+          throw new HoodieDeltaStreamerWriteException("Quarantine Table Commit failed!");
         }
       }
       boolean success = writeClient.commit(instantTime, writeStatusRDD, Option.of(checkpointCommitMetadata), commitActionType, Collections.emptyMap());
@@ -777,7 +749,7 @@ public class DeltaSync implements Serializable, Closeable {
         }
       } else {
         LOG.info("Commit " + instantTime + " failed!");
-        throw new DeltaSyncException(DeltaSyncException.Type.WRITE, "Commit " + instantTime + " failed!");
+        throw new HoodieDeltaStreamerWriteException("Commit " + instantTime + " failed!");
       }
     } else {
       LOG.error("Delta Sync found errors when writing. Errors/Total=" + totalErrorRecords + "/" + totalRecords);
@@ -790,7 +762,7 @@ public class DeltaSync implements Serializable, Closeable {
       });
       // Rolling back instant
       writeClient.rollback(instantTime);
-      throw new DeltaSyncException(DeltaSyncException.Type.WRITE, "Commit " + instantTime + " failed and rolled-back !");
+      throw new HoodieDeltaStreamerWriteException("Commit " + instantTime + " failed and rolled-back !");
     }
     long overallTimeMs = overallTimerContext != null ? overallTimerContext.stop() : 0;
 
@@ -859,20 +831,21 @@ public class DeltaSync implements Serializable, Closeable {
       }
 
       //Collect exceptions in list because we want all sync to run. Then we can throw
-      List<HoodieException> metaSyncExceptions = new ArrayList<>();
+      Map<String,HoodieException> failedMetaSyncs = new HashMap<>();
       for (String impl : syncClientToolClasses) {
+        Timer.Context syncContext = metrics.getMetaSyncTimerContext();
         try {
-          Timer.Context syncContext = metrics.getMetaSyncTimerContext();
           SyncUtilHelpers.runHoodieMetaSync(impl.trim(), metaProps, conf, fs, cfg.targetBasePath, cfg.baseFileFormat);
-          long metaSyncTimeMs = syncContext != null ? syncContext.stop() : 0;
-          metrics.updateDeltaStreamerMetaSyncMetrics(getSyncClassShortName(impl), metaSyncTimeMs);
+
         } catch (HoodieException e) {
           LOG.info("SyncTool class " + impl.trim() + " failed with exception", e);
-          metaSyncExceptions.add(e);
+          failedMetaSyncs.put(impl, e);
         }
+        long metaSyncTimeMs = syncContext != null ? syncContext.stop() : 0;
+        metrics.updateDeltaStreamerMetaSyncMetrics(getSyncClassShortName(impl), metaSyncTimeMs);
       }
-      if (!metaSyncExceptions.isEmpty()) {
-        throw new DeltaSyncException(DeltaSyncException.Type.META_SYNC, "Meta sync failure", SyncUtilHelpers.getExceptionFromList(metaSyncExceptions));
+      if (!failedMetaSyncs.isEmpty()) {
+        throw getHoodieMetaSyncException(failedMetaSyncs);
       }
     }
   }
@@ -1025,7 +998,7 @@ public class DeltaSync implements Serializable, Closeable {
       }
       return newWriteSchema;
     } catch (Exception e) {
-      throw new HoodieException("Failed to fetch schema from table ", e);
+      throw new HoodieSchemaFetchException("Failed to fetch schema from table ", e);
     }
   }
 

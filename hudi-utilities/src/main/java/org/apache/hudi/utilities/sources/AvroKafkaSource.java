@@ -21,8 +21,8 @@ package org.apache.hudi.utilities.sources;
 import org.apache.hudi.DataSourceWriteOptions;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.exception.HoodieException;
-import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.utilities.deser.KafkaAvroSchemaDeserializer;
+import org.apache.hudi.utilities.exception.HoodieReadFromSourceException;
 import org.apache.hudi.utilities.ingestion.HoodieIngestionMetrics;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.AvroConvertor;
@@ -64,14 +64,14 @@ public class AvroKafkaSource extends KafkaSource<GenericRecord> {
       props.put(NATIVE_KAFKA_VALUE_DESERIALIZER_PROP, Class.forName(deserializerClassName).getName());
       if (deserializerClassName.equals(KafkaAvroSchemaDeserializer.class.getName())) {
         if (schemaProvider == null) {
-          throw new HoodieIOException("SchemaProvider has to be set to use KafkaAvroSchemaDeserializer");
+          throw new HoodieReadFromSourceException("SchemaProvider has to be set to use KafkaAvroSchemaDeserializer");
         }
         props.put(KAFKA_AVRO_VALUE_DESERIALIZER_SCHEMA, schemaProvider.getSourceSchema().toString());
       }
     } catch (ClassNotFoundException e) {
       String error = "Could not load custom avro kafka deserializer: " + deserializerClassName;
       LOG.error(error);
-      throw new HoodieException(error, e);
+      throw new HoodieReadFromSourceException(error, e);
     }
     this.offsetGen = new KafkaOffsetGen(props);
   }
@@ -98,7 +98,7 @@ public class AvroKafkaSource extends KafkaSource<GenericRecord> {
   protected JavaRDD<GenericRecord> processForKafkaOffsets(JavaRDD<ConsumerRecord<Object, Object>> kafkaRDD) {
     if (shouldAppendKafkaOffsets())  {
       if (schemaProvider == null) {
-        throw new HoodieException("Needed schema provider class for appendingKafkaOffsets");
+        throw new HoodieReadFromSourceException("Needed schema provider class for appendingKafkaOffsets");
       }
       AvroConvertor convertor = getAvroConverter(false);
       return kafkaRDD.map(consumerRecord -> convertor.withKafkaFieldsAppended(consumerRecord));

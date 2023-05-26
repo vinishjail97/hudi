@@ -19,6 +19,7 @@
 package org.apache.hudi.utilities.schema;
 
 import org.apache.hudi.common.config.TypedProperties;
+import org.apache.hudi.internal.schema.HoodieSchemaException;
 
 import org.apache.avro.Schema;
 import org.apache.log4j.LogManager;
@@ -42,13 +43,17 @@ public class KafkaOffsetPostProcessor  extends SchemaPostProcessor {
 
   @Override
   public Schema processSchema(Schema schema) {
-    List<Schema.Field> fieldList = schema.getFields();
-    List<Schema.Field> newFieldList = fieldList.stream()
-        .map(f -> new Schema.Field(f.name(), f.schema(), f.doc(), f.defaultVal())).collect(Collectors.toList());
-    newFieldList.add(new Schema.Field(KAFKA_SOURCE_OFFSET_COLUMN, Schema.create(Schema.Type.LONG)));
-    newFieldList.add(new Schema.Field(KAFKA_SOURCE_PARTITION_COLUMN, Schema.create(Schema.Type.INT)));
-    newFieldList.add(new Schema.Field(KAFKA_SOURCE_TIMESTAMP_COLUMN, Schema.create(Schema.Type.LONG)));
-    Schema newSchema = Schema.createRecord(schema.getName() + "_processed", schema.getDoc(), schema.getNamespace(), false, newFieldList);
-    return newSchema;
+    try {
+      List<Schema.Field> fieldList = schema.getFields();
+      List<Schema.Field> newFieldList = fieldList.stream()
+          .map(f -> new Schema.Field(f.name(), f.schema(), f.doc(), f.defaultVal())).collect(Collectors.toList());
+      newFieldList.add(new Schema.Field(KAFKA_SOURCE_OFFSET_COLUMN, Schema.create(Schema.Type.LONG)));
+      newFieldList.add(new Schema.Field(KAFKA_SOURCE_PARTITION_COLUMN, Schema.create(Schema.Type.INT)));
+      newFieldList.add(new Schema.Field(KAFKA_SOURCE_TIMESTAMP_COLUMN, Schema.create(Schema.Type.LONG)));
+      Schema newSchema = Schema.createRecord(schema.getName() + "_processed", schema.getDoc(), schema.getNamespace(), false, newFieldList);
+      return newSchema;
+    } catch (Exception e) {
+      throw new HoodieSchemaException("Kafka offset post processor failed with schema: " + schema, e);
+    }
   }
 }

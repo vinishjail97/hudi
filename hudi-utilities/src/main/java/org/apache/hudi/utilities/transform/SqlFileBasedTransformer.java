@@ -22,7 +22,9 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
-import org.apache.hudi.exception.HoodieIOException;
+import org.apache.hudi.utilities.exception.HoodieTransformException;
+import org.apache.hudi.utilities.exception.HoodieTransformExecutionException;
+
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -68,7 +70,7 @@ public class SqlFileBasedTransformer implements Transformer {
 
     final String sqlFile = props.getString(Config.TRANSFORMER_SQL_FILE);
     if (null == sqlFile) {
-      throw new IllegalArgumentException(
+      throw new HoodieTransformException(
           "Missing required configuration : (" + Config.TRANSFORMER_SQL_FILE + ")");
     }
 
@@ -94,7 +96,7 @@ public class SqlFileBasedTransformer implements Transformer {
       }
       return rows;
     } catch (final IOException ioe) {
-      throw new HoodieIOException("Error reading transformer SQL file.", ioe);
+      throw new HoodieTransformExecutionException("Error reading transformer SQL file.", ioe);
     } finally {
       sparkSession.catalog().dropTempView(tmpTable);
     }

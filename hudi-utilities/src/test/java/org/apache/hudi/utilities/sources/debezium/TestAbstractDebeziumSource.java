@@ -46,7 +46,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import java.io.IOException;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -182,7 +181,7 @@ public abstract class TestAbstractDebeziumSource extends UtilitiesTestBase {
     }
 
     @Override
-    public String fetchSchemaFromRegistry(String registryUrl) throws IOException {
+    public String fetchSchemaFromRegistry(String registryUrl) {
       return schema;
     }
   }

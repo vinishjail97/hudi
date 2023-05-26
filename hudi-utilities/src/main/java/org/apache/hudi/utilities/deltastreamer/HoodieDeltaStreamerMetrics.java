@@ -116,14 +116,6 @@ public class HoodieDeltaStreamerMetrics extends HoodieIngestionMetrics {
     }
   }
 
-  public void updateFailureType(DeltaSyncException.Type failureType) {
-    if (writeConfig.isMetricsOn()) {
-      for (DeltaSyncException.Type type : DeltaSyncException.Type.values()) {
-        metrics.registerGauge(getMetricsName("deltastreamer", "failureType_" + type), type == failureType ? 1 : 0);
-      }
-    }
-  }
-
   public void updateIsActivelyIngesting(int isActivelyIngesting) {
     if (writeConfig.isMetricsOn()) {
       metrics.registerGauge(getMetricsName("deltastreamer", "isActivelyIngesting"), isActivelyIngesting);

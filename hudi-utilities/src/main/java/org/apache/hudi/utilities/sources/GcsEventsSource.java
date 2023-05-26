@@ -23,6 +23,7 @@ import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.utilities.exception.HoodieReadFromSourceException;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.gcs.PubsubMessagesFetcher;
 import org.apache.hudi.utilities.sources.helpers.gcs.MessageBatch;
@@ -129,7 +130,14 @@ public class GcsEventsSource extends RowSource {
   protected Pair<Option<Dataset<Row>>, String> fetchNextBatch(Option<String> lastCkptStr, long sourceLimit) {
     LOG.info("fetchNextBatch(): Input checkpoint: " + lastCkptStr);
 
-    MessageBatch messageBatch = fetchFileMetadata();
+    MessageBatch messageBatch;
+    try {
+      messageBatch = fetchFileMetadata();
+    } catch (HoodieException e) {
+      throw e;
+    } catch (Exception e) {
+      throw new HoodieReadFromSourceException("Failed to fetch file metadata from GCS events source", e);
+    }
 
     if (messageBatch.isEmpty()) {
       LOG.info("No new data. Returning empty batch with checkpoint value: " + CHECKPOINT_VALUE_ZERO);
@@ -198,7 +206,7 @@ public class GcsEventsSource extends RowSource {
       pubsubMessagesFetcher.sendAcks(messagesToAck);
       messagesToAck.clear();
     } catch (IOException e) {
-      throw new HoodieException("Error when acknowledging messages from Pubsub", e);
+      throw new HoodieReadFromSourceException("Error when acknowledging messages from Pubsub", e);
     }
   }
 

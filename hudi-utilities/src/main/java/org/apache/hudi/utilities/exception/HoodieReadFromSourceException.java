@@ -16,40 +16,17 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.utilities.deltastreamer;
+package org.apache.hudi.utilities.exception;
 
 import org.apache.hudi.exception.HoodieException;
 
-public class DeltaSyncException extends HoodieException {
-  private final Type type;
+public class HoodieReadFromSourceException extends HoodieException {
 
-  public DeltaSyncException(Type type, String message, Throwable ex) {
-    super(createFullMessage(type, message), ex);
-    this.type = type;
+  public HoodieReadFromSourceException(String msg) {
+    super(msg);
   }
 
-  public DeltaSyncException(Type type, String message) {
-    super(createFullMessage(type, message));
-    this.type = type;
-  }
-
-  private static String createFullMessage(Type type, String message) {
-    return String.format("%s %s", type.name(), message);
-  }
-
-  public Type getType() {
-    return type;
-  }
-
-  public enum Type {
-    UNKNOWN,
-    READ_FROM_SOURCE,
-    SCHEMA_COMPATIBILITY,
-    TRANSFORM_PLAN,
-    USER_TRANSFORM_EXECUTION,
-    PLATFORM_TRANSFORM_EXECUTION,
-    WRITE,
-    META_SYNC,
-    SCHEMA_FETCH
+  public HoodieReadFromSourceException(String msg, Throwable e) {
+    super(msg, e);
   }
 }

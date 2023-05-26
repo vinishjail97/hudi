@@ -19,6 +19,8 @@
 package org.apache.hudi.utilities.transform;
 
 import org.apache.hudi.common.config.TypedProperties;
+import org.apache.hudi.utilities.exception.HoodieTransformException;
+import org.apache.hudi.utilities.exception.HoodieTransformExecutionException;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -54,17 +56,21 @@ public class SqlQueryBasedTransformer implements Transformer {
       TypedProperties properties) {
     String transformerSQL = properties.getString(Config.TRANSFORMER_SQL);
     if (null == transformerSQL) {
-      throw new IllegalArgumentException("Missing configuration : (" + Config.TRANSFORMER_SQL + ")");
+      throw new HoodieTransformException("Missing configuration : (" + Config.TRANSFORMER_SQL + ")");
     }
 
-    // tmp table name doesn't like dashes
-    String tmpTable = TMP_TABLE.concat(UUID.randomUUID().toString().replace("-", "_"));
-    LOG.info("Registering tmp table : " + tmpTable);
-    rowDataset.createOrReplaceTempView(tmpTable);
-    String sqlStr = transformerSQL.replaceAll(SRC_PATTERN, tmpTable);
-    LOG.debug("SQL Query for transformation : (" + sqlStr + ")");
-    Dataset<Row> transformed = sparkSession.sql(sqlStr);
-    sparkSession.catalog().dropTempView(tmpTable);
-    return transformed;
+    try {
+      // tmp table name doesn't like dashes
+      String tmpTable = TMP_TABLE.concat(UUID.randomUUID().toString().replace("-", "_"));
+      LOG.info("Registering tmp table : " + tmpTable);
+      rowDataset.createOrReplaceTempView(tmpTable);
+      String sqlStr = transformerSQL.replaceAll(SRC_PATTERN, tmpTable);
+      LOG.debug("SQL Query for transformation : (" + sqlStr + ")");
+      Dataset<Row> transformed = sparkSession.sql(sqlStr);
+      sparkSession.catalog().dropTempView(tmpTable);
+      return transformed;
+    } catch (Exception e) {
+      throw new HoodieTransformExecutionException("Failed to apply sql query based transformer", e);
+    }
   }
 }

@@ -20,7 +20,7 @@ package org.apache.hudi.utilities.schema;
 
 import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.common.config.TypedProperties;
-import org.apache.hudi.exception.HoodieIOException;
+import org.apache.hudi.utilities.exception.HoodieSchemaFetchException;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -74,23 +74,27 @@ public class SchemaRegistryProvider extends SchemaProvider {
    * @return the Schema in String form.
    * @throws IOException
    */
-  public String fetchSchemaFromRegistry(String registryUrl) throws IOException {
-    URL registry;
-    HttpURLConnection connection;
-    Matcher matcher = Pattern.compile("://(.*?)@").matcher(registryUrl);
-    if (matcher.find()) {
-      String creds = matcher.group(1);
-      String urlWithoutCreds = registryUrl.replace(creds + "@", "");
-      registry = new URL(urlWithoutCreds);
-      connection = (HttpURLConnection) registry.openConnection();
-      setAuthorizationHeader(matcher.group(1), connection);
-    } else {
-      registry = new URL(registryUrl);
-      connection = (HttpURLConnection) registry.openConnection();
+  public String fetchSchemaFromRegistry(String registryUrl) {
+    try {
+      URL registry;
+      HttpURLConnection connection;
+      Matcher matcher = Pattern.compile("://(.*?)@").matcher(registryUrl);
+      if (matcher.find()) {
+        String creds = matcher.group(1);
+        String urlWithoutCreds = registryUrl.replace(creds + "@", "");
+        registry = new URL(urlWithoutCreds);
+        connection = (HttpURLConnection) registry.openConnection();
+        setAuthorizationHeader(matcher.group(1), connection);
+      } else {
+        registry = new URL(registryUrl);
+        connection = (HttpURLConnection) registry.openConnection();
+      }
+      ObjectMapper mapper = new ObjectMapper();
+      JsonNode node = mapper.readTree(getStream(connection));
+      return node.get("schema").asText();
+    } catch (Exception e) {
+      throw new HoodieSchemaFetchException("Failed to fetch schema from registry", e);
     }
-    ObjectMapper mapper = new ObjectMapper();
-    JsonNode node = mapper.readTree(getStream(connection));
-    return node.get("schema").asText();
   }
 
   protected void setAuthorizationHeader(String creds, HttpURLConnection connection) {
@@ -107,7 +111,7 @@ public class SchemaRegistryProvider extends SchemaProvider {
     DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(Config.SRC_SCHEMA_REGISTRY_URL_PROP));
   }
 
-  private Schema getSchema(String registryUrl) throws IOException {
+  private Schema getSchema(String registryUrl) {
     return new Schema.Parser().parse(fetchSchemaFromRegistry(registryUrl));
   }
 
@@ -116,8 +120,8 @@ public class SchemaRegistryProvider extends SchemaProvider {
     String registryUrl = config.getString(Config.SRC_SCHEMA_REGISTRY_URL_PROP);
     try {
       return getSchema(registryUrl);
-    } catch (IOException ioe) {
-      throw new HoodieIOException("Error reading source schema from registry :" + registryUrl, ioe);
+    } catch (Exception e) {
+      throw new HoodieSchemaFetchException("Error reading source schema from registry :" + registryUrl, e);
     }
   }
 
@@ -127,8 +131,8 @@ public class SchemaRegistryProvider extends SchemaProvider {
     String targetRegistryUrl = config.getString(Config.TARGET_SCHEMA_REGISTRY_URL_PROP, registryUrl);
     try {
       return getSchema(targetRegistryUrl);
-    } catch (IOException ioe) {
-      throw new HoodieIOException("Error reading target schema from registry :" + registryUrl, ioe);
+    } catch (Exception e) {
+      throw new HoodieSchemaFetchException("Error reading target schema from registry :" + targetRegistryUrl, e);
     }
   }
 }
