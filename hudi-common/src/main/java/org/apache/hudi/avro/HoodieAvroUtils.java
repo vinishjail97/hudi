@@ -1090,6 +1090,9 @@ public class HoodieAvroUtils {
         }
         break;
       case STRING:
+        if (oldSchema.getType() == Schema.Type.ENUM) {
+          return String.valueOf(oldValue);
+        }
         if (oldSchema.getType() == Schema.Type.BYTES) {
           return String.valueOf(((byte[]) oldValue));
         }
