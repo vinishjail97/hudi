@@ -273,7 +273,8 @@ public class DeltaSync implements Serializable, Closeable {
         UtilHelpers.createSource(cfg.sourceClassName, props, jssc, sparkSession, schemaProvider, metrics),
         this.quarantineTableWriterInterfaceImpl,
         Option.of(props));
-    this.transformer = UtilHelpers.createTransformer(Option.ofNullable(cfg.transformerClassNames), this.quarantineTableWriterInterfaceImpl.isPresent());
+    this.transformer = UtilHelpers.createTransformer(Option.ofNullable(cfg.transformerClassNames),
+        Option.ofNullable(schemaProvider).map(SchemaProvider::getSourceSchema), this.quarantineTableWriterInterfaceImpl.isPresent());
     this.jobGroupId = "OnehouseDeltaStreamer-" + UUID.randomUUID();
   }
 

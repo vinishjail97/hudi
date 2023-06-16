@@ -19,11 +19,15 @@
 
 package org.apache.hudi.utilities.functional;
 
+import org.apache.hudi.common.config.TypedProperties;
+import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.testutils.SparkClientFunctionalTestHarness;
 import org.apache.hudi.utilities.exception.HoodieTransformPlanException;
 import org.apache.hudi.utilities.transform.ChainedTransformer;
 import org.apache.hudi.utilities.transform.Transformer;
 
+import org.apache.avro.Schema;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -85,7 +89,7 @@ public class TestChainedTransformer extends SparkClientFunctionalTestHarness {
   })
   public void testChainedTransformerValidationFails(String transformerName) {
     try {
-      ChainedTransformer transformer = new ChainedTransformer(Arrays.asList(transformerName.split(",")));
+      ChainedTransformer transformer = new ChainedTransformer(Arrays.asList(transformerName.split(",")), Option.empty());
       fail();
     } catch (Exception e) {
       assertTrue(e instanceof HoodieTransformPlanException, e.getMessage());
@@ -100,8 +104,19 @@ public class TestChainedTransformer extends SparkClientFunctionalTestHarness {
       "org.apache.hudi.utilities.transform.FlatteningTransformer,org.apache.hudi.utilities.transform.FlatteningTransformer"
   })
   public void testChainedTransformerValidationPasses(String transformerName) {
-    ChainedTransformer transformer = new ChainedTransformer(Arrays.asList(transformerName.split(",")));
+    ChainedTransformer transformer = new ChainedTransformer(Arrays.asList(transformerName.split(",")), Option.empty());
     assertNotNull(transformer);
   }
 
+  @Test
+  public void testChainedTransformerTransformedSchema() {
+    String transformerName = "org.apache.hudi.utilities.transform.FlatteningTransformer";
+    ChainedTransformer transformer = new ChainedTransformer(Arrays.asList(transformerName.split(",")),
+        Option.of(new Schema.Parser().parse(HoodieTestDataGenerator.TRIP_EXAMPLE_SCHEMA)));
+    StructType transformedSchema = transformer.transformedSchema(jsc(), spark(), null, new TypedProperties());
+    // Verify transformed nested fields are present in the transformed schema
+    assertTrue(Arrays.asList(transformedSchema.fieldNames()).contains("fare_amount"));
+    assertTrue(Arrays.asList(transformedSchema.fieldNames()).contains("fare_currency"));
+    assertNotNull(transformer);
+  }
 }
