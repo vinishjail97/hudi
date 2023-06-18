@@ -127,6 +127,8 @@ public class HoodieTestDataGenerator implements AutoCloseable {
       TRIP_SCHEMA_PREFIX + EXTRA_TYPE_SCHEMA + MAP_TYPE_SCHEMA + FARE_NESTED_SCHEMA + TIP_NESTED_SCHEMA + TRIP_SCHEMA_SUFFIX;
   public static final String TRIP_FLATTENED_SCHEMA =
       TRIP_SCHEMA_PREFIX + FARE_FLATTENED_SCHEMA + TRIP_SCHEMA_SUFFIX;
+  public static final String TRIP_NESTED_EXAMPLE_SCHEMA =
+      TRIP_SCHEMA_PREFIX + FARE_NESTED_SCHEMA + TRIP_SCHEMA_SUFFIX;
 
   public static final String TRIP_SCHEMA = "{\"type\":\"record\",\"name\":\"tripUberRec\",\"fields\":["
       + "{\"name\":\"timestamp\",\"type\":\"long\"},{\"name\":\"_row_key\",\"type\":\"string\"},{\"name\":\"rider\",\"type\":\"string\"},"
@@ -141,6 +143,7 @@ public class HoodieTestDataGenerator implements AutoCloseable {
 
 
   public static final Schema AVRO_SCHEMA = new Schema.Parser().parse(TRIP_EXAMPLE_SCHEMA);
+  public static final Schema NESTED_AVRO_SCHEMA = new Schema.Parser().parse(TRIP_NESTED_EXAMPLE_SCHEMA);
   public static final TypeDescription ORC_SCHEMA = AvroOrcUtils.createOrcSchema(new Schema.Parser().parse(TRIP_EXAMPLE_SCHEMA));
   public static final Schema AVRO_SCHEMA_WITH_METADATA_FIELDS =
       HoodieAvroUtils.addMetadataFields(AVRO_SCHEMA);
@@ -386,6 +389,18 @@ public class HoodieTestDataGenerator implements AutoCloseable {
     return rec;
   }
 
+  public static void createRequestedCommitFile(String basePath, String instantTime, Configuration configuration) throws IOException {
+    Path pendingRequestedFile = new Path(basePath + "/" + HoodieTableMetaClient.METAFOLDER_NAME + "/"
+        + HoodieTimeline.makeRequestedCommitFileName(instantTime));
+    createEmptyFile(basePath, pendingRequestedFile, configuration);
+  }
+
+  public static void createPendingCommitFile(String basePath, String instantTime, Configuration configuration) throws IOException {
+    Path pendingCommitFile = new Path(basePath + "/" + HoodieTableMetaClient.METAFOLDER_NAME + "/"
+        + HoodieTimeline.makeInflightCommitFileName(instantTime));
+    createEmptyFile(basePath, pendingCommitFile, configuration);
+  }
+
   public static void createCommitFile(String basePath, String instantTime, Configuration configuration) {
     HoodieCommitMetadata commitMetadata = new HoodieCommitMetadata();
     createCommitFile(basePath, instantTime, configuration, commitMetadata);
@@ -427,6 +442,20 @@ public class HoodieTestDataGenerator implements AutoCloseable {
     }
   }
 
+  public static void createReplaceCommitRequestedFile(String basePath, String instantTime, Configuration configuration)
+      throws IOException {
+    Path commitFile = new Path(basePath + "/" + HoodieTableMetaClient.METAFOLDER_NAME + "/"
+        + HoodieTimeline.makeRequestedReplaceFileName(instantTime));
+    createEmptyFile(basePath, commitFile, configuration);
+  }
+
+  public static void createReplaceCommitInflightFile(String basePath, String instantTime, Configuration configuration)
+      throws IOException {
+    Path commitFile = new Path(basePath + "/" + HoodieTableMetaClient.METAFOLDER_NAME + "/"
+        + HoodieTimeline.makeInflightReplaceFileName(instantTime));
+    createEmptyFile(basePath, commitFile, configuration);
+  }
+
   private static void createPendingReplaceFile(String basePath, String instantTime, Configuration configuration, HoodieCommitMetadata commitMetadata) {
     Arrays.asList(HoodieTimeline.makeInflightReplaceFileName(instantTime),
         HoodieTimeline.makeRequestedReplaceFileName(instantTime))
@@ -449,6 +478,13 @@ public class HoodieTestDataGenerator implements AutoCloseable {
     FileSystem fs = FSUtils.getFs(basePath, configuration);
     FSDataOutputStream os = fs.create(filePath, true);
     os.close();
+  }
+
+  public static void createCompactionRequestedFile(String basePath, String instantTime, Configuration configuration)
+      throws IOException {
+    Path commitFile = new Path(basePath + "/" + HoodieTableMetaClient.METAFOLDER_NAME + "/"
+        + HoodieTimeline.makeRequestedCompactionFileName(instantTime));
+    createEmptyFile(basePath, commitFile, configuration);
   }
 
   public static void createCompactionAuxiliaryMetadata(String basePath, HoodieInstant instant,

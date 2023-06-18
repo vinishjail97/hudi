@@ -815,14 +815,14 @@ object HoodieSparkSqlWriter {
       tableConfig: HoodieTableConfig, mode: SaveMode): (Map[String, String], HoodieConfig) = {
     val translatedOptions = DataSourceWriteOptions.translateSqlOptions(optParams)
     val mergedParams = mutable.Map.empty ++ HoodieWriterUtils.parametersWithWriteDefaults(translatedOptions)
-    if (!mergedParams.contains(HoodieTableConfig.KEY_GENERATOR_CLASS_NAME.key)
-      && mergedParams.contains(KEYGENERATOR_CLASS_NAME.key)) {
-      mergedParams(HoodieTableConfig.KEY_GENERATOR_CLASS_NAME.key) = mergedParams(KEYGENERATOR_CLASS_NAME.key)
-    }
     if (null != tableConfig && mode != SaveMode.Overwrite) {
       tableConfig.getProps.foreach { case (key, value) =>
         mergedParams(key) = value
       }
+    }
+    if (!mergedParams.contains(HoodieTableConfig.KEY_GENERATOR_CLASS_NAME.key)
+      && mergedParams.contains(KEYGENERATOR_CLASS_NAME.key)) {
+      mergedParams(HoodieTableConfig.KEY_GENERATOR_CLASS_NAME.key) = mergedParams(KEYGENERATOR_CLASS_NAME.key)
     }
 
     // use preCombineField to fill in PAYLOAD_ORDERING_FIELD_PROP_KEY

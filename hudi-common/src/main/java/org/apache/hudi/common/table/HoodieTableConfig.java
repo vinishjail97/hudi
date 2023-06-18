@@ -42,6 +42,7 @@ import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.keygen.constant.KeyGeneratorOptions;
 import org.apache.hudi.keygen.constant.KeyGeneratorOptions.Config;
+import org.apache.hudi.metadata.MetadataPartitionType;
 
 import org.apache.avro.Schema;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -54,11 +55,11 @@ import org.apache.log4j.Logger;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.HashSet;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
@@ -670,6 +671,24 @@ public class HoodieTableConfig extends HoodieConfig {
         StringUtils.split(getStringOrDefault(TABLE_METADATA_PARTITIONS, StringUtils.EMPTY_STRING),
             CONFIG_VALUES_DELIMITER));
   }
+
+  /**
+   * @returns true if metadata table has been created and is being used for this dataset, else returns false.
+   */
+  public boolean isMetadataTableEnabled() {
+    return isMetadataPartitionEnabled(MetadataPartitionType.FILES);
+  }
+
+  /**
+   * Checks if metadata table is enabled and the specified partition has been initialized.
+   *
+   * @param partition The partition to check
+   * @returns true if the specific partition has been initialized, else returns false.
+   */
+  public boolean isMetadataPartitionEnabled(MetadataPartitionType partition) {
+    return getMetadataPartitions().contains(partition.getPartitionPath());
+  }
+
 
   /**
    * Returns the format to use for partition meta files.

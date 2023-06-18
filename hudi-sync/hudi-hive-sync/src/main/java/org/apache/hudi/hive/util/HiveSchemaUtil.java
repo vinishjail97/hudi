@@ -230,7 +230,7 @@ public class HiveSchemaUtil {
             .append(decimalMetadata.getScale()).append(")").toString();
       } else if (originalType == OriginalType.DATE) {
         return field.append("DATE").toString();
-      } else if (supportTimestamp && originalType == OriginalType.TIMESTAMP_MICROS) {
+      } else if (supportTimestamp && (originalType == OriginalType.TIMESTAMP_MICROS || originalType == OriginalType.TIMESTAMP_MILLIS)) {
         return field.append("TIMESTAMP").toString();
       }
 

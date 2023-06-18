@@ -267,7 +267,7 @@ public abstract class BaseHoodieWriteClient<T extends HoodieRecordPayload, I, K,
     HoodieTable table = createTable(config, hadoopConf);
     HoodieCommitMetadata metadata = CommitUtils.buildMetadata(stats, partitionToReplaceFileIds,
         extraMetadata, operationType, config.getWriteSchema(), commitActionType);
-    HoodieInstant inflightInstant = new HoodieInstant(State.INFLIGHT, table.getMetaClient().getCommitActionType(), instantTime);
+    HoodieInstant inflightInstant = new HoodieInstant(State.INFLIGHT, commitActionType, instantTime);
     HeartbeatUtils.abortIfHeartbeatExpired(instantTime, table, heartbeatClient, config);
     this.txnManager.beginTransaction(Option.of(inflightInstant),
         lastCompletedTxnAndMetadata.isPresent() ? Option.of(lastCompletedTxnAndMetadata.get().getLeft()) : Option.empty());

@@ -36,11 +36,11 @@ import org.apache.hudi.keygen.constant.KeyGeneratorOptions.Config
 import org.apache.hudi.metrics.Metrics
 import org.apache.hudi.testutils.HoodieClientTestBase
 import org.apache.hudi.util.JFunction
-import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers, QuickstartUtils, ScalaAssertionSupport}
-import org.apache.spark.sql
+import org.apache.hudi.{AvroConversionUtils, DataSourceReadOptions, DataSourceWriteOptions, HoodieDataSourceHelpers, QuickstartUtils}
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
+import org.apache.spark.sql
 import org.apache.spark.sql._
-import org.apache.spark.sql.functions.{col, concat, lit, udf, when}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hudi.HoodieSparkSessionExtension
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
@@ -1137,6 +1137,43 @@ class TestCOWDataSource extends HoodieClientTestBase {
         triggerCount += 1
       }
     }
+  }
+
+  @Test
+  def testHiveStyleDelete(): Unit = {
+    val columns = Seq("id", "precombine", "partition")
+    val data = Seq((1, "1", "2021-01-05"),
+      (2, "2", "2021-01-06"),
+      (3, "3", "2021-01-05"))
+    val rdd = spark.sparkContext.parallelize(data)
+    val df = spark.createDataFrame(rdd).toDF(columns: _*)
+    var hudiOptions = Map[String, String](
+      HoodieWriteConfig.TBL_NAME.key() -> "tbl",
+      DataSourceWriteOptions.OPERATION.key() -> "insert",
+      DataSourceWriteOptions.TABLE_TYPE.key() -> "COPY_ON_WRITE",
+      DataSourceWriteOptions.RECORDKEY_FIELD.key() -> "id",
+      DataSourceWriteOptions.PARTITIONPATH_FIELD.key() -> "partition",
+      DataSourceWriteOptions.PRECOMBINE_FIELD.key() -> "precombine",
+      DataSourceWriteOptions.HIVE_STYLE_PARTITIONING.key() -> "true"
+    )
+
+    df.write.format("org.apache.hudi").options(hudiOptions).mode(SaveMode.Overwrite).save(basePath)
+
+    hudiOptions = Map[String, String](
+      HoodieWriteConfig.TBL_NAME.key() -> "tbl",
+      DataSourceWriteOptions.OPERATION.key() -> "delete",
+      DataSourceWriteOptions.TABLE_TYPE.key() -> "COPY_ON_WRITE",
+      DataSourceWriteOptions.RECORDKEY_FIELD.key() -> "id",
+      DataSourceWriteOptions.PARTITIONPATH_FIELD.key() -> "partition",
+      DataSourceWriteOptions.PRECOMBINE_FIELD.key() -> "precombine"
+    )
+
+    df.filter(df("id") === 1).
+      write.format("org.apache.hudi").options(hudiOptions).
+      mode(SaveMode.Append).save(basePath)
+    val result = spark.read.format("hudi").load(basePath)
+    assertEquals(2, result.count())
+    assertEquals(0, result.filter(result("id") === 1).count())
   }
 }
 

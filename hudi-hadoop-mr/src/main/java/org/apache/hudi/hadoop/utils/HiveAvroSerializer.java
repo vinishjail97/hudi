@@ -62,6 +62,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static org.apache.hudi.avro.AvroSchemaUtils.resolveNullableSchema;
 import static org.apache.hudi.avro.AvroSchemaUtils.resolveUnionSchema;
 import static org.apache.hudi.avro.HoodieAvroUtils.isMetadataField;
 
@@ -205,6 +206,7 @@ public class HiveAvroSerializer {
       assert fieldOI instanceof PrimitiveObjectInspector;
       return serializeEnum((PrimitiveObjectInspector) fieldOI, structFieldData, schema);
     }
+
     switch (typeInfo.getCategory()) {
       case PRIMITIVE:
         assert fieldOI instanceof PrimitiveObjectInspector;
@@ -333,8 +335,15 @@ public class HiveAvroSerializer {
 
     TypeInfo listElementTypeInfo = typeInfo.getListElementTypeInfo();
     ObjectInspector listElementObjectInspector = fieldOI.getListElementObjectInspector();
-    Schema elementType = schema.getElementType().getField("element") == null ? schema.getElementType() : schema.getElementType().getField("element").schema();
-
+    // NOTE: We have to resolve nullable schema, since Avro permits array elements
+    //       to be null
+    Schema arrayNestedType = resolveNullableSchema(schema.getElementType());
+    Schema elementType;
+    if (listElementObjectInspector.getCategory() == ObjectInspector.Category.PRIMITIVE) {
+      elementType = arrayNestedType;
+    } else {
+      elementType = arrayNestedType.getField("element") == null ? arrayNestedType : arrayNestedType.getField("element").schema();
+    }
     for (int i = 0; i < list.size(); i++) {
       Object childFieldData = list.get(i);
       if (childFieldData instanceof ArrayWritable && ((ArrayWritable) childFieldData).get().length != ((StructTypeInfo) listElementTypeInfo).getAllStructFieldNames().size()) {

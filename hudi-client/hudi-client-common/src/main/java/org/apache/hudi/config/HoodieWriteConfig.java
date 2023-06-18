@@ -2830,12 +2830,13 @@ public class HoodieWriteConfig extends HoodieConfig {
                 "Increase %s=%d to be greater than %s=%d.",
                 HoodieArchivalConfig.MAX_COMMITS_TO_KEEP.key(), maxInstantsToKeep,
                 HoodieArchivalConfig.MIN_COMMITS_TO_KEEP.key(), minInstantsToKeep));
-        checkArgument(minInstantsToKeep > cleanerCommitsRetained,
-            String.format(
-                "Increase %s=%d to be greater than %s=%d. Otherwise, there is risk of incremental pull "
-                    + "missing data from few instants.",
-                HoodieArchivalConfig.MIN_COMMITS_TO_KEEP.key(), minInstantsToKeep,
-                HoodieCleanConfig.CLEANER_COMMITS_RETAINED.key(), cleanerCommitsRetained));
+        if (minInstantsToKeep <= cleanerCommitsRetained) {
+          LOG.warn(String.format("Increase %s=%s to be greater than %s=%s (there is risk of incremental pull "
+                  + "missing data from few instants based on the current configuration). "
+                  + "The Hudi archiver will automatically adjust the configuration regardless.",
+              HoodieArchivalConfig.MIN_COMMITS_TO_KEEP.key(), minInstantsToKeep,
+              HoodieCleanConfig.CLEANER_COMMITS_RETAINED.key(), cleanerCommitsRetained));
+        }
       }
 
       boolean inlineCompact = writeConfig.getBoolean(HoodieCompactionConfig.INLINE_COMPACT);
