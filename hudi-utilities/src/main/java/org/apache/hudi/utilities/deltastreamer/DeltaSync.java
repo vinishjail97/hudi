@@ -376,7 +376,7 @@ public class DeltaSync implements Serializable, Closeable {
       } else {
         Schema newSourceSchema = srcRecordsWithCkpt.getKey().getSourceSchema();
         Schema newTargetSchema = srcRecordsWithCkpt.getKey().getTargetSchema();
-        if (!(processedSchema.isSchemaPresent(newSourceSchema))
+        if (newSourceSchema != null && newTargetSchema != null && !(processedSchema.isSchemaPresent(newSourceSchema))
             || !(processedSchema.isSchemaPresent(newTargetSchema))) {
           LOG.info("Seeing new schema. Source :" + newSourceSchema.toString(true)
               + ", Target :" + newTargetSchema.toString(true));
@@ -490,7 +490,7 @@ public class DeltaSync implements Serializable, Closeable {
 
       checkpointStr = dataAndCheckpoint.getCheckpointForNextBatch();
       boolean reconcileSchema = props.getBoolean(DataSourceWriteOptions.RECONCILE_SCHEMA().key());
-      if (this.userProvidedSchemaProvider != null && this.userProvidedSchemaProvider.getTargetSchema() != null) {
+      if (this.userProvidedSchemaProvider != null && this.userProvidedSchemaProvider.getTargetSchema() != null && this.userProvidedSchemaProvider.getTargetSchema() != InputBatch.NULL_SCHEMA) {
         // If the target schema is specified through Avro schema,
         // pass in the schema for the Row-to-Avro conversion
         // to avoid nullability mismatch between Avro schema and Row schema
