@@ -1018,3 +1018,14 @@ a73ac2be00 [ONHS-8534] Make deltastreamer exceptions more descriptive (#297)
 5ed0c895a2 [ONHS-8784] Cherry pick PRs from May 27 to June 1 (#306)
 f961ecf4e0 [HUDI-6269] Ensure configs of one transformer are not passed to another transformer (#8817) (#305)
 4916967a77 Upgrade to version release-v0.17.0 (#302)
+
+---[2023-06-19 14:07:10] [release-v0.19.0] Adding release tag for hudi-internal release-v0.19.0---
+ddcc5db0d6 [ONHS-9089] Oss cp jun2 jun15 (#311)
+256f30ac4f Add null check before calling isSchemaPresent (#309)
+190524bbc4 [ONHS-8543] Cleanup: remove StackTraceutils (#304)
+22f0e7b097 [HUDI-6380] Add API to fetch transformed schema in Transformer (#8982) (#312)
+9c6c41866f Upgrade to version release-v0.18.0 (#307)
+
+---[2023-06-19 15:44:30] [release-v0.19.1] Adding release tag for hudi-internal release-v0.19.1---
+29c4c799e2 [ONHS-9212] Use HoodieSparkEngineContext instead of JavaSparkContext in DeltaSync (#313)
+5c383553de [ONHS-9101] Schema converter fix (#310)
