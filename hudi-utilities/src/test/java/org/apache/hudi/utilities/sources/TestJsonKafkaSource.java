@@ -19,6 +19,8 @@
 package org.apache.hudi.utilities.sources;
 
 import java.util.Properties;
+
+import org.apache.hudi.client.common.HoodieSparkEngineContext;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.common.testutils.RawTripTestPayload;
@@ -314,7 +316,7 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
     props.put("hoodie.deltastreamer.quarantinetable.validate.targetschema.enable", "true");
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
     Option<QuarantineTableWriterInterface> quarantineTableWriterInterface = Option.of(new JsonQuarantineTableWriter(new HoodieDeltaStreamer.Config(),
-        spark(),props,jsc(),fs()));
+        spark(), props, new HoodieSparkEngineContext(jsc()), fs()));
     SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource, quarantineTableWriterInterface, Option.of(props));
     String instantTime =  quarantineTableWriterInterface.get().startCommit();
     assertEquals(1000, kafkaSource.fetchNewDataInRowFormat(Option.empty(),Long.MAX_VALUE).getBatch().get().count());
@@ -338,7 +340,7 @@ public class TestJsonKafkaSource extends BaseTestKafkaSource {
 
     Source jsonSource = new JsonKafkaSource(props, jsc(), spark(), schemaProvider, metrics);
     Option<QuarantineTableWriterInterface> quarantineTableWriterInterface = Option.of(new JsonQuarantineTableWriter(new HoodieDeltaStreamer.Config(),
-        spark(), props, jsc(), fs()));
+        spark(), props, new HoodieSparkEngineContext(jsc()), fs()));
     SourceFormatAdapter kafkaSource = new SourceFormatAdapter(jsonSource, quarantineTableWriterInterface, Option.of(props));
     InputBatch<JavaRDD<GenericRecord>> fetch1 = kafkaSource.fetchNewDataInAvroFormat(Option.empty(), Long.MAX_VALUE);
     assertEquals(1000, fetch1.getBatch().get().count());

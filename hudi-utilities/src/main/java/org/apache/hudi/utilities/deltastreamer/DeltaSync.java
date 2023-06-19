@@ -53,7 +53,6 @@ import org.apache.hudi.config.HoodieIndexConfig;
 import org.apache.hudi.config.HoodiePayloadConfig;
 import org.apache.hudi.config.HoodieQuarantineTableConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
-import org.apache.hudi.config.OnehouseInternalDeltastreamerConfig;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
 import org.apache.hudi.hive.HiveSyncConfig;
@@ -92,7 +91,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
-import org.apache.parquet.avro.AvroWriteSupport;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.rdd.RDD;
@@ -181,6 +179,11 @@ public class DeltaSync implements Serializable, Closeable {
   private transient FileSystem fs;
 
   /**
+   * Spark context Wrapper.
+   */
+  private final transient HoodieSparkEngineContext sparkEngineContext;
+
+  /**
    * Spark context.
    */
   private transient JavaSparkContext jssc;
@@ -237,21 +240,19 @@ public class DeltaSync implements Serializable, Closeable {
   private transient HoodieMetrics hoodieMetrics;
   private final String jobGroupId;
 
-  public DeltaSync(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession, TypedProperties props,
-                   JavaSparkContext jssc, FileSystem fs, Configuration conf,
-                   Function<SparkRDDWriteClient, Boolean> onInitializingHoodieWriteClient) throws IOException {
-    this(cfg, sparkSession, UtilHelpers.wrapSchemaProviderWithPostProcessor(
-            UtilHelpers.createSchemaProvider(cfg.schemaProviderClassName, props, jssc),
-        props, jssc, cfg.transformerClassNames),
-        props, jssc, fs, conf, onInitializingHoodieWriteClient);
-  }
-
+  @Deprecated
   public DeltaSync(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession, SchemaProvider schemaProvider,
                    TypedProperties props, JavaSparkContext jssc, FileSystem fs, Configuration conf,
                    Function<SparkRDDWriteClient, Boolean> onInitializingHoodieWriteClient) throws IOException {
+    this(cfg, sparkSession, schemaProvider, props, new HoodieSparkEngineContext(jssc), fs, conf, onInitializingHoodieWriteClient);
+  }
 
+  public DeltaSync(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession, SchemaProvider schemaProvider,
+                   TypedProperties props, HoodieSparkEngineContext sparkEngineContext, FileSystem fs, Configuration conf,
+                   Function<SparkRDDWriteClient, Boolean> onInitializingHoodieWriteClient) throws IOException {
     this.cfg = cfg;
-    this.jssc = jssc;
+    this.sparkEngineContext = sparkEngineContext;
+    this.jssc = sparkEngineContext.getJavaSparkContext();
     this.sparkSession = sparkSession;
     this.fs = fs;
     this.onInitializingHoodieWriteClient = onInitializingHoodieWriteClient;
@@ -267,7 +268,7 @@ public class DeltaSync implements Serializable, Closeable {
     this.hoodieMetrics = new HoodieMetrics(getHoodieClientConfig(this.schemaProvider));
     this.conf = conf;
     if (props.getBoolean(QUARANTINE_TABLE_ENABLED.key(),QUARANTINE_TABLE_ENABLED.defaultValue())) {
-      this.quarantineTableWriterInterfaceImpl = Option.of(new JsonQuarantineTableWriter(cfg,sparkSession,props,jssc,fs));
+      this.quarantineTableWriterInterfaceImpl = Option.of(new JsonQuarantineTableWriter(cfg, sparkSession, props, sparkEngineContext, fs));
     }
     this.formatAdapter = new SourceFormatAdapter(
         UtilHelpers.createSource(cfg.sourceClassName, props, jssc, sparkSession, schemaProvider, metrics),
@@ -876,7 +877,7 @@ public class DeltaSync implements Serializable, Closeable {
 
     if (writeConfig.isEmbeddedTimelineServerEnabled()) {
       if (!embeddedTimelineService.isPresent()) {
-        embeddedTimelineService = EmbeddedTimelineServerHelper.createEmbeddedTimelineService(new HoodieSparkEngineContext(jssc), writeConfig);
+        embeddedTimelineService = EmbeddedTimelineServerHelper.createEmbeddedTimelineService(sparkEngineContext, writeConfig);
       } else {
         EmbeddedTimelineServerHelper.updateWriteConfigWithTimelineServer(embeddedTimelineService.get(), writeConfig);
       }
@@ -887,15 +888,7 @@ public class DeltaSync implements Serializable, Closeable {
       writeClient.close();
     }
 
-    HoodieSparkEngineContext hoodieSparkEngineContext;
-    if (props.getBoolean(OnehouseInternalDeltastreamerConfig.DISABLE_OLD_PARQUET_LIST_STRUCTURE.key(), false)) {
-      Configuration updatedHadoopConf = new Configuration(jssc.hadoopConfiguration());
-      updatedHadoopConf.set(AvroWriteSupport.WRITE_OLD_LIST_STRUCTURE, "false");
-      hoodieSparkEngineContext = new HoodieSparkEngineContext(jssc, updatedHadoopConf);
-    } else {
-      hoodieSparkEngineContext = new HoodieSparkEngineContext(jssc);
-    }
-    writeClient = new SparkRDDWriteClient<>(hoodieSparkEngineContext, writeConfig, embeddedTimelineService);
+    writeClient = new SparkRDDWriteClient<>(sparkEngineContext, writeConfig, embeddedTimelineService);
     onInitializingHoodieWriteClient.apply(writeClient);
   }
 

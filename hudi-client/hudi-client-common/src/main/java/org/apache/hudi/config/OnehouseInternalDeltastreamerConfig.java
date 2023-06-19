@@ -155,11 +155,6 @@ public class OnehouseInternalDeltastreamerConfig extends HoodieConfig {
       .withDocumentation("Number of records to sample from the first write. To improve the estimation's accuracy, "
           + "for smaller or more compressable record size, set the sample size bigger. For bigger or less compressable record size, set smaller.");
 
-  public static final ConfigProperty<Boolean> DISABLE_OLD_PARQUET_LIST_STRUCTURE = ConfigProperty
-      .key("hoodie.parquet.avro.disable.old.parquet.list.structure")
-      .defaultValue(false)
-      .withDocumentation("Disables the old parquet list structure and instead writes with 3-level lists");
-
   private OnehouseInternalDeltastreamerConfig() {
     super();
   }
