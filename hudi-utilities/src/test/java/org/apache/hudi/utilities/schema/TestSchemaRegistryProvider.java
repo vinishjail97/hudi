@@ -45,6 +45,17 @@ class TestSchemaRegistryProvider {
       + "\\\"name\\\": \\\"FullName\\\",\\\"fields\\\": [{ \\\"name\\\": \\\"first\\\", \\\"type\\\": "
       + "\\\"string\\\" }]}\"}";
 
+  private final String jsonSchemaFormat =
+        "{\"schema\": \"{\\\"$schema\\\": \\\"http://json-schema.org/draft-07/schema#\\\", "
+      + "\\\"title\\\": \\\"FullName\\\", \\\"type\\\": \\\"object\\\", "
+      + "\\\"properties\\\": { \\\"first\\\": { \\\"type\\\": \\\"string\\\" } }, "
+      + "\\\"required\\\": [\\\"first\\\"]}\"}";
+
+  private final String expectedSchemaInAvroFormat = "{\"schema\":\"{\\\"type\\\": \\\"record\\\", "
+      + "\\\"doc\\\": \\\"\\\", "
+      + "\\\"name\\\": \\\"FullName\\\",\\\"fields\\\": [{ \\\"name\\\": \\\"first\\\", "
+      + "\\\"type\\\": \\\"string\\\", \\\"doc\\\": \\\"\\\" }]}\"}";
+
   private TypedProperties getProps() {
     return new TypedProperties() {{
         put("hoodie.deltastreamer.schemaprovider.registry.baseUrl", "http://" + basicAuth + "@localhost");
@@ -62,7 +73,11 @@ class TestSchemaRegistryProvider {
   }
 
   private SchemaRegistryProvider getUnderTest(TypedProperties props) throws IOException {
-    InputStream is = new ByteArrayInputStream(json.getBytes(StandardCharsets.UTF_8));
+    return getUnderTest(props, json);
+  }
+
+  private SchemaRegistryProvider getUnderTest(TypedProperties props, String schema) throws IOException {
+    InputStream is = new ByteArrayInputStream(schema.getBytes(StandardCharsets.UTF_8));
     SchemaRegistryProvider spyUnderTest = Mockito.spy(new SchemaRegistryProvider(props, null));
     Mockito.doReturn(is).when(spyUnderTest).getStream(Mockito.any());
     return spyUnderTest;
@@ -108,5 +123,17 @@ class TestSchemaRegistryProvider {
     assertNotNull(actual);
     assertEquals(actual, getExpectedSchema(json));
     verify(spyUnderTest, times(0)).setAuthorizationHeader(Mockito.any(), Mockito.any());
+  }
+
+  @Test
+  public void testJsonSchemaShouldBeConverted() throws IOException {
+    TypedProperties props = getProps();
+    props.put("hoodie.deltastreamer.schemaprovider.registry.schemaconverter",
+        "org.apache.hudi.utilities.schema.converter.JsonToAvroSchemaConverter");
+    props.put("hoodie.deltastreamer.schemaprovider.registry.url", "http://localhost");
+    SchemaRegistryProvider spyUnderTest = getUnderTest(props, jsonSchemaFormat);
+    Schema actual = spyUnderTest.getSourceSchema();
+    assertNotNull(actual);
+    assertEquals(actual, getExpectedSchema(expectedSchemaInAvroFormat));
   }
 }

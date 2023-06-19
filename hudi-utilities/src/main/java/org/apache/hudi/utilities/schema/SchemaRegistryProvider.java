@@ -20,6 +20,8 @@ package org.apache.hudi.utilities.schema;
 
 import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.common.config.TypedProperties;
+import org.apache.hudi.common.util.ReflectionUtils;
+import org.apache.hudi.internal.schema.HoodieSchemaException;
 import org.apache.hudi.utilities.exception.HoodieSchemaFetchException;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -52,6 +54,8 @@ public class SchemaRegistryProvider extends SchemaProvider {
     public static final String SRC_SCHEMA_REGISTRY_URL_PROP = "hoodie.deltastreamer.schemaprovider.registry.url";
     public static final String TARGET_SCHEMA_REGISTRY_URL_PROP =
         "hoodie.deltastreamer.schemaprovider.registry.targetUrl";
+    public static final String SCHEMA_CONVERTER_PROP =
+         "hoodie.deltastreamer.schemaprovider.registry.schemaconverter";
   }
 
   @FunctionalInterface
@@ -63,6 +67,18 @@ public class SchemaRegistryProvider extends SchemaProvider {
      * @return avro schema string
      */
     String convert(String schema) throws IOException;
+  }
+
+  public Schema parseSchemaFromRegistry(String registryUrl) {
+    String schema = fetchSchemaFromRegistry(registryUrl);
+    try {
+      SchemaConverter converter = config.containsKey(Config.SCHEMA_CONVERTER_PROP)
+          ? ReflectionUtils.loadClass(config.getString(Config.SCHEMA_CONVERTER_PROP))
+          : s -> s;
+      return new Schema.Parser().parse(converter.convert(schema));
+    } catch (Exception e) {
+      throw new HoodieSchemaException("Failed to parse schema from registry: " + schema, e);
+    }
   }
 
   /**
@@ -111,15 +127,11 @@ public class SchemaRegistryProvider extends SchemaProvider {
     DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(Config.SRC_SCHEMA_REGISTRY_URL_PROP));
   }
 
-  private Schema getSchema(String registryUrl) {
-    return new Schema.Parser().parse(fetchSchemaFromRegistry(registryUrl));
-  }
-
   @Override
   public Schema getSourceSchema() {
     String registryUrl = config.getString(Config.SRC_SCHEMA_REGISTRY_URL_PROP);
     try {
-      return getSchema(registryUrl);
+      return parseSchemaFromRegistry(registryUrl);
     } catch (Exception e) {
       throw new HoodieSchemaFetchException("Error reading source schema from registry :" + registryUrl, e);
     }
@@ -130,7 +142,7 @@ public class SchemaRegistryProvider extends SchemaProvider {
     String registryUrl = config.getString(Config.SRC_SCHEMA_REGISTRY_URL_PROP);
     String targetRegistryUrl = config.getString(Config.TARGET_SCHEMA_REGISTRY_URL_PROP, registryUrl);
     try {
-      return getSchema(targetRegistryUrl);
+      return parseSchemaFromRegistry(targetRegistryUrl);
     } catch (Exception e) {
       throw new HoodieSchemaFetchException("Error reading target schema from registry :" + targetRegistryUrl, e);
     }
