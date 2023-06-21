@@ -117,7 +117,7 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
   /**
    * Spark context Wrapper.
    */
-  private final transient HoodieSparkEngineContext sparkEngineContext;
+  private final transient HoodieSparkEngineContext hoodieSparkContext;
 
   /**
    * Spark context.
@@ -134,11 +134,11 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
   private transient Schema schema;
 
   public JsonQuarantineTableWriter(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession,
-                                   TypedProperties props, HoodieSparkEngineContext sparkEngineContext, FileSystem fs) throws IOException {
+                                   TypedProperties props, HoodieSparkEngineContext hoodieSparkContext, FileSystem fs) throws IOException {
 
     this.cfg = cfg;
-    this.sparkEngineContext = sparkEngineContext;
-    this.jssc = sparkEngineContext.getJavaSparkContext();
+    this.hoodieSparkContext = hoodieSparkContext;
+    this.jssc = hoodieSparkContext.getJavaSparkContext();
     this.sparkSession = sparkSession;
     this.fs = fs;
     this.props = props;
@@ -149,7 +149,7 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
       this.schema = new Schema.Parser().parse(inputStream);
     }
     this.quarantineTableCfg = getQuarantineTableWriteConfig();
-    this.quarantineTableWriteClient = new SparkRDDWriteClient<>(sparkEngineContext, quarantineTableCfg);
+    this.quarantineTableWriteClient = new SparkRDDWriteClient<>(hoodieSparkContext, quarantineTableCfg);
   }
 
   @Override

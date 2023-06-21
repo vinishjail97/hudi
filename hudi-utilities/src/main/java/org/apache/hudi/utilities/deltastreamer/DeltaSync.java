@@ -181,7 +181,7 @@ public class DeltaSync implements Serializable, Closeable {
   /**
    * Spark context Wrapper.
    */
-  private final transient HoodieSparkEngineContext sparkEngineContext;
+  private final transient HoodieSparkEngineContext hoodieSparkContext;
 
   /**
    * Spark context.
@@ -248,11 +248,11 @@ public class DeltaSync implements Serializable, Closeable {
   }
 
   public DeltaSync(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession, SchemaProvider schemaProvider,
-                   TypedProperties props, HoodieSparkEngineContext sparkEngineContext, FileSystem fs, Configuration conf,
+                   TypedProperties props, HoodieSparkEngineContext hoodieSparkContext, FileSystem fs, Configuration conf,
                    Function<SparkRDDWriteClient, Boolean> onInitializingHoodieWriteClient) throws IOException {
     this.cfg = cfg;
-    this.sparkEngineContext = sparkEngineContext;
-    this.jssc = sparkEngineContext.getJavaSparkContext();
+    this.hoodieSparkContext = hoodieSparkContext;
+    this.jssc = hoodieSparkContext.getJavaSparkContext();
     this.sparkSession = sparkSession;
     this.fs = fs;
     this.onInitializingHoodieWriteClient = onInitializingHoodieWriteClient;
@@ -268,7 +268,7 @@ public class DeltaSync implements Serializable, Closeable {
     this.hoodieMetrics = new HoodieMetrics(getHoodieClientConfig(this.schemaProvider));
     this.conf = conf;
     if (props.getBoolean(QUARANTINE_TABLE_ENABLED.key(),QUARANTINE_TABLE_ENABLED.defaultValue())) {
-      this.quarantineTableWriterInterfaceImpl = Option.of(new JsonQuarantineTableWriter(cfg, sparkSession, props, sparkEngineContext, fs));
+      this.quarantineTableWriterInterfaceImpl = Option.of(new JsonQuarantineTableWriter(cfg, sparkSession, props, hoodieSparkContext, fs));
     }
     this.formatAdapter = new SourceFormatAdapter(
         UtilHelpers.createSource(cfg.sourceClassName, props, jssc, sparkSession, schemaProvider, metrics),
@@ -877,7 +877,7 @@ public class DeltaSync implements Serializable, Closeable {
 
     if (writeConfig.isEmbeddedTimelineServerEnabled()) {
       if (!embeddedTimelineService.isPresent()) {
-        embeddedTimelineService = EmbeddedTimelineServerHelper.createEmbeddedTimelineService(sparkEngineContext, writeConfig);
+        embeddedTimelineService = EmbeddedTimelineServerHelper.createEmbeddedTimelineService(hoodieSparkContext, writeConfig);
       } else {
         EmbeddedTimelineServerHelper.updateWriteConfigWithTimelineServer(embeddedTimelineService.get(), writeConfig);
       }
@@ -888,7 +888,7 @@ public class DeltaSync implements Serializable, Closeable {
       writeClient.close();
     }
 
-    writeClient = new SparkRDDWriteClient<>(sparkEngineContext, writeConfig, embeddedTimelineService);
+    writeClient = new SparkRDDWriteClient<>(hoodieSparkContext, writeConfig, embeddedTimelineService);
     onInitializingHoodieWriteClient.apply(writeClient);
   }
 
