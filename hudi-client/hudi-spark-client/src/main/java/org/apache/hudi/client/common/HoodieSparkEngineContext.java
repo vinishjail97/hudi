@@ -37,11 +37,16 @@ import org.apache.hudi.data.HoodieSparkLongAccumulator;
 import org.apache.hudi.exception.HoodieException;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
 import org.apache.spark.sql.SQLContext;
 import scala.Tuple2;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -56,6 +61,7 @@ public class HoodieSparkEngineContext extends HoodieEngineContext {
 
   private final JavaSparkContext javaSparkContext;
   private SQLContext sqlContext;
+  private final Map<HoodieData.HoodieDataCacheKey, List<Integer>> cachedRddIds = new HashMap<>();
 
   public HoodieSparkEngineContext(JavaSparkContext jsc) {
     this(jsc, jsc.hadoopConfiguration());
@@ -69,6 +75,10 @@ public class HoodieSparkEngineContext extends HoodieEngineContext {
 
   public void setSqlContext(SQLContext sqlContext) {
     this.sqlContext = sqlContext;
+  }
+
+  public JavaSparkContext jsc() {
+    return javaSparkContext;
   }
 
   public JavaSparkContext getJavaSparkContext() {
@@ -181,5 +191,52 @@ public class HoodieSparkEngineContext extends HoodieEngineContext {
   @Override
   public void setJobStatus(String activeModule, String activityDescription) {
     javaSparkContext.setJobGroup(activeModule, activityDescription);
+  }
+
+  @Override
+  public void putCachedDataIds(HoodieData.HoodieDataCacheKey cacheKey, int... ids) {
+    synchronized (cachedRddIds) {
+      cachedRddIds.putIfAbsent(cacheKey, new ArrayList<>());
+      for (int id : ids) {
+        cachedRddIds.get(cacheKey).add(id);
+      }
+    }
+  }
+
+  @Override
+  public List<Integer> getCachedDataIds(HoodieData.HoodieDataCacheKey cacheKey) {
+    synchronized (cachedRddIds) {
+      return cachedRddIds.getOrDefault(cacheKey, Collections.emptyList());
+    }
+  }
+
+  @Override
+  public List<Integer> removeCachedDataIds(HoodieData.HoodieDataCacheKey cacheKey) {
+    synchronized (cachedRddIds) {
+      List<Integer> removed = cachedRddIds.remove(cacheKey);
+      return removed == null ? Collections.emptyList() : removed;
+    }
+  }
+
+  @Override
+  public void cancelJob(String groupId) {
+    javaSparkContext.cancelJobGroup(groupId);
+  }
+
+  @Override
+  public void cancelAllJobs() {
+    javaSparkContext.cancelAllJobs();
+  }
+
+  public SparkConf getConf() {
+    return javaSparkContext.getConf();
+  }
+
+  public Configuration hadoopConfiguration() {
+    return javaSparkContext.hadoopConfiguration();
+  }
+
+  public <T> JavaRDD<T> emptyRDD() {
+    return javaSparkContext.emptyRDD();
   }
 }

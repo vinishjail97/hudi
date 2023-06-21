@@ -26,6 +26,7 @@ import org.apache.hudi.common.util.collection.Pair;
 import java.io.Serializable;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * An interface abstracting a container holding a collection of objects of type {@code T}
@@ -191,4 +192,42 @@ public interface HoodieData<T> extends Serializable {
    * @return the unique identifier.
    */
   int getId();
+
+  /**
+   * The key used in a caching map to identify a {@link HoodieData}.
+   *
+   * At the end of a write operation, we manually unpersist the {@link HoodieData} associated with that writer.
+   * Therefore, in multi-writer scenario, we need to use both {@code basePath} and {@code instantTime} to identify {@link HoodieData}s.
+   */
+  class HoodieDataCacheKey implements Serializable {
+
+    public static HoodieDataCacheKey of(String basePath, String instantTime) {
+      return new HoodieDataCacheKey(basePath, instantTime);
+    }
+
+    private final String basePath;
+    private final String instantTime;
+
+    private HoodieDataCacheKey(String basePath, String instantTime) {
+      this.basePath = basePath;
+      this.instantTime = instantTime;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o == null || getClass() != o.getClass()) {
+        return false;
+      }
+      HoodieDataCacheKey that = (HoodieDataCacheKey) o;
+      return basePath.equals(that.basePath) && instantTime.equals(that.instantTime);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(basePath, instantTime);
+    }
+  }
 }

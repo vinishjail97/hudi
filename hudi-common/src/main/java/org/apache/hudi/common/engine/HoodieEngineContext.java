@@ -95,4 +95,13 @@ public abstract class HoodieEngineContext {
 
   public abstract void setJobStatus(String activeModule, String activityDescription);
 
+  public abstract void putCachedDataIds(HoodieData.HoodieDataCacheKey cacheKey, int... ids);
+
+  public abstract List<Integer> getCachedDataIds(HoodieData.HoodieDataCacheKey cacheKey);
+
+  public abstract List<Integer> removeCachedDataIds(HoodieData.HoodieDataCacheKey cacheKey);
+
+  public abstract void cancelJob(String jobId);
+
+  public abstract void cancelAllJobs();
 }

@@ -109,7 +109,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -184,11 +183,6 @@ public class DeltaSync implements Serializable, Closeable {
   private final transient HoodieSparkEngineContext hoodieSparkContext;
 
   /**
-   * Spark context.
-   */
-  private transient JavaSparkContext jssc;
-
-  /**
    * Spark Session.
    */
   private transient SparkSession sparkSession;
@@ -238,7 +232,6 @@ public class DeltaSync implements Serializable, Closeable {
 
   private transient HoodieIngestionMetrics metrics;
   private transient HoodieMetrics hoodieMetrics;
-  private final String jobGroupId;
 
   @Deprecated
   public DeltaSync(HoodieDeltaStreamer.Config cfg, SparkSession sparkSession, SchemaProvider schemaProvider,
@@ -252,7 +245,6 @@ public class DeltaSync implements Serializable, Closeable {
                    Function<SparkRDDWriteClient, Boolean> onInitializingHoodieWriteClient) throws IOException {
     this.cfg = cfg;
     this.hoodieSparkContext = hoodieSparkContext;
-    this.jssc = hoodieSparkContext.getJavaSparkContext();
     this.sparkSession = sparkSession;
     this.fs = fs;
     this.onInitializingHoodieWriteClient = onInitializingHoodieWriteClient;
@@ -271,12 +263,11 @@ public class DeltaSync implements Serializable, Closeable {
       this.quarantineTableWriterInterfaceImpl = Option.of(new JsonQuarantineTableWriter(cfg, sparkSession, props, hoodieSparkContext, fs));
     }
     this.formatAdapter = new SourceFormatAdapter(
-        UtilHelpers.createSource(cfg.sourceClassName, props, jssc, sparkSession, schemaProvider, metrics),
+        UtilHelpers.createSource(cfg.sourceClassName, props, hoodieSparkContext.jsc(), sparkSession, schemaProvider, metrics),
         this.quarantineTableWriterInterfaceImpl,
         Option.of(props));
     this.transformer = UtilHelpers.createTransformer(Option.ofNullable(cfg.transformerClassNames),
         Option.ofNullable(schemaProvider).map(SchemaProvider::getSourceSchema), this.quarantineTableWriterInterfaceImpl.isPresent());
-    this.jobGroupId = "OnehouseDeltaStreamer-" + UUID.randomUUID();
   }
 
   /**
@@ -348,7 +339,7 @@ public class DeltaSync implements Serializable, Closeable {
         .setPartitionMetafileUseBaseFormat(props.getBoolean(HoodieTableConfig.PARTITION_METAFILE_USE_BASE_FORMAT.key(),
             HoodieTableConfig.PARTITION_METAFILE_USE_BASE_FORMAT.defaultValue()))
         .setShouldDropPartitionColumns(isDropPartitionColumns())
-        .initTable(new Configuration(jssc.hadoopConfiguration()),
+        .initTable(new Configuration(hoodieSparkContext.hadoopConfiguration()),
             cfg.targetBasePath);
   }
 
@@ -356,8 +347,7 @@ public class DeltaSync implements Serializable, Closeable {
    * Run one round of delta sync and return new compaction instant if one got scheduled.
    */
   public Pair<Option<String>, JavaRDD<WriteStatus>> syncOnce() throws IOException {
-    // set the jobGroup for easy cancellation
-    jssc.setJobGroup(jobGroupId, String.format("Sync for target table: %s", cfg.targetTableName), true);
+    hoodieSparkContext.setJobStatus(this.getClass().getSimpleName(), String.format("Sync for target table: %s", cfg.targetTableName));
     Pair<Option<String>, JavaRDD<WriteStatus>> result = null;
     Timer.Context overallTimerContext = metrics.getOverallTimerContext();
 
@@ -443,7 +433,7 @@ public class DeltaSync implements Serializable, Closeable {
           .setPartitionMetafileUseBaseFormat(props.getBoolean(HoodieTableConfig.PARTITION_METAFILE_USE_BASE_FORMAT.key(),
               HoodieTableConfig.PARTITION_METAFILE_USE_BASE_FORMAT.defaultValue()))
           .setShouldDropPartitionColumns(isDropPartitionColumns())
-          .initTable(new Configuration(jssc.hadoopConfiguration()), cfg.targetBasePath);
+          .initTable(new Configuration(hoodieSparkContext.hadoopConfiguration()), cfg.targetBasePath);
     }
 
     LOG.debug("Checkpoint from config: " + cfg.checkpoint);
@@ -478,6 +468,7 @@ public class DeltaSync implements Serializable, Closeable {
     final Option<JavaRDD<GenericRecord>> avroRDDOptional;
     final String checkpointStr;
     SchemaProvider schemaProvider;
+    hoodieSparkContext.setJobStatus(this.getClass().getSimpleName(), "Fetch from source");
     if (transformer.isPresent()) {
       // Transformation is needed. Fetch New rows in Row Format, apply transformation and then convert them
       // to generic records for writing
@@ -485,7 +476,7 @@ public class DeltaSync implements Serializable, Closeable {
       dataAndCheckpoint = formatAdapter.fetchNewDataInRowFormat(resumeCheckpointStr, cfg.sourceLimit);
 
 
-      Option<Dataset<Row>> transformed = dataAndCheckpoint.getBatch().map(data -> transformer.get().apply(jssc, sparkSession, data, props));
+      Option<Dataset<Row>> transformed = dataAndCheckpoint.getBatch().map(data -> transformer.get().apply(hoodieSparkContext.jsc(), sparkSession, data, props));
 
       transformed = formatAdapter.transformDatasetWithQuarantineEvents(transformed, QuarantineEvent.QuarantineReason.CUSTOM_TRANSFORMER_FAILURE);
 
@@ -527,11 +518,11 @@ public class DeltaSync implements Serializable, Closeable {
                   // determine the targetSchemaProvider. use latestTableSchema if reconcileSchema is enabled.
                   SchemaProvider targetSchemaProvider = null;
                   if (reconcileSchema) {
-                    targetSchemaProvider = UtilHelpers.createLatestSchemaProvider(r.schema(), jssc, fs, cfg.targetBasePath);
+                    targetSchemaProvider = UtilHelpers.createLatestSchemaProvider(r.schema(), hoodieSparkContext.jsc(), fs, cfg.targetBasePath);
                   } else {
-                    targetSchemaProvider = UtilHelpers.createRowBasedSchemaProvider(r.schema(), props, jssc);
+                    targetSchemaProvider = UtilHelpers.createRowBasedSchemaProvider(r.schema(), props, hoodieSparkContext.jsc());
                   }
-                  return (SchemaProvider) new DelegatingSchemaProvider(props, jssc,
+                  return (SchemaProvider) new DelegatingSchemaProvider(props, hoodieSparkContext.jsc(),
                       dataAndCheckpoint.getSchemaProvider(), targetSchemaProvider); })
                 .orElse(dataAndCheckpoint.getSchemaProvider());
         avroRDDOptional = transformed
@@ -556,13 +547,14 @@ public class DeltaSync implements Serializable, Closeable {
       return null;
     }
 
+    hoodieSparkContext.setJobStatus(this.getClass().getSimpleName(), "Checking if input is empty");
     if ((!avroRDDOptional.isPresent()) || (avroRDDOptional.get().isEmpty())) {
       if (!cfg.allowCommitOnNoData) {
         LOG.info("No new data found, hence nothing to commit.");
         return null;
       }
       LOG.info("No new data, perform empty commit.");
-      return Pair.of(schemaProvider, Pair.of(checkpointStr, jssc.emptyRDD()));
+      return Pair.of(schemaProvider, Pair.of(checkpointStr, hoodieSparkContext.emptyRDD()));
     }
 
     boolean shouldCombine = cfg.filterDupes || cfg.operation.equals(WriteOperationType.UPSERT);
@@ -674,7 +666,7 @@ public class DeltaSync implements Serializable, Closeable {
     Option<String> scheduledCompactionInstant = Option.empty();
     // filter dupes if needed
     if (cfg.filterDupes) {
-      records = DataSourceUtils.dropDuplicates(jssc, records, writeClient.getConfig());
+      records = DataSourceUtils.dropDuplicates(hoodieSparkContext.jsc(), records, writeClient.getConfig());
     }
 
     boolean isEmpty = records.isEmpty();
@@ -821,7 +813,7 @@ public class DeltaSync implements Serializable, Closeable {
       LOG.info("When set --enable-hive-sync will use HiveSyncTool for backward compatibility");
     }
     if (cfg.enableMetaSync) {
-      FileSystem fs = FSUtils.getFs(cfg.targetBasePath, jssc.hadoopConfiguration());
+      FileSystem fs = FSUtils.getFs(cfg.targetBasePath, hoodieSparkContext.hadoopConfiguration());
 
       TypedProperties metaProps = new TypedProperties();
       metaProps.putAll(props);
@@ -872,7 +864,7 @@ public class DeltaSync implements Serializable, Closeable {
     registerAvroSchemas(sourceSchema, targetSchema);
     final HoodieWriteConfig initialWriteConfig = getHoodieClientConfig(targetSchema);
     final HoodieWriteConfig writeConfig = SparkSampleWritesUtils
-        .getWriteConfigWithRecordSizeEstimate(jssc, records, initialWriteConfig)
+        .getWriteConfigWithRecordSizeEstimate(hoodieSparkContext.jsc(), records, initialWriteConfig)
         .orElse(initialWriteConfig);
 
     if (writeConfig.isEmbeddedTimelineServerEnabled()) {
@@ -1024,7 +1016,7 @@ public class DeltaSync implements Serializable, Closeable {
       if (LOG.isDebugEnabled()) {
         LOG.debug("Registering Schema: " + schemas);
       }
-      jssc.sc().getConf().registerAvroSchemas(JavaConversions.asScalaBuffer(schemas).toList());
+      hoodieSparkContext.jsc().sc().getConf().registerAvroSchemas(JavaConversions.asScalaBuffer(schemas).toList());
     }
   }
 
@@ -1048,7 +1040,6 @@ public class DeltaSync implements Serializable, Closeable {
     if (hoodieMetrics != null && hoodieMetrics.getMetrics() != null) {
       hoodieMetrics.getMetrics().shutdown();
     }
-    jssc.cancelJobGroup(jobGroupId);
   }
 
   public FileSystem getFs() {
