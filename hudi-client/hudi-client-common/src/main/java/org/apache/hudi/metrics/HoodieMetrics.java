@@ -50,6 +50,8 @@ public class HoodieMetrics {
   private String conflictResolutionTimerName = null;
   private String conflictResolutionSuccessCounterName = null;
   private String conflictResolutionFailureCounterName = null;
+  private String compactionRequestedCounterName = null;
+  private String compactionCompletedCounterName = null;
   private HoodieWriteConfig config;
   private String tableName;
   private Timer rollbackTimer = null;
@@ -64,6 +66,8 @@ public class HoodieMetrics {
   private Timer conflictResolutionTimer = null;
   private Counter conflictResolutionSuccessCounter = null;
   private Counter conflictResolutionFailureCounter = null;
+  private Counter compactionRequestedCounter = null;
+  private Counter compactionCompletedCounter = null;
 
   public HoodieMetrics(HoodieWriteConfig config) {
     this.config = config;
@@ -82,6 +86,8 @@ public class HoodieMetrics {
       this.conflictResolutionTimerName = getMetricsName("timer", "conflict_resolution");
       this.conflictResolutionSuccessCounterName = getMetricsName("counter", "conflict_resolution.success");
       this.conflictResolutionFailureCounterName = getMetricsName("counter", "conflict_resolution.failure");
+      this.compactionRequestedCounterName = getMetricsName("counter", "compaction.requested");
+      this.compactionCompletedCounterName = getMetricsName("counter", "compaction.completed");
     }
   }
 
@@ -267,7 +273,7 @@ public class HoodieMetrics {
     }
   }
 
-  String getMetricsName(String action, String metric) {
+  public String getMetricsName(String action, String metric) {
     return config == null ? null : String.format("%s.%s.%s", config.getMetricReporterMetricsNamePrefix(), action, metric);
   }
 
@@ -291,6 +297,20 @@ public class HoodieMetrics {
       LOG.info("Sending conflict resolution failure metric");
       conflictResolutionFailureCounter = getCounter(conflictResolutionFailureCounter, conflictResolutionFailureCounterName);
       conflictResolutionFailureCounter.inc();
+    }
+  }
+
+  public void emitCompactionRequested() {
+    if (config.isMetricsOn()) {
+      compactionRequestedCounter = getCounter(compactionRequestedCounter, compactionRequestedCounterName);
+      compactionRequestedCounter.inc();
+    }
+  }
+
+  public void emitCompactionCompleted() {
+    if (config.isMetricsOn()) {
+      compactionCompletedCounter = getCounter(compactionCompletedCounter, compactionCompletedCounterName);
+      compactionCompletedCounter.inc();
     }
   }
 

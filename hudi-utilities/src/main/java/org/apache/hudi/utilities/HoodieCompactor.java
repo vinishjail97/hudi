@@ -30,7 +30,6 @@ import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
-import org.apache.hudi.exception.HoodieCompactionException;
 
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
@@ -266,7 +265,8 @@ public class HoodieCompactor {
           LOG.info("Found the earliest scheduled compaction instant which will be executed: "
               + cfg.compactionInstantTime);
         } else {
-          throw new HoodieCompactionException("There is no scheduled compaction in the table.");
+          LOG.info("There is no scheduled compaction in the table.");
+          return 0;
         }
       }
       HoodieWriteMetadata<JavaRDD<WriteStatus>> compactionMetadata = client.compact(cfg.compactionInstantTime);

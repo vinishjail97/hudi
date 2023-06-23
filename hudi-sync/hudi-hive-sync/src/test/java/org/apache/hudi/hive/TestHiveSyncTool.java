@@ -28,6 +28,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.ImmutablePair;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.hive.ddl.HMSDDLExecutor;
 import org.apache.hudi.hive.testutils.HiveTestUtil;
 import org.apache.hudi.sync.common.model.FieldSchema;
 import org.apache.hudi.sync.common.model.Partition;
@@ -81,6 +82,7 @@ import static org.apache.hudi.hive.testutils.HiveTestUtil.basePath;
 import static org.apache.hudi.hive.testutils.HiveTestUtil.ddlExecutor;
 import static org.apache.hudi.hive.testutils.HiveTestUtil.getHiveConf;
 import static org.apache.hudi.hive.testutils.HiveTestUtil.hiveSyncProps;
+import static org.apache.hudi.hive.testutils.HiveTestUtil.hiveSyncConfig;
 import static org.apache.hudi.sync.common.HoodieSyncConfig.META_SYNC_BASE_PATH;
 import static org.apache.hudi.sync.common.HoodieSyncConfig.META_SYNC_CONDITIONAL_SYNC;
 import static org.apache.hudi.sync.common.HoodieSyncConfig.META_SYNC_DATABASE_NAME;
@@ -195,6 +197,38 @@ public class TestHiveSyncTool {
     } catch (Exception e) {
       throw new HoodieHiveSyncException("Failed to get the metastore location from the table " + tableName, e);
     }
+  }
+
+  @ParameterizedTest
+  @MethodSource("syncMode")
+  public void testDropUpperCasePartitionWithHMS() throws Exception {
+    hiveSyncConfig.setValue(META_SYNC_PARTITION_FIELDS.key(), "DATESTR");
+    // Create and write some partition
+    HiveTestUtil.createCOWTable("100", 1, true);
+    HiveTestUtil.addCOWPartition("2010/02/01", true, true, "101");
+    HiveTestUtil.addCOWPartition("2010/02/02", true, true, "102");
+    HiveTestUtil.addCOWPartition("2010/02/03", true, true, "103");
+    reinitHiveSyncClient();
+    reSyncHiveTable();
+    assertEquals(4, hiveClient.getAllPartitions(HiveTestUtil.TABLE_NAME).size(),
+        "Table partitions should match the number of partitions we wrote");
+    // Drop partition with HMSDDLExecutor
+    try (HMSDDLExecutor hmsExecutor = new HMSDDLExecutor(hiveSyncConfig)) {
+      hmsExecutor.dropPartitionsToTable(HiveTestUtil.TABLE_NAME, Collections.singletonList("2010/02/03"));
+    }
+
+    reinitHiveSyncClient();
+    reSyncHiveTable();
+    assertEquals(3, hiveClient.getAllPartitions(HiveTestUtil.TABLE_NAME).size(),
+        "Table partitions should match the number of partitions we wrote");
+
+    // Drop partition with QueryBasedDDLExecutor
+    ddlExecutor.runSQL("ALTER TABLE `" + HiveTestUtil.TABLE_NAME
+        + "` DROP PARTITION (`datestr`='2010-02-02')");
+    reinitHiveSyncClient();
+    reSyncHiveTable();
+    assertEquals(2, hiveClient.getAllPartitions(HiveTestUtil.TABLE_NAME).size(),
+        "Table partitions should match the number of partitions we wrote");
   }
 
   @ParameterizedTest

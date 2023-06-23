@@ -24,6 +24,7 @@ import org.apache.hudi.common.engine.HoodieEngineContext;
 import org.apache.hudi.common.model.HoodieRecordPayload;
 import org.apache.hudi.common.model.HoodieWriteStat;
 import org.apache.hudi.common.util.HoodieTimer;
+import org.apache.hudi.config.HoodiePreCommitValidatorConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.exception.HoodieValidationException;
 import org.apache.hudi.table.HoodieSparkTable;
@@ -34,6 +35,7 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -96,5 +98,15 @@ public abstract class SparkPreCommitValidator<T extends HoodieRecordPayload, I, 
 
   public HoodieWriteConfig getWriteConfig() {
     return this.writeConfig;
+  }
+
+  protected Dataset<Row> executeSqlQuery(SQLContext sqlContext,
+                                         String sqlQuery,
+                                         String tableName,
+                                         String logLabel) {
+    String queryWithTempTableName = sqlQuery.replaceAll(
+        HoodiePreCommitValidatorConfig.VALIDATOR_TABLE_VARIABLE, tableName);
+    LOG.info(String.format("Running query (%s): %s", logLabel, queryWithTempTableName));
+    return sqlContext.sql(queryWithTempTableName);
   }
 }

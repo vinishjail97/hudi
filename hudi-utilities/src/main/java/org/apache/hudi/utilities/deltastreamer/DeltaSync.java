@@ -22,6 +22,7 @@ import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.DataSourceWriteOptions;
 import org.apache.hudi.HoodieSparkUtils;
 import org.apache.hudi.avro.HoodieAvroUtils;
+import org.apache.hudi.client.HoodieWriteResult;
 import org.apache.hudi.client.SparkRDDWriteClient;
 import org.apache.hudi.client.WriteStatus;
 import org.apache.hudi.client.common.HoodieSparkEngineContext;
@@ -675,6 +676,8 @@ public class DeltaSync implements Serializable, Closeable {
     String instantTime = startCommit();
     LOG.info("Starting commit  : " + instantTime);
 
+    HoodieWriteResult writeResult;
+    Map<String, List<String>> partitionToReplacedFileIds = Collections.emptyMap();
     JavaRDD<WriteStatus> writeStatusRDD;
     switch (cfg.operation) {
       case INSERT:
@@ -687,14 +690,20 @@ public class DeltaSync implements Serializable, Closeable {
         writeStatusRDD = writeClient.bulkInsert(records, instantTime);
         break;
       case INSERT_OVERWRITE:
-        writeStatusRDD = writeClient.insertOverwrite(records, instantTime).getWriteStatuses();
+        writeResult = writeClient.insertOverwrite(records, instantTime);
+        partitionToReplacedFileIds = writeResult.getPartitionToReplaceFileIds();
+        writeStatusRDD = writeResult.getWriteStatuses();
         break;
       case INSERT_OVERWRITE_TABLE:
-        writeStatusRDD = writeClient.insertOverwriteTable(records, instantTime).getWriteStatuses();
+        writeResult = writeClient.insertOverwriteTable(records, instantTime);
+        partitionToReplacedFileIds = writeResult.getPartitionToReplaceFileIds();
+        writeStatusRDD = writeResult.getWriteStatuses();
         break;
       case DELETE_PARTITION:
         List<String> partitions = records.map(record -> record.getPartitionPath()).distinct().collect();
-        writeStatusRDD = writeClient.deletePartitions(partitions, instantTime).getWriteStatuses();
+        writeResult = writeClient.deletePartitions(partitions, instantTime);
+        partitionToReplacedFileIds = writeResult.getPartitionToReplaceFileIds();
+        writeStatusRDD = writeResult.getWriteStatuses();
         break;
       default:
         throw new HoodieDeltaStreamerException("Unknown operation : " + cfg.operation);
@@ -728,7 +737,7 @@ public class DeltaSync implements Serializable, Closeable {
           throw new HoodieDeltaStreamerWriteException("Quarantine Table Commit failed!");
         }
       }
-      boolean success = writeClient.commit(instantTime, writeStatusRDD, Option.of(checkpointCommitMetadata), commitActionType, Collections.emptyMap());
+      boolean success = writeClient.commit(instantTime, writeStatusRDD, Option.of(checkpointCommitMetadata), commitActionType, partitionToReplacedFileIds);
       if (success) {
         LOG.info("Commit " + instantTime + " successful!");
         this.formatAdapter.getSource().onCommit(checkpointStr);

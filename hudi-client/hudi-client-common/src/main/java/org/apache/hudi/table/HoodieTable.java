@@ -935,7 +935,6 @@ public abstract class HoodieTable<T extends HoodieRecordPayload, I, K, O> implem
       try {
         LOG.info("Deleting metadata table because it is disabled in writer.");
         deleteMetadataTable(config.getBasePath(), context);
-        clearMetadataTablePartitionsConfig(Option.empty(), true);
       } catch (HoodieMetadataException e) {
         throw new HoodieException("Failed to delete metadata table.", e);
       }
