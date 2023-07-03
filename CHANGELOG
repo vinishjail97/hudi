@@ -1032,3 +1032,8 @@ ddcc5db0d6 [ONHS-9089] Oss cp jun2 jun15 (#311)
 
 ---[2023-06-24 23:02:37] [release-v0.19.3] Adding release tag for hudi-internal release-v0.19.3---
 caa8ee982 [ONHS-9376] Cherry pick PRs from June 15 to June 23 (#326)
+
+---[2023-07-03 11:08:02] [release-v0.20.0] ---
+633a33c627 [ONHS-9461] add null checks before registering schema to avoid NPE (#328)
+7a898eaf91 [ONHS-9242] Fix TestHoodiePartitionMetadata (#316)
+c4864accea [ONHS-9390] Upgrade to version release-v0.19.3 (#327)
