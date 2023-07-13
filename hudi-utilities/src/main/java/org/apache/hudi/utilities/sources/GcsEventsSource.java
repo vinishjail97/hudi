@@ -18,17 +18,19 @@
 
 package org.apache.hudi.utilities.sources;
 
-import com.google.pubsub.v1.ReceivedMessage;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
+import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.exception.HoodieReadFromSourceException;
 import org.apache.hudi.utilities.schema.SchemaProvider;
-import org.apache.hudi.utilities.sources.helpers.gcs.PubsubMessagesFetcher;
 import org.apache.hudi.utilities.sources.helpers.gcs.MessageBatch;
 import org.apache.hudi.utilities.sources.helpers.gcs.MessageValidity;
 import org.apache.hudi.utilities.sources.helpers.gcs.MetadataMessage;
+import org.apache.hudi.utilities.sources.helpers.gcs.PubsubMessagesFetcher;
+
+import com.google.pubsub.v1.ReceivedMessage;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -36,6 +38,8 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.types.StructType;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -97,6 +101,7 @@ absolute_path_to/hudi-utilities-bundle_2.12-0.13.0-SNAPSHOT.jar \
 public class GcsEventsSource extends RowSource {
 
   private final PubsubMessagesFetcher pubsubMessagesFetcher;
+  private final SchemaProvider schemaProvider;
   private final boolean ackMessages;
 
   private final List<String> messagesToAck = new ArrayList<>();
@@ -108,11 +113,11 @@ public class GcsEventsSource extends RowSource {
   public GcsEventsSource(TypedProperties props, JavaSparkContext jsc, SparkSession spark,
                          SchemaProvider schemaProvider) {
     this(
-            props, jsc, spark, schemaProvider,
-            new PubsubMessagesFetcher(
-                    props.getString(GOOGLE_PROJECT_ID), props.getString(PUBSUB_SUBSCRIPTION_ID),
-                    props.getInteger(BATCH_SIZE_CONF, DEFAULT_BATCH_SIZE)
-            )
+        props, jsc, spark, schemaProvider,
+        new PubsubMessagesFetcher(
+            props.getString(GOOGLE_PROJECT_ID), props.getString(PUBSUB_SUBSCRIPTION_ID),
+            props.getInteger(BATCH_SIZE_CONF, DEFAULT_BATCH_SIZE)
+        )
     );
   }
 
@@ -122,6 +127,7 @@ public class GcsEventsSource extends RowSource {
 
     this.pubsubMessagesFetcher = pubsubMessagesFetcher;
     this.ackMessages = props.getBoolean(ACK_MESSAGES, ACK_MESSAGES_DEFAULT_VALUE);
+    this.schemaProvider = schemaProvider;
 
     LOG.info("Created GcsEventsSource");
   }
@@ -147,8 +153,12 @@ public class GcsEventsSource extends RowSource {
     Dataset<String> eventRecords = sparkSession.createDataset(messageBatch.getMessages(), Encoders.STRING());
 
     LOG.info("Returning checkpoint value: " + CHECKPOINT_VALUE_ZERO);
-
-    return Pair.of(Option.of(sparkSession.read().json(eventRecords)), CHECKPOINT_VALUE_ZERO);
+    StructType sourceSchema = UtilHelpers.getSourceSchema(schemaProvider);
+    if (sourceSchema != null) {
+      return Pair.of(Option.of(sparkSession.read().schema(sourceSchema).json(eventRecords)), CHECKPOINT_VALUE_ZERO);
+    } else {
+      return Pair.of(Option.of(sparkSession.read().json(eventRecords)), CHECKPOINT_VALUE_ZERO);
+    }
   }
 
   @Override
