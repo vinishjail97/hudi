@@ -92,19 +92,27 @@ public class HoodieMetricsConfig extends HoodieConfig {
         }
         return Option.empty();
       })
+      .sinceVersion("0.13.0")
       .withDocumentation("Enable metrics for locking infra. Useful when operating in multiwriter mode");
 
   public static final ConfigProperty<String> METRICS_REPORTER_FILE_BASED_CONFIGS_PATH = ConfigProperty
       .key(METRIC_PREFIX + ".configs.properties")
       .defaultValue("")
-      .sinceVersion("0.12.2")
-      .withDocumentation("list of config file paths for metric exporter configs");
+      .sinceVersion("0.14.0")
+      .withDocumentation("Comma separated list of config file paths for metric exporter configs");
 
   public static final ConfigProperty<String> METRICS_REPORTER_DEFAULT_LABELS = ConfigProperty
       .key(METRIC_PREFIX + ".default.labels")
       .defaultValue("")
       .sinceVersion("0.12.2")
       .withDocumentation("default labels for metric reporter");
+
+  public static final ConfigProperty<Boolean> TURN_METRICS_COMPACTION_LOG_BLOCKS_ON = ConfigProperty
+      .key(METRIC_PREFIX + "compaction.log.blocks.on")
+      .defaultValue(false)
+      .sinceVersion("0.14.0")
+      .withDocumentation("Turn on/off metrics reporting for log blocks with compaction commit. off by default.");
+
   /**
    * @deprecated Use {@link #TURN_METRICS_ON} and its methods instead
    */
@@ -167,6 +175,11 @@ public class HoodieMetricsConfig extends HoodieConfig {
 
     public Builder on(boolean metricsOn) {
       hoodieMetricsConfig.setValue(TURN_METRICS_ON, String.valueOf(metricsOn));
+      return this;
+    }
+
+    public Builder compactionLogBlocksEnable(boolean compactionLogBlockMetricsEnable) {
+      hoodieMetricsConfig.setValue(TURN_METRICS_COMPACTION_LOG_BLOCKS_ON, String.valueOf(compactionLogBlockMetricsEnable));
       return this;
     }
 

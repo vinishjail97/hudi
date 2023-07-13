@@ -53,9 +53,11 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.types.StructType;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Utilities used throughout the data source.
@@ -77,7 +79,7 @@ public class DataSourceUtils {
       }
     }
 
-    throw new TableNotFoundException("Unable to find a hudi table for the user provided paths.");
+    throw new TableNotFoundException(Arrays.stream(userProvidedPaths).map(Path::toString).collect(Collectors.joining(",")));
   }
 
   /**
