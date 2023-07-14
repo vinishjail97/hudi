@@ -474,7 +474,7 @@ public class CleanPlanner<T extends HoodieRecordPayload, I, K, O> implements Ser
    */
   public Option<HoodieInstant> getEarliestCommitToRetain() {
     return CleanerUtils.getEarliestCommitToRetain(
-        hoodieTable.getMetaClient().getActiveTimeline().getCommitsAndCompactionTimeline(),
+        hoodieTable.getMetaClient().getActiveTimeline().getCommitsTimeline(),
         config.getCleanerPolicy(),
         config.getCleanerCommitsRetained(),
         Instant.now(),

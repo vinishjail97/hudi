@@ -638,10 +638,18 @@ public class TestHoodieTimelineArchiver extends HoodieClientTestHarness {
     assertThrows(HoodieException.class, () -> metaClient.getArchivedTimeline().reload());
   }
 
-  @ParameterizedTest
-  @ValueSource(booleans = {true, false})
-  public void testArchivalWithMultiWriters(boolean enableMetadata) throws Exception {
-    HoodieWriteConfig writeConfig = initTestTableAndGetWriteConfig(enableMetadata, 2, 4, 5, 2,
+  @Test
+  public void testArchivalWithMultiWritersMDTDisabled() throws Exception {
+    testArchivalWithMultiWriters(false);
+  }
+
+  @Test
+  public void testArchivalWithMultiWriters() throws Exception {
+    testArchivalWithMultiWriters(true);
+  }
+
+  private void testArchivalWithMultiWriters(boolean enableMetadata) throws Exception {
+    HoodieWriteConfig writeConfig = initTestTableAndGetWriteConfig(enableMetadata, 4, 5, 5, 2,
         HoodieTableType.COPY_ON_WRITE, false, 10, 209715200,
         HoodieFailedWritesCleaningPolicy.LAZY, WriteConcurrencyMode.OPTIMISTIC_CONCURRENCY_CONTROL);
 
@@ -659,7 +667,7 @@ public class TestHoodieTimelineArchiver extends HoodieClientTestHarness {
         }
         metaClient.reloadActiveTimeline();
         while (!metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants().lastInstant().get().getTimestamp().endsWith("29")
-            || metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants().countInstants() > 4) {
+            || metaClient.getActiveTimeline().getCommitsTimeline().filterCompletedInstants().countInstants() > 5) {
           try {
             HoodieTimelineArchiver archiver = new HoodieTimelineArchiver(writeConfig, table);
             archiver.archiveIfRequired(context, true);
@@ -682,7 +690,7 @@ public class TestHoodieTimelineArchiver extends HoodieClientTestHarness {
     // do ingestion and trigger archive actions here.
     for (int i = 1; i < 30; i++) {
       testTable.doWriteOperation("0000000" + String.format("%02d", i), WriteOperationType.UPSERT, i == 1 ? Arrays.asList("p1", "p2") : Collections.emptyList(), Arrays.asList("p1", "p2"), 2);
-      if (i == 5) {
+      if (i == 6) {
         // start up archival threads only after 4 commits.
         countDownLatch.countDown();
       }
