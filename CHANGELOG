@@ -1037,3 +1037,10 @@ caa8ee982 [ONHS-9376] Cherry pick PRs from June 15 to June 23 (#326)
 633a33c627 [ONHS-9461] add null checks before registering schema to avoid NPE (#328)
 7a898eaf91 [ONHS-9242] Fix TestHoodiePartitionMetadata (#316)
 c4864accea [ONHS-9390] Upgrade to version release-v0.19.3 (#327)
+
+---[2023-07-14 23:21:16] [release-v0.21.0] Adding release tag for hudi-internal release-v0.21.0---
+65af1898cc1 [ONHS-9845] Fix tests (#336)
+e4819af0ef2 [ONHS-9764] - Adding schema validation during ingestion using schema provider for s3 metadata job (#331)
+ab4c3f61979 Adding support for comma separated path format for spark.read.load (#333)
+549b0485564 Oss cp june24 july11 (#332)
+83df3f2a662 [ONHS-9556] Upgrade to version release-v0.20.0 (#330)
