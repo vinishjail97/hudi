@@ -828,6 +828,7 @@ public class DeltaSync implements Serializable, Closeable {
       LOG.info("When set --enable-hive-sync will use HiveSyncTool for backward compatibility");
     }
     if (cfg.enableMetaSync) {
+      LOG.debug("[MetaSync] Starting sync");
       FileSystem fs = FSUtils.getFs(cfg.targetBasePath, hoodieSparkContext.hadoopConfiguration());
 
       TypedProperties metaProps = new TypedProperties();
@@ -837,20 +838,23 @@ public class DeltaSync implements Serializable, Closeable {
         metaProps.put(HIVE_SYNC_BUCKET_SYNC_SPEC.key(), HiveSyncConfig.getBucketSpec(props.getString(HoodieIndexConfig.BUCKET_INDEX_HASH_FIELD.key()),
             props.getInteger(HoodieIndexConfig.BUCKET_INDEX_NUM_BUCKETS.key())));
       }
-
       //Collect exceptions in list because we want all sync to run. Then we can throw
       Map<String,HoodieException> failedMetaSyncs = new HashMap<>();
       for (String impl : syncClientToolClasses) {
         Timer.Context syncContext = metrics.getMetaSyncTimerContext();
+        boolean success = false;
         try {
           SyncUtilHelpers.runHoodieMetaSync(impl.trim(), metaProps, conf, fs, cfg.targetBasePath, cfg.baseFileFormat);
-
+          success = true;
         } catch (HoodieException e) {
-          LOG.info("SyncTool class " + impl.trim() + " failed with exception", e);
+          LOG.error("[MetaSync] SyncTool class " + impl.trim() + " failed with exception", e);
           failedMetaSyncs.put(impl, e);
         }
         long metaSyncTimeMs = syncContext != null ? syncContext.stop() : 0;
         metrics.updateDeltaStreamerMetaSyncMetrics(getSyncClassShortName(impl), metaSyncTimeMs);
+        if (success) {
+          LOG.info("[MetaSync] SyncTool class " + impl.trim() + " completed successfully and took " + metaSyncTimeMs);
+        }
       }
       if (!failedMetaSyncs.isEmpty()) {
         throw getHoodieMetaSyncException(failedMetaSyncs);
