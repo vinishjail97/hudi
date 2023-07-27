@@ -1048,3 +1048,7 @@ ab4c3f61979 Adding support for comma separated path format for spark.read.load (
 ---[2023-07-22 18:19:34] [release-v0.21.1] Adding release tag for hudi-internal release-v0.21.1---
 9e837e99f [ONHS-10171] Avoid using synchronized for meta sync (#341)
 13cb16237 [ONHS-9845] Upgrade to version release-v0.21.0 (#334)
+
+---[2023-07-27 11:09:18] [release-v0.21.2] ---
+e367c87aa1 [ONHS-10136] Move min and max instants to a static function (#345)
+f026247c45 [AUDIT-232] Upgrade to version release-v0.21.1 (#342)
