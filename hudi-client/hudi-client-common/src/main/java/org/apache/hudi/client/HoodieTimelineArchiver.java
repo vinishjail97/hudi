@@ -29,7 +29,6 @@ import org.apache.hudi.common.fs.HoodieWrapperFileSystem;
 import org.apache.hudi.common.fs.StorageSchemes;
 import org.apache.hudi.common.model.HoodieArchivedLogFile;
 import org.apache.hudi.common.model.HoodieAvroPayload;
-import org.apache.hudi.common.model.HoodieCleaningPolicy;
 import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
@@ -45,7 +44,6 @@ import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.timeline.TimelineMetadataUtils;
 import org.apache.hudi.common.table.timeline.TimelineUtils;
 import org.apache.hudi.common.table.view.FileSystemViewStorageConfig;
-import org.apache.hudi.common.util.CleanerUtils;
 import org.apache.hudi.common.util.ClusteringUtils;
 import org.apache.hudi.common.util.CollectionUtils;
 import org.apache.hudi.common.util.CompactionUtils;
@@ -72,8 +70,6 @@ import org.apache.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.text.ParseException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -85,16 +81,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.hudi.client.utils.ArchivalUtils.getMinAndMaxInstantsToKeep;
 import static org.apache.hudi.common.table.timeline.HoodieTimeline.GREATER_THAN;
 import static org.apache.hudi.common.table.timeline.HoodieTimeline.LESSER_THAN;
 import static org.apache.hudi.common.table.timeline.HoodieTimeline.LESSER_THAN_OR_EQUALS;
 import static org.apache.hudi.common.table.timeline.HoodieTimeline.compareTimestamps;
-import static org.apache.hudi.config.HoodieArchivalConfig.MAX_COMMITS_TO_KEEP;
-import static org.apache.hudi.config.HoodieArchivalConfig.MIN_COMMITS_TO_KEEP;
-import static org.apache.hudi.config.HoodieCleanConfig.CLEANER_COMMITS_RETAINED;
-import static org.apache.hudi.config.HoodieCleanConfig.CLEANER_FILE_VERSIONS_RETAINED;
-import static org.apache.hudi.config.HoodieCleanConfig.CLEANER_HOURS_RETAINED;
-import static org.apache.hudi.config.HoodieCleanConfig.CLEANER_POLICY;
 
 /**
  * Archiver to bound the growth of files under .hoodie meta path.
@@ -118,67 +109,9 @@ public class HoodieTimelineArchiver<T extends HoodieAvroPayload, I, K, O> {
     this.metaClient = table.getMetaClient();
     this.archiveFilePath = HoodieArchivedTimeline.getArchiveLogPath(metaClient.getArchivePath());
     this.txnManager = new TransactionManager(config, table.getMetaClient().getFs());
-
-    Option<HoodieInstant> earliestCommitToRetain = Option.empty();
-    HoodieTimeline completedCommitsTimeline = table.getCompletedCommitsTimeline();
-    Option<HoodieInstant> latestCommit = completedCommitsTimeline.lastInstant();
-    HoodieCleaningPolicy cleanerPolicy = config.getCleanerPolicy();
-    int cleanerCommitsRetained = config.getCleanerCommitsRetained();
-    int cleanerHoursRetained = config.getCleanerHoursRetained();
-
-    try {
-      earliestCommitToRetain = CleanerUtils.getEarliestCommitToRetain(
-          metaClient.getActiveTimeline().getCommitsTimeline(),
-          cleanerPolicy,
-          cleanerCommitsRetained,
-          latestCommit.isPresent()
-              ? HoodieActiveTimeline.parseDateFromInstantTime(latestCommit.get().getTimestamp()).toInstant()
-              : Instant.now(),
-          cleanerHoursRetained);
-    } catch (ParseException e) {
-      LOG.warn("Error parsing instant time: " + latestCommit.get().getTimestamp());
-    }
-
-    int configuredMinInstantsToKeep = config.getMinCommitsToKeep();
-    int configuredMaxInstantsToKeep = config.getMaxCommitsToKeep();
-    if (earliestCommitToRetain.isPresent()) {
-      int minInstantsToKeepBasedOnCleaning =
-          completedCommitsTimeline.findInstantsAfter(earliestCommitToRetain.get().getTimestamp())
-              .countInstants() + 2;
-      if (configuredMinInstantsToKeep < minInstantsToKeepBasedOnCleaning) {
-        this.maxInstantsToKeep = minInstantsToKeepBasedOnCleaning
-            + configuredMaxInstantsToKeep - configuredMinInstantsToKeep;
-        this.minInstantsToKeep = minInstantsToKeepBasedOnCleaning;
-        LOG.warn(String.format("The configured archival configs %s=%s is more aggressive than the cleaning "
-                + "configs as the earliest commit to retain is %s. Adjusted the archival configs "
-                + "to be %s=%s and %s=%s",
-            MIN_COMMITS_TO_KEEP.key(), configuredMinInstantsToKeep, earliestCommitToRetain.get(),
-            MIN_COMMITS_TO_KEEP.key(), this.minInstantsToKeep,
-            MAX_COMMITS_TO_KEEP.key(), this.maxInstantsToKeep));
-        switch (cleanerPolicy) {
-          case KEEP_LATEST_COMMITS:
-            LOG.warn(String.format("Cleaning configs: %s=KEEP_LATEST_COMMITS %s=%s", CLEANER_POLICY.key(),
-                CLEANER_COMMITS_RETAINED.key(), cleanerCommitsRetained));
-            break;
-          case KEEP_LATEST_BY_HOURS:
-            LOG.warn(String.format("Cleaning configs: %s=KEEP_LATEST_BY_HOURS %s=%s", CLEANER_POLICY.key(),
-                CLEANER_HOURS_RETAINED.key(), cleanerHoursRetained));
-            break;
-          case KEEP_LATEST_FILE_VERSIONS:
-            LOG.warn(String.format("Cleaning configs: %s=CLEANER_FILE_VERSIONS_RETAINED %s=%s", CLEANER_POLICY.key(),
-                CLEANER_FILE_VERSIONS_RETAINED.key(), config.getCleanerFileVersionsRetained()));
-            break;
-          default:
-            break;
-        }
-      } else {
-        this.maxInstantsToKeep = configuredMaxInstantsToKeep;
-        this.minInstantsToKeep = configuredMinInstantsToKeep;
-      }
-    } else {
-      this.maxInstantsToKeep = configuredMaxInstantsToKeep;
-      this.minInstantsToKeep = configuredMinInstantsToKeep;
-    }
+    Pair<Integer, Integer> minAndMaxInstants = getMinAndMaxInstantsToKeep(table, metaClient);
+    this.minInstantsToKeep = minAndMaxInstants.getLeft();
+    this.maxInstantsToKeep = minAndMaxInstants.getRight();
   }
 
   private Writer openWriter() {
