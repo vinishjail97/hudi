@@ -18,7 +18,6 @@
 
 package org.apache.hudi.utilities.sources;
 
-import org.apache.hudi.DataSourceReadOptions;
 import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.common.config.SerializableConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
@@ -27,8 +26,12 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.schema.SchemaProvider;
+import org.apache.hudi.utilities.sources.helpers.CloudDataFetcher;
+import org.apache.hudi.utilities.sources.helpers.CloudObjectIncrCheckpoint;
 import org.apache.hudi.utilities.sources.helpers.CloudObjectMetadata;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
+import org.apache.hudi.utilities.sources.helpers.QueryInfo;
+import org.apache.hudi.utilities.sources.helpers.QueryRunner;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -41,15 +44,15 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Collections;
 import java.util.List;
 
+import static org.apache.hudi.common.util.StringUtils.isNullOrEmpty;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.DEFAULT_NUM_INSTANTS_PER_FETCH;
-import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.DEFAULT_READ_LATEST_INSTANT_ON_MISSING_CKPT;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.DEFAULT_SOURCE_FILE_FORMAT;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_SRC_BASE_PATH;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.NUM_INSTANTS_PER_FETCH;
-import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.READ_LATEST_INSTANT_ON_MISSING_CKPT;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.SOURCE_FILE_FORMAT;
 import static org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon.getCloudObjectMetadataPerPartition;
-import static org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon.loadAsDataset;
+import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.DATAFILE_FORMAT;
+import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.getMissingCheckpointStrategy;
 
 /**
  * This source will use the S3 events meta information from hoodie table generate by {@link S3EventsSource}.
@@ -57,6 +60,13 @@ import static org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorComm
 public class S3EventsHoodieIncrSource extends HoodieIncrSource {
 
   private static final Logger LOG = LogManager.getLogger(S3EventsHoodieIncrSource.class);
+  private final String srcPath;
+  private final int numInstantsPerFetch;
+  private final boolean checkIfFileExists;
+  private final String fileFormat;
+  private final IncrSourceHelper.MissingCheckpointStrategy missingCheckpointStrategy;
+  private final QueryRunner queryRunner;
+  private final CloudDataFetcher cloudDataFetcher;
 
   public static class Config {
     // control whether we do existence check for files before consuming them
@@ -72,7 +82,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     // control whether to ignore the s3 objects with this substring
     static final String S3_IGNORE_KEY_SUBSTRING = "hoodie.deltastreamer.source.s3incr.ignore.key.substring";
     /**
-     *{@value #SPARK_DATASOURCE_OPTIONS} is json string, passed to the reader while loading dataset.
+     * {@value #SPARK_DATASOURCE_OPTIONS} is json string, passed to the reader while loading dataset.
      * Example delta streamer conf
      * - --hoodie-conf hoodie.deltastreamer.source.s3incr.spark.datasource.options={"header":"true","encoding":"UTF-8"}
      */
@@ -83,100 +93,104 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     static final String S3_PATH_REGEX = "hoodie.deltastreamer.source.cloud.data.select.path.regex";
   }
 
+  public static final String S3_OBJECT_KEY = "s3.object.key";
+  public static final String S3_OBJECT_SIZE = "s3.object.size";
+  public static final String S3_BUCKET_NAME = "s3.bucket.name";
+
   public S3EventsHoodieIncrSource(
       TypedProperties props,
       JavaSparkContext sparkContext,
       SparkSession sparkSession,
       SchemaProvider schemaProvider) {
+    this(props, sparkContext, sparkSession, schemaProvider, new QueryRunner(sparkSession, props),
+        new CloudDataFetcher(props, props.getString(DATAFILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT)));
+  }
+
+  public S3EventsHoodieIncrSource(
+      TypedProperties props,
+      JavaSparkContext sparkContext,
+      SparkSession sparkSession,
+      SchemaProvider schemaProvider,
+      QueryRunner queryRunner,
+      CloudDataFetcher cloudDataFetcher) {
     super(props, sparkContext, sparkSession, schemaProvider);
+    DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(HOODIE_SRC_BASE_PATH));
+    this.srcPath = props.getString(HOODIE_SRC_BASE_PATH);
+    this.numInstantsPerFetch = props.getInteger(NUM_INSTANTS_PER_FETCH, DEFAULT_NUM_INSTANTS_PER_FETCH);
+    this.checkIfFileExists = props.getBoolean(Config.ENABLE_EXISTS_CHECK, Config.DEFAULT_ENABLE_EXISTS_CHECK);
+    this.fileFormat = props.getString(SOURCE_FILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT);
+    this.missingCheckpointStrategy = getMissingCheckpointStrategy(props);
+    this.queryRunner = queryRunner;
+    this.cloudDataFetcher = cloudDataFetcher;
   }
 
   @Override
-  public Pair<Option<Dataset<Row>>, String> fetchNextBatch(Option<String> lastCkptStr, long sourceLimit) {
-    DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(HOODIE_SRC_BASE_PATH));
-    String srcPath = props.getString(HOODIE_SRC_BASE_PATH);
-    int numInstantsPerFetch = props.getInteger(NUM_INSTANTS_PER_FETCH, DEFAULT_NUM_INSTANTS_PER_FETCH);
-    boolean readLatestOnMissingCkpt = props.getBoolean(
-        READ_LATEST_INSTANT_ON_MISSING_CKPT, DEFAULT_READ_LATEST_INSTANT_ON_MISSING_CKPT);
-    IncrSourceHelper.MissingCheckpointStrategy missingCheckpointStrategy = (props.containsKey(HoodieIncrSource.Config.MISSING_CHECKPOINT_STRATEGY))
-        ? IncrSourceHelper.MissingCheckpointStrategy.valueOf(props.getString(HoodieIncrSource.Config.MISSING_CHECKPOINT_STRATEGY)) : null;
-    if (readLatestOnMissingCkpt) {
-      missingCheckpointStrategy = IncrSourceHelper.MissingCheckpointStrategy.READ_LATEST;
-    }
-    String fileFormat = props.getString(SOURCE_FILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT);
+  public Pair<Option<Dataset<Row>>, String> fetchNextBatch(Option<String> lastCheckpoint, long sourceLimit) {
+    CloudObjectIncrCheckpoint cloudObjectIncrCheckpoint = CloudObjectIncrCheckpoint.fromString(lastCheckpoint);
+    QueryInfo queryInfo =
+        IncrSourceHelper.generateQueryInfo(
+            sparkContext, srcPath, numInstantsPerFetch,
+            Option.of(cloudObjectIncrCheckpoint.getCommit()),
+            missingCheckpointStrategy,
+            HoodieRecord.COMMIT_TIME_METADATA_FIELD,
+            S3_OBJECT_KEY, S3_OBJECT_SIZE, true,
+            Option.ofNullable(cloudObjectIncrCheckpoint.getKey()));
+    LOG.info("Querying S3 with:" + cloudObjectIncrCheckpoint + ", queryInfo:" + queryInfo);
 
-    // Use begin Instant if set and non-empty
-    Option<String> beginInstant =
-        lastCkptStr.isPresent()
-            ? lastCkptStr.get().isEmpty() ? Option.empty() : lastCkptStr
-            : Option.empty();
-
-    Pair<String, Pair<String, String>> queryTypeAndInstantEndpts =
-        IncrSourceHelper.calculateBeginAndEndInstants(
-            sparkContext, srcPath, numInstantsPerFetch, beginInstant, missingCheckpointStrategy);
-
-    if (queryTypeAndInstantEndpts.getValue().getKey().equals(queryTypeAndInstantEndpts.getValue().getValue())) {
-      LOG.warn("Already caught up. Begin Checkpoint was :" + queryTypeAndInstantEndpts.getValue().getKey());
-      return Pair.of(Option.empty(), queryTypeAndInstantEndpts.getValue().getKey());
+    if (isNullOrEmpty(cloudObjectIncrCheckpoint.getKey()) && queryInfo.areStartAndEndInstantsEqual()) {
+      LOG.warn("Already caught up. No new data to process");
+      return Pair.of(Option.empty(), queryInfo.getEndInstant());
     }
 
-    Dataset<Row> source = null;
-    // Do incremental pull. Set end instant if available.
-    if (queryTypeAndInstantEndpts.getKey().equals(DataSourceReadOptions.QUERY_TYPE_INCREMENTAL_OPT_VAL())) {
-      source = sparkSession.read().format("org.apache.hudi")
-          .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_INCREMENTAL_OPT_VAL())
-          .option(DataSourceReadOptions.BEGIN_INSTANTTIME().key(), queryTypeAndInstantEndpts.getRight().getLeft())
-          .option(DataSourceReadOptions.END_INSTANTTIME().key(), queryTypeAndInstantEndpts.getRight().getRight()).load(srcPath);
-    } else {
-      // if checkpoint is missing from source table, and if strategy is set to READ_UPTO_LATEST_COMMIT, we have to issue snapshot query
-      source = sparkSession.read().format("org.apache.hudi")
-          .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_SNAPSHOT_OPT_VAL()).load(srcPath)
-          // add filtering so that only interested records are returned.
-          .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD,
-              queryTypeAndInstantEndpts.getRight().getLeft()))
-          .filter(String.format("%s <= '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD,
-              queryTypeAndInstantEndpts.getRight().getRight()));
-    }
-
+    Dataset<Row> source = queryRunner.run(queryInfo);
     if (source.isEmpty()) {
-      return Pair.of(Option.empty(), queryTypeAndInstantEndpts.getRight().getRight());
+      LOG.info("Source of file names is empty. Returning empty result and endInstant: "
+          + queryInfo.getEndInstant());
+      return Pair.of(Option.empty(), queryInfo.getEndInstant());
     }
 
     Dataset<Row> filteredSourceData = applyFilter(source, fileFormat);
+
+    LOG.info("Adjusting end checkpoint:" + queryInfo.getEndInstant() + " based on sourceLimit :" + sourceLimit);
+    Pair<CloudObjectIncrCheckpoint, Dataset<Row>> checkPointAndDataset =
+        IncrSourceHelper.filterAndGenerateCheckpointBasedOnSourceLimit(
+            filteredSourceData, sourceLimit, queryInfo, cloudObjectIncrCheckpoint);
+    LOG.info("Adjusted end checkpoint :" + checkPointAndDataset.getLeft());
+
 
     String s3FS = props.getString(Config.S3_FS_PREFIX, "s3").toLowerCase();
     String s3Prefix = s3FS + "://";
 
     // Create S3 paths
-    final boolean checkExists = props.getBoolean(Config.ENABLE_EXISTS_CHECK, Config.DEFAULT_ENABLE_EXISTS_CHECK);
     SerializableConfiguration serializableHadoopConf = new SerializableConfiguration(sparkContext.hadoopConfiguration());
-    List<CloudObjectMetadata> cloudObjectMetadata = filteredSourceData
-        .select("s3.bucket.name", "s3.object.key", "s3.object.size")
+    List<CloudObjectMetadata> cloudObjectMetadata = checkPointAndDataset.getRight()
+        .select(S3_BUCKET_NAME, S3_OBJECT_KEY, S3_OBJECT_SIZE)
         .distinct()
-        .mapPartitions(getCloudObjectMetadataPerPartition(s3Prefix, serializableHadoopConf, checkExists), Encoders.kryo(CloudObjectMetadata.class))
+        .mapPartitions(getCloudObjectMetadataPerPartition(s3Prefix, serializableHadoopConf, checkIfFileExists), Encoders.kryo(CloudObjectMetadata.class))
         .collectAsList();
+    LOG.info("Total number of files to process :" + cloudObjectMetadata.size());
 
-    Option<Dataset<Row>> datasetOption = loadAsDataset(sparkSession, cloudObjectMetadata, props, fileFormat);
-    return Pair.of(datasetOption, queryTypeAndInstantEndpts.getRight().getRight());
+    Option<Dataset<Row>> datasetOption = cloudDataFetcher.getCloudObjectDataDF(sparkSession, cloudObjectMetadata, props);
+    return Pair.of(datasetOption, checkPointAndDataset.getLeft().toString());
   }
 
   Dataset<Row> applyFilter(Dataset<Row> source, String fileFormat) {
-    String filter = "s3.object.size > 0";
+    String filter = S3_OBJECT_SIZE + " > 0";
     String s3KeyPrefix = props.getString(Config.S3_KEY_PREFIX, null);
     if (!StringUtils.isNullOrEmpty(s3KeyPrefix)) {
-      filter = filter + " and s3.object.key like '" + s3KeyPrefix + "%'";
+      filter = filter + " and " + S3_OBJECT_KEY + " like '" + s3KeyPrefix + "%'";
     }
     if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_IGNORE_KEY_PREFIX, null))) {
-      filter = filter + " and s3.object.key not like '" + props.getString(Config.S3_IGNORE_KEY_PREFIX) + "%'";
+      filter = filter + " and " + S3_OBJECT_KEY + " not like '" + props.getString(Config.S3_IGNORE_KEY_PREFIX) + "%'";
     }
     if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_IGNORE_KEY_SUBSTRING, null))) {
-      filter = filter + " and s3.object.key not like '%" + props.getString(Config.S3_IGNORE_KEY_SUBSTRING) + "%'";
+      filter = filter + " and " + S3_OBJECT_KEY + " not like '%" + props.getString(Config.S3_IGNORE_KEY_SUBSTRING) + "%'";
     }
     // add file format filtering by default
     // ToDo this was an urgent fix for Zendesk, we need to make this config more formal with a
     // list of extensions
     String fileExtensionFilter = props.getString(Config.S3_ACTUAL_FILE_EXTENSIONS, fileFormat);
-    filter = filter + " and s3.object.key like '%" + fileExtensionFilter + "'";
+    filter = filter + " and " + S3_OBJECT_KEY + " like '%" + fileExtensionFilter + "'";
 
     if (!StringUtils.isNullOrEmpty(props.getString(Config.S3_PATH_REGEX, null))) {
       filter = filter + generateS3KeyRegexFilter(s3KeyPrefix, props.getString(Config.S3_PATH_REGEX));
@@ -186,9 +200,9 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
 
   String generateS3KeyRegexFilter(String s3KeyPrefix, String s3PathRegex) {
     if (StringUtils.isNullOrEmpty(s3KeyPrefix)) {
-      return " and s3.object.key rlike '^" + s3PathRegex + "'";
+      return " and " + S3_OBJECT_KEY + " rlike '^" + s3PathRegex + "'";
     } else {
-      String regexFormat = " and regexp_replace(s3.object.key, '^%s', '') rlike '^%s'";
+      String regexFormat = " and regexp_replace(" + S3_OBJECT_KEY + ", '^%s', '') rlike '^%s'";
       String prefixRegexWithSlash = s3KeyPrefix.endsWith("/") ? s3KeyPrefix : s3KeyPrefix + "/";
       return String.format(regexFormat, prefixRegexWithSlash, s3PathRegex);
     }

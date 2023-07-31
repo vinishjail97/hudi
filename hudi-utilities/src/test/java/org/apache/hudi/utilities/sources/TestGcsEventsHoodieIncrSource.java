@@ -31,22 +31,27 @@ import org.apache.hudi.common.table.timeline.versioning.TimelineLayoutVersion;
 import org.apache.hudi.common.testutils.SchemaTestUtil;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.common.util.collection.Triple;
 import org.apache.hudi.config.HoodieArchivalConfig;
 import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.testutils.SparkClientFunctionalTestHarness;
 import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
+import org.apache.hudi.utilities.sources.helpers.CloudDataFetcher;
 import org.apache.hudi.utilities.sources.helpers.CloudObjectMetadata;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
-import org.apache.hudi.utilities.sources.helpers.gcs.GcsDataFetcher;
+import org.apache.hudi.utilities.sources.helpers.QueryRunner;
 import org.apache.hudi.utilities.sources.helpers.gcs.GcsObjectMetadataFetcher;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
@@ -62,9 +67,13 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import static org.apache.hudi.testutils.Assertions.assertNoWriteErrors;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.MissingCheckpointStrategy.READ_UPTO_LATEST_COMMIT;
@@ -81,6 +90,8 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
   private static final Schema GCS_METADATA_SCHEMA = SchemaTestUtil.getSchemaFromResource(
       TestGcsEventsHoodieIncrSource.class, "/delta-streamer-config/gcs-metadata.avsc", true);
 
+  private ObjectMapper mapper = new ObjectMapper();
+
   @TempDir
   protected java.nio.file.Path tempDir;
 
@@ -88,16 +99,21 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
   GcsObjectMetadataFetcher gcsObjectMetadataFetcher;
 
   @Mock
-  GcsDataFetcher gcsObjectDataFetcher;
+  CloudDataFetcher gcsObjectDataFetcher;
+
+  @Mock
+  QueryRunner queryRunner;
 
   protected FilebasedSchemaProvider schemaProvider;
   private HoodieTableMetaClient metaClient;
+  private JavaSparkContext jsc;
 
   private static final Logger LOG = LogManager.getLogger(TestGcsEventsHoodieIncrSource.class);
 
   @BeforeEach
   public void setUp() throws IOException {
     metaClient = getHoodieMetaClient(hadoopConf(), basePath());
+    jsc = JavaSparkContext.fromSparkContext(spark().sparkContext());
     MockitoAnnotations.initMocks(this);
   }
 
@@ -113,12 +129,12 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
 
     Pair<String, List<HoodieRecord>> inserts = writeGcsMetadataRecords(commitTimeForWrites);
 
-    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 0, inserts.getKey());
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 100L, 0, inserts.getKey());
 
     verify(gcsObjectMetadataFetcher, times(0)).getGcsObjectMetadata(Mockito.any(), Mockito.any(),
-            anyBoolean());
+        anyBoolean());
     verify(gcsObjectDataFetcher, times(0)).getCloudObjectDataDF(
-            Mockito.any(), Mockito.any(), Mockito.any());
+        Mockito.any(), Mockito.any(), Mockito.any());
   }
 
   @Test
@@ -143,25 +159,121 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
         DataTypes.createStructField("text", DataTypes.StringType, true)
     });
     Dataset<Row> rows = spark().createDataFrame(recs, schema);
+    List<Triple<String, Long, String>> filePathSizeAndCommitTime = new ArrayList<>();
+    // Add file paths and sizes to the list
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file1.json", 100L, "1"));
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file2.json", 150L, "1"));
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file3.json", 200L, "1"));
+    Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
     when(gcsObjectDataFetcher.getCloudObjectDataDF(Mockito.any(), eq(cloudObjectMetadataList), Mockito.any())).thenReturn(Option.of(rows));
+    when(queryRunner.run(Mockito.any())).thenReturn(inputDs);
 
-    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 4, inserts.getKey());
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 100L, 4, "1#path/to/file1.json");
 
     verify(gcsObjectMetadataFetcher, times(1)).getGcsObjectMetadata(Mockito.any(), Mockito.any(),
-            anyBoolean());
+        anyBoolean());
     verify(gcsObjectDataFetcher, times(1)).getCloudObjectDataDF(Mockito.any(),
-            eq(cloudObjectMetadataList), Mockito.any());
+        eq(cloudObjectMetadataList), Mockito.any());
+  }
+
+  @Test
+  public void testTwoFilesAndContinueInSameCommit() throws IOException {
+    String commitTimeForWrites = "2";
+    String commitTimeForReads = "1";
+
+    Pair<String, List<HoodieRecord>> inserts = writeGcsMetadataRecords(commitTimeForWrites);
+    List<CloudObjectMetadata> cloudObjectMetadataList = Arrays.asList(
+        new CloudObjectMetadata("data-file-1.json", 1),
+        new CloudObjectMetadata("data-file-2.json", 1));
+    when(gcsObjectMetadataFetcher.getGcsObjectMetadata(Mockito.any(), Mockito.any(), anyBoolean())).thenReturn(cloudObjectMetadataList);
+
+    List<Row> recs = Arrays.asList(
+        new GenericRow(new String[] {"1", "Hello 1"}),
+        new GenericRow(new String[] {"2", "Hello 2"}),
+        new GenericRow(new String[] {"3", "Hello 3"}),
+        new GenericRow(new String[] {"4", "Hello 4"})
+    );
+    StructType schema = new StructType(new StructField[] {
+        DataTypes.createStructField("id", DataTypes.StringType, true),
+        DataTypes.createStructField("text", DataTypes.StringType, true)
+    });
+    Dataset<Row> rows = spark().createDataFrame(recs, schema);
+
+    List<Triple<String, Long, String>> filePathSizeAndCommitTime = new ArrayList<>();
+    // Add file paths and sizes to the list
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file1.json", 100L, "1"));
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file2.json", 150L, "1"));
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file3.json", 200L, "1"));
+
+    Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
+
+    when(gcsObjectDataFetcher.getCloudObjectDataDF(Mockito.any(), eq(cloudObjectMetadataList), Mockito.any())).thenReturn(Option.of(rows));
+    when(queryRunner.run(Mockito.any())).thenReturn(inputDs);
+
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 250L, 4, "1#path/to/file2.json");
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file2.json"), 250L, 4, "1#path/to/file3.json");
+
+    verify(gcsObjectMetadataFetcher, times(2)).getGcsObjectMetadata(Mockito.any(), Mockito.any(),
+        anyBoolean());
+    verify(gcsObjectDataFetcher, times(2)).getCloudObjectDataDF(Mockito.any(),
+        eq(cloudObjectMetadataList), Mockito.any());
+  }
+
+  @Test
+  public void testTwoFilesAndContinueAcrossCommits() throws IOException {
+    String commitTimeForWrites = "2";
+    String commitTimeForReads = "1";
+
+    Pair<String, List<HoodieRecord>> inserts = writeGcsMetadataRecords(commitTimeForWrites);
+    List<CloudObjectMetadata> cloudObjectMetadataList = Arrays.asList(
+        new CloudObjectMetadata("data-file-1.json", 1),
+        new CloudObjectMetadata("data-file-2.json", 1));
+    when(gcsObjectMetadataFetcher.getGcsObjectMetadata(Mockito.any(), Mockito.any(), anyBoolean())).thenReturn(cloudObjectMetadataList);
+
+    List<Row> recs = Arrays.asList(
+        new GenericRow(new String[] {"1", "Hello 1"}),
+        new GenericRow(new String[] {"2", "Hello 2"}),
+        new GenericRow(new String[] {"3", "Hello 3"}),
+        new GenericRow(new String[] {"4", "Hello 4"})
+    );
+    StructType schema = new StructType(new StructField[] {
+        DataTypes.createStructField("id", DataTypes.StringType, true),
+        DataTypes.createStructField("text", DataTypes.StringType, true)
+    });
+    Dataset<Row> rows = spark().createDataFrame(recs, schema);
+
+    List<Triple<String, Long, String>> filePathSizeAndCommitTime = new ArrayList<>();
+    // Add file paths and sizes to the list
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file1.json", 100L, "1"));
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file3.json", 200L, "1"));
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file2.json", 150L, "1"));
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file4.json", 50L, "2"));
+    filePathSizeAndCommitTime.add(Triple.of("path/to/file5.json", 150L, "2"));
+
+    Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
+
+    when(gcsObjectDataFetcher.getCloudObjectDataDF(Mockito.any(), eq(cloudObjectMetadataList), Mockito.any())).thenReturn(Option.of(rows));
+    when(queryRunner.run(Mockito.any())).thenReturn(inputDs);
+
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 100L, 4, "1#path/to/file1.json");
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file1.json"), 100L, 4, "1#path/to/file2.json");
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file2.json"), 1000L, 4, "2#path/to/file5.json");
+
+    verify(gcsObjectMetadataFetcher, times(3)).getGcsObjectMetadata(Mockito.any(), Mockito.any(),
+        anyBoolean());
+    verify(gcsObjectDataFetcher, times(3)).getCloudObjectDataDF(Mockito.any(),
+        eq(cloudObjectMetadataList), Mockito.any());
   }
 
   private void readAndAssert(IncrSourceHelper.MissingCheckpointStrategy missingCheckpointStrategy,
-                             Option<String> checkpointToPull, int expectedCount, String expectedCheckpoint) {
+                             Option<String> checkpointToPull, long sourceLimit, int expectedCount, String expectedCheckpoint) {
     TypedProperties typedProperties = setProps(missingCheckpointStrategy);
 
     GcsEventsHoodieIncrSource incrSource = new GcsEventsHoodieIncrSource(typedProperties, jsc(),
-            spark(), schemaProvider, gcsObjectMetadataFetcher, gcsObjectDataFetcher);
+        spark(), schemaProvider, gcsObjectMetadataFetcher, gcsObjectDataFetcher, queryRunner);
 
-    Pair<Option<Dataset<Row>>, String> dataAndCheckpoint = incrSource.fetchNextBatch(checkpointToPull, 100);
+    Pair<Option<Dataset<Row>>, String> dataAndCheckpoint = incrSource.fetchNextBatch(checkpointToPull, sourceLimit);
 
     Option<Dataset<Row>> datasetOpt = dataAndCheckpoint.getLeft();
     String nextCheckPoint = dataAndCheckpoint.getRight();
@@ -174,7 +286,7 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
       assertEquals(datasetOpt.get().count(), expectedCount);
     }
 
-    Assertions.assertEquals(nextCheckPoint, expectedCheckpoint);
+    Assertions.assertEquals(expectedCheckpoint, nextCheckPoint);
   }
 
   private HoodieRecord getGcsMetadataRecord(String commitTime, String filename, String bucketName, String generation) {
@@ -215,11 +327,11 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
 
   private HoodieWriteConfig getWriteConfig() {
     return getConfigBuilder(basePath(), metaClient)
-            .withArchivalConfig(HoodieArchivalConfig.newBuilder().archiveCommitsWith(2, 3).build())
-            .withCleanConfig(HoodieCleanConfig.newBuilder().retainCommits(1).build())
-            .withMetadataConfig(HoodieMetadataConfig.newBuilder()
-                    .withMaxNumDeltaCommitsBeforeCompaction(1).build())
-            .build();
+        .withArchivalConfig(HoodieArchivalConfig.newBuilder().archiveCommitsWith(2, 3).build())
+        .withCleanConfig(HoodieCleanConfig.newBuilder().retainCommits(1).build())
+        .withMetadataConfig(HoodieMetadataConfig.newBuilder()
+            .withMaxNumDeltaCommitsBeforeCompaction(1).build())
+        .build();
   }
 
   private Pair<String, List<HoodieRecord>> writeGcsMetadataRecords(String commitTime) throws IOException {
@@ -228,10 +340,10 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
 
     writeClient.startCommitWithTime(commitTime);
     List<HoodieRecord> gcsMetadataRecords = Arrays.asList(
-            getGcsMetadataRecord(commitTime, "data-file-1.json", "bucket-1", "1"),
-            getGcsMetadataRecord(commitTime, "data-file-2.json", "bucket-1", "1"),
-            getGcsMetadataRecord(commitTime, "data-file-3.json", "bucket-1", "1"),
-            getGcsMetadataRecord(commitTime, "data-file-4.json", "bucket-1", "1")
+        getGcsMetadataRecord(commitTime, "data-file-1.json", "bucket-1", "1"),
+        getGcsMetadataRecord(commitTime, "data-file-2.json", "bucket-1", "1"),
+        getGcsMetadataRecord(commitTime, "data-file-3.json", "bucket-1", "1"),
+        getGcsMetadataRecord(commitTime, "data-file-4.json", "bucket-1", "1")
     );
     JavaRDD<WriteStatus> result = writeClient.upsert(jsc().parallelize(gcsMetadataRecords, 1), commitTime);
 
@@ -245,20 +357,45 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     Properties properties = new Properties();
     properties.setProperty("hoodie.deltastreamer.source.hoodieincr.path", basePath());
     properties.setProperty("hoodie.deltastreamer.source.hoodieincr.missing.checkpoint.strategy",
-            missingCheckpointStrategy.name());
+        missingCheckpointStrategy.name());
     properties.setProperty("hoodie.deltastreamer.source.gcsincr.datafile.format", "json");
     return new TypedProperties(properties);
   }
 
   private HoodieWriteConfig.Builder getConfigBuilder(String basePath, HoodieTableMetaClient metaClient) {
     return HoodieWriteConfig.newBuilder()
-            .withPath(basePath)
-            .withSchema(GCS_METADATA_SCHEMA.toString())
-            .withParallelism(2, 2)
-            .withBulkInsertParallelism(2)
-            .withFinalizeWriteParallelism(2).withDeleteParallelism(2)
-            .withTimelineLayoutVersion(TimelineLayoutVersion.CURR_VERSION)
-            .forTable(metaClient.getTableConfig().getTableName());
+        .withPath(basePath)
+        .withSchema(GCS_METADATA_SCHEMA.toString())
+        .withParallelism(2, 2)
+        .withBulkInsertParallelism(2)
+        .withFinalizeWriteParallelism(2).withDeleteParallelism(2)
+        .withTimelineLayoutVersion(TimelineLayoutVersion.CURR_VERSION)
+        .forTable(metaClient.getTableConfig().getTableName());
   }
 
+  private String generateGCSEventMetadata(Long objectSize, String bucketName, String objectKey, String commitTime)
+      throws JsonProcessingException {
+    Map<String, Object> objectMetadata = new HashMap<>();
+    objectMetadata.put("bucket", bucketName);
+    objectMetadata.put("name", objectKey);
+    objectMetadata.put("size", objectSize);
+    objectMetadata.put("_hoodie_commit_time", commitTime);
+    return mapper.writeValueAsString(objectMetadata);
+  }
+
+  private List<String> getSampleGCSObjectKeys(List<Triple<String, Long, String>> filePathSizeAndCommitTime) {
+    return filePathSizeAndCommitTime.stream().map(f -> {
+      try {
+        return generateGCSEventMetadata(f.getMiddle(), "bucket-1", f.getLeft(), f.getRight());
+      } catch (JsonProcessingException e) {
+        throw new RuntimeException(e);
+      }
+    }).collect(Collectors.toList());
+  }
+
+  private Dataset<Row> generateDataset(List<Triple<String, Long, String>> filePathSizeAndCommitTime) {
+    JavaRDD<String> testRdd = jsc.parallelize(getSampleGCSObjectKeys(filePathSizeAndCommitTime), 2);
+    Dataset<Row> inputDs = spark().read().json(testRdd);
+    return inputDs;
+  }
 }

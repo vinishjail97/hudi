@@ -27,6 +27,7 @@ import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.hive.SlashEncodedDayPartitionValueExtractor;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
+import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -128,21 +129,23 @@ public class HoodieIncrSource extends RowSource {
     Option<String> beginInstant =
         lastCkptStr.isPresent() ? lastCkptStr.get().isEmpty() ? Option.empty() : lastCkptStr : Option.empty();
 
-    Pair<String, Pair<String, String>> queryTypeAndInstantEndpts = IncrSourceHelper.calculateBeginAndEndInstants(sparkContext, srcPath,
-        numInstantsPerFetch, beginInstant, missingCheckpointStrategy);
+    QueryInfo queryInfo = IncrSourceHelper.generateQueryInfo(sparkContext, srcPath,
+        numInstantsPerFetch, beginInstant, missingCheckpointStrategy,
+        HoodieRecord.COMMIT_TIME_METADATA_FIELD, HoodieRecord.RECORD_KEY_METADATA_FIELD,
+        null, false, Option.empty());
 
-    if (queryTypeAndInstantEndpts.getValue().getKey().equals(queryTypeAndInstantEndpts.getValue().getValue())) {
-      LOG.warn("Already caught up. Begin Checkpoint was :" + queryTypeAndInstantEndpts.getValue().getKey());
-      return Pair.of(Option.empty(), queryTypeAndInstantEndpts.getValue().getKey());
+    if (queryInfo.areStartAndEndInstantsEqual()) {
+      LOG.info("Already caught up. No new data to process");
+      return Pair.of(Option.empty(), queryInfo.getEndInstant());
     }
 
     Dataset<Row> source = null;
     // Do Incr pull. Set end instant if available
-    if (queryTypeAndInstantEndpts.getKey().equals(DataSourceReadOptions.QUERY_TYPE_INCREMENTAL_OPT_VAL())) {
+    if (queryInfo.isIncremental()) {
       source = sparkSession.read().format("org.apache.hudi")
           .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_INCREMENTAL_OPT_VAL())
-          .option(DataSourceReadOptions.BEGIN_INSTANTTIME().key(), queryTypeAndInstantEndpts.getValue().getLeft())
-          .option(DataSourceReadOptions.END_INSTANTTIME().key(), queryTypeAndInstantEndpts.getValue().getRight())
+          .option(DataSourceReadOptions.BEGIN_INSTANTTIME().key(), queryInfo.getStartInstant())
+          .option(DataSourceReadOptions.END_INSTANTTIME().key(), queryInfo.getEndInstant())
           .option(DataSourceReadOptions.INCREMENTAL_FALLBACK_TO_FULL_TABLE_SCAN_FOR_NON_EXISTING_FILES().key(),
               props.getString(DataSourceReadOptions.INCREMENTAL_FALLBACK_TO_FULL_TABLE_SCAN_FOR_NON_EXISTING_FILES().key(),
                   DataSourceReadOptions.INCREMENTAL_FALLBACK_TO_FULL_TABLE_SCAN_FOR_NON_EXISTING_FILES().defaultValue()))
@@ -154,9 +157,9 @@ public class HoodieIncrSource extends RowSource {
           .load(srcPath)
           // add filtering so that only interested records are returned.
           .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD,
-              queryTypeAndInstantEndpts.getRight().getLeft()))
+              queryInfo.getStartInstant()))
           .filter(String.format("%s <= '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD,
-              queryTypeAndInstantEndpts.getRight().getRight()));
+              queryInfo.getEndInstant()));
     }
 
     /*
@@ -188,6 +191,6 @@ public class HoodieIncrSource extends RowSource {
         HoodieRecord.HOODIE_META_COLUMNS.stream().filter(x -> !x.equals(HoodieRecord.PARTITION_PATH_METADATA_FIELD)).toArray(String[]::new);
     final Dataset<Row> src = source.drop(colsToDrop);
     // log.info("Final Schema from Source is :" + src.schema());
-    return Pair.of(Option.of(src), queryTypeAndInstantEndpts.getRight().getRight());
+    return Pair.of(Option.of(src), queryInfo.getEndInstant());
   }
 }

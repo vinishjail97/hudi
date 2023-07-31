@@ -27,6 +27,7 @@ import org.apache.hudi.exception.HoodieException;
 import java.io.Serializable;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Function;
@@ -94,7 +95,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
   @Override
   public HoodieTimeline filterPendingExcludingCompaction() {
     return new HoodieDefaultTimeline(instants.stream().filter(instant -> (!instant.isCompleted())
-            && (!instant.getAction().equals(HoodieTimeline.COMPACTION_ACTION))), details);
+        && (!instant.getAction().equals(HoodieTimeline.COMPACTION_ACTION))), details);
   }
 
   @Override
@@ -119,7 +120,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
   @Override
   public HoodieTimeline filterCompletedAndCompactionInstants() {
     return new HoodieDefaultTimeline(instants.stream().filter(s -> s.isCompleted()
-            || s.getAction().equals(HoodieTimeline.COMPACTION_ACTION)), details);
+        || s.getAction().equals(HoodieTimeline.COMPACTION_ACTION)), details);
   }
 
   @Override
@@ -198,6 +199,12 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
   }
 
   @Override
+  public HoodieDefaultTimeline findInstantsInClosedRange(String startTs, String endTs) {
+    return new HoodieDefaultTimeline(
+        instants.stream().filter(instant -> HoodieTimeline.isInClosedRange(instant.getTimestamp(), startTs, endTs)), details);
+  }
+
+  @Override
   public HoodieDefaultTimeline findInstantsAfter(String instantTime, int numCommits) {
     return new HoodieDefaultTimeline(instants.stream()
         .filter(s -> compareTimestamps(s.getTimestamp(), GREATER_THAN, instantTime)).limit(numCommits),
@@ -220,8 +227,15 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
   @Override
   public HoodieDefaultTimeline findInstantsBefore(String instantTime) {
     return new HoodieDefaultTimeline(instants.stream()
-            .filter(s -> compareTimestamps(s.getTimestamp(), LESSER_THAN, instantTime)),
-            details);
+        .filter(s -> compareTimestamps(s.getTimestamp(), LESSER_THAN, instantTime)),
+        details);
+  }
+
+  @Override
+  public Option<HoodieInstant> findInstantBefore(String instantTime) {
+    return Option.fromJavaOptional(instants.stream()
+        .filter(instant -> compareTimestamps(instant.getTimestamp(), LESSER_THAN, instantTime))
+        .max(Comparator.comparing(HoodieInstant::getTimestamp)));
   }
 
   @Override
@@ -276,7 +290,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
    */
   public HoodieTimeline getDeltaCommitTimeline() {
     return new HoodieDefaultTimeline(filterInstantsByAction(DELTA_COMMIT_ACTION),
-            (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
+        (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
   }
 
   /**
@@ -286,7 +300,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
    */
   public HoodieTimeline getTimelineOfActions(Set<String> actions) {
     return new HoodieDefaultTimeline(getInstants().filter(s -> actions.contains(s.getAction())),
-            (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
+        (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
   }
 
   /**
@@ -294,7 +308,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
    */
   public HoodieTimeline getCleanerTimeline() {
     return new HoodieDefaultTimeline(filterInstantsByAction(CLEAN_ACTION),
-            (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
+        (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
   }
 
   /**
@@ -309,7 +323,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
    * Get only the rollback and restore action (inflight and completed) in the active timeline.
    */
   public HoodieTimeline getRollbackAndRestoreTimeline() {
-    return  getTimelineOfActions(CollectionUtils.createSet(ROLLBACK_ACTION, RESTORE_ACTION));
+    return getTimelineOfActions(CollectionUtils.createSet(ROLLBACK_ACTION, RESTORE_ACTION));
   }
 
   /**
@@ -317,7 +331,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
    */
   public HoodieTimeline getSavePointTimeline() {
     return new HoodieDefaultTimeline(filterInstantsByAction(SAVEPOINT_ACTION),
-            (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
+        (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
   }
 
   /**
@@ -325,7 +339,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
    */
   public HoodieTimeline getRestoreTimeline() {
     return new HoodieDefaultTimeline(filterInstantsByAction(RESTORE_ACTION),
-            (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
+        (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails);
   }
 
   protected Stream<HoodieInstant> filterInstantsByAction(String action) {
@@ -429,7 +443,7 @@ public class HoodieDefaultTimeline implements HoodieTimeline {
     }
     return firstNonSavepointCommit;
   }
-  
+
   @Override
   public Option<byte[]> getInstantDetails(HoodieInstant instant) {
     return details.apply(instant);

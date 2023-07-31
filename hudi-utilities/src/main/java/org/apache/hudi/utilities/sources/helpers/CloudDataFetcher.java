@@ -16,11 +16,10 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.utilities.sources.helpers.gcs;
+package org.apache.hudi.utilities.sources.helpers;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.utilities.sources.helpers.CloudObjectMetadata;
 
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -34,19 +33,19 @@ import java.util.List;
 import static org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon.loadAsDataset;
 
 /**
- * Connects to GCS from Spark and downloads data from a given list of files.
- * Assumes SparkContext is already configured with GCS options through GcsEventsHoodieIncrSource.addGcsAccessConfs().
+ * Connects to S3/GCS from Spark and downloads data from a given list of files.
+ * Assumes SparkContext is already configured.
  */
-public class GcsDataFetcher implements Serializable {
+public class CloudDataFetcher implements Serializable {
 
   private final String fileFormat;
   private TypedProperties props;
 
-  private static final Logger LOG = LogManager.getLogger(GcsDataFetcher.class);
+  private static final Logger LOG = LogManager.getLogger(CloudDataFetcher.class);
 
   private static final long serialVersionUID = 1L;
 
-  public GcsDataFetcher(TypedProperties props, String fileFormat) {
+  public CloudDataFetcher(TypedProperties props, String fileFormat) {
     this.fileFormat = fileFormat;
     this.props = props;
   }
