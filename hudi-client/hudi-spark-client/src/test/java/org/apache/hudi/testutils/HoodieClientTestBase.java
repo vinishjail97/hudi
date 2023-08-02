@@ -39,6 +39,7 @@ import org.apache.hudi.common.table.view.SyncableFileSystemView;
 import org.apache.hudi.common.testutils.HoodieTestDataGenerator;
 import org.apache.hudi.common.testutils.RawTripTestPayload;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.config.HoodieCompactionConfig;
 import org.apache.hudi.config.HoodieIndexConfig;
@@ -154,7 +155,7 @@ public class HoodieClientTestBase extends HoodieClientTestHarness {
    */
   public HoodieWriteConfig.Builder getConfigBuilder(String schemaStr, IndexType indexType,
                                                     HoodieFailedWritesCleaningPolicy cleaningPolicy) {
-    return HoodieWriteConfig.newBuilder().withPath(basePath).withSchema(schemaStr)
+    HoodieWriteConfig.Builder builder = HoodieWriteConfig.newBuilder().withPath(basePath)
         .withParallelism(2, 2).withBulkInsertParallelism(2).withFinalizeWriteParallelism(2).withDeleteParallelism(2)
         .withTimelineLayoutVersion(TimelineLayoutVersion.CURR_VERSION)
         .withWriteStatusClass(MetadataMergeWriteStatus.class)
@@ -168,6 +169,10 @@ public class HoodieClientTestBase extends HoodieClientTestHarness {
             .withEnableBackupForRemoteFileSystemView(false) // Fail test if problem connecting to timeline-server
             .withRemoteServerPort(timelineServicePort)
             .withStorageType(FileSystemViewStorageType.EMBEDDED_KV_STORE).build());
+    if (StringUtils.nonEmpty(schemaStr)) {
+      builder.withSchema(schemaStr);
+    }
+    return builder;
   }
 
   public HoodieSparkTable getHoodieTable(HoodieTableMetaClient metaClient, HoodieWriteConfig config) {
