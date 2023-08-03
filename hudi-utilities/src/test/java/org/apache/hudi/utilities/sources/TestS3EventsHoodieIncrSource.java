@@ -36,6 +36,7 @@ import org.apache.hudi.config.HoodieArchivalConfig;
 import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.testutils.SparkClientFunctionalTestHarness;
+import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.CloudDataFetcher;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
@@ -46,6 +47,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.GenericData;
 import org.apache.avro.generic.GenericRecord;
+import org.apache.hudi.utilities.sources.helpers.TestCloudObjectsSelectorCommon;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
@@ -75,6 +77,7 @@ import java.util.stream.Stream;
 import static org.apache.hudi.testutils.Assertions.assertNoWriteErrors;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.MissingCheckpointStrategy.READ_UPTO_LATEST_COMMIT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -103,8 +106,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
           PATH_ONE + "subpath3/Q4_2021/summary.txt",
           PATH_ONE + "subpath4/subpath3/Q4_2021/summary.txt");
 
-  @Mock
-  private SchemaProvider mockSchemaProvider;
+  private Option<SchemaProvider> schemaProvider;
   @Mock
   QueryRunner mockQueryRunner;
   @Mock
@@ -116,6 +118,11 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
   public void setUp() throws IOException {
     jsc = JavaSparkContext.fromSparkContext(spark().sparkContext());
     metaClient = getHoodieMetaClient(hadoopConf(), basePath());
+    String schemaFilePath = TestCloudObjectsSelectorCommon.class.getClassLoader().getResource("schema/sample_gcs_data.avsc").getPath();
+    TypedProperties props = new TypedProperties();
+    props.put("hoodie.deltastreamer.schemaprovider.source.schema.file", schemaFilePath);
+    props.put("hoodie.deltastreamer.schema.provider.class.name", FilebasedSchemaProvider.class.getName());
+    this.schemaProvider = Option.of(new FilebasedSchemaProvider(props, jsc));
   }
 
   @ParameterizedTest
@@ -133,7 +140,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
 
     S3EventsHoodieIncrSource s3EventsHoodieIncrSource = new S3EventsHoodieIncrSource(
         createPropsForS3EventsHoodieIncrSource(basePath(), keyPrefix, fileExtension, pathRegex),
-        jsc, spark(), mockSchemaProvider);
+        jsc, spark(), schemaProvider.get());
     List<String> resultKeys = s3EventsHoodieIncrSource.applyFilter(inputDs, fileFormat)
         .select("s3.object.key").collectAsList()
         .stream().map(row -> row.getString(0)).sorted().collect(Collectors.toList());
@@ -193,7 +200,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
   public void testGenerateS3RegexFilters(String keyPrefix, String pathRegex, String expectedFilter) {
     S3EventsHoodieIncrSource s3EventsHoodieIncrSource = new S3EventsHoodieIncrSource(
         createPropsForS3EventsHoodieIncrSource(basePath(), keyPrefix, ".unused", pathRegex),
-        jsc, spark(), mockSchemaProvider);
+        jsc, spark(), schemaProvider.get());
     assertEquals(expectedFilter, s3EventsHoodieIncrSource.generateS3KeyRegexFilter(keyPrefix,
         pathRegex));
   }
@@ -392,7 +399,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
     when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
-    when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any()))
+    when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
         .thenReturn(Option.empty());
 
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 100L, "commit1#path/to/file1.json");
@@ -416,7 +423,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
     when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
-    when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any()))
+    when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
         .thenReturn(Option.empty());
 
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 250L, "commit1#path/to/file2.json");
@@ -442,12 +449,16 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
     when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
-    when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any()))
+    when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
         .thenReturn(Option.empty());
 
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("commit1"), 100L, "commit1#path/to/file1.json");
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("commit1#path/to/file1.json"), 100L, "commit1#path/to/file2.json");
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("commit1#path/to/file2.json"), 1000L, "commit2#path/to/file5.json");
+    schemaProvider = Option.empty();
+    when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
+        .thenReturn(Option.empty());
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("commit1"), 100L, "commit1#path/to/file1.json");
   }
 
   private void readAndAssert(IncrSourceHelper.MissingCheckpointStrategy missingCheckpointStrategy,
@@ -455,7 +466,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
     TypedProperties typedProperties = setProps(missingCheckpointStrategy);
 
     S3EventsHoodieIncrSource incrSource = new S3EventsHoodieIncrSource(typedProperties, jsc(),
-        spark(), mockSchemaProvider, mockQueryRunner, mockCloudDataFetcher);
+        spark(), schemaProvider.orElse(null), mockQueryRunner, mockCloudDataFetcher);
 
     Pair<Option<Dataset<Row>>, String> dataAndCheckpoint = incrSource.fetchNextBatch(checkpointToPull, sourceLimit);
 

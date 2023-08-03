@@ -68,6 +68,8 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
   private final QueryRunner queryRunner;
   private final CloudDataFetcher cloudDataFetcher;
 
+  private final Option<SchemaProvider> schemaProvider;
+
   public static class Config {
     // control whether we do existence check for files before consuming them
     static final String ENABLE_EXISTS_CHECK = "hoodie.deltastreamer.source.s3incr.check.file.exists";
@@ -122,6 +124,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     this.missingCheckpointStrategy = getMissingCheckpointStrategy(props);
     this.queryRunner = queryRunner;
     this.cloudDataFetcher = cloudDataFetcher;
+    this.schemaProvider = Option.ofNullable(schemaProvider);
   }
 
   @Override
@@ -170,7 +173,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
         .collectAsList();
     LOG.info("Total number of files to process :" + cloudObjectMetadata.size());
 
-    Option<Dataset<Row>> datasetOption = cloudDataFetcher.getCloudObjectDataDF(sparkSession, cloudObjectMetadata, props);
+    Option<Dataset<Row>> datasetOption = cloudDataFetcher.getCloudObjectDataDF(sparkSession, cloudObjectMetadata, props, schemaProvider);
     return Pair.of(datasetOption, checkPointAndDataset.getLeft().toString());
   }
 

@@ -18,6 +18,8 @@
 
 package org.apache.hudi.utilities.sources.helpers;
 
+import org.apache.avro.Schema;
+import org.apache.hudi.AvroConversionUtils;
 import org.apache.hudi.common.config.SerializableConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.fs.FSUtils;
@@ -25,6 +27,8 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.exception.HoodieException;
 import org.apache.hudi.exception.HoodieIOException;
+import org.apache.hudi.utilities.schema.SchemaProvider;
+import org.apache.hudi.utilities.sources.InputBatch;
 import org.apache.hudi.utilities.sources.S3EventsHoodieIncrSource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -143,7 +147,8 @@ public class CloudObjectsSelectorCommon {
     }
   }
 
-  public static Option<Dataset<Row>> loadAsDataset(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata, TypedProperties props, String fileFormat) {
+  public static Option<Dataset<Row>> loadAsDataset(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata,
+                                                   TypedProperties props, String fileFormat, Option<SchemaProvider> schemaProviderOption) {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Extracted distinct files " + cloudObjectMetadata.size()
           + " and some samples " + cloudObjectMetadata.stream().map(CloudObjectMetadata::getPath).limit(10).collect(Collectors.toList()));
@@ -153,6 +158,12 @@ public class CloudObjectsSelectorCommon {
       return Option.empty();
     }
     DataFrameReader reader = spark.read().format(fileFormat);
+    if (schemaProviderOption.isPresent()) {
+      Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
+      if (sourceSchema != null && !sourceSchema.equals(InputBatch.NULL_SCHEMA)) {
+        reader = reader.schema(AvroConversionUtils.convertAvroSchemaToStructType(sourceSchema));
+      }
+    }
     String datasourceOpts = props.getString(CloudStoreIngestionConfig.SPARK_DATASOURCE_OPTIONS, null);
     if (StringUtils.isNullOrEmpty(datasourceOpts)) {
       // fall back to legacy config for BWC. TODO consolidate in HUDI-6020
@@ -200,5 +211,9 @@ public class CloudObjectsSelectorCommon {
       }
     }
     return Option.of(dataset);
+  }
+
+  public static Option<Dataset<Row>> loadAsDataset(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata, TypedProperties props, String fileFormat) {
+    return loadAsDataset(spark, cloudObjectMetadata, props, fileFormat, Option.empty());
   }
 }
