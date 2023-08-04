@@ -1052,3 +1052,10 @@ ab4c3f61979 Adding support for comma separated path format for spark.read.load (
 ---[2023-07-27 11:09:18] [release-v0.21.2] ---
 e367c87aa1 [ONHS-10136] Move min and max instants to a static function (#345)
 f026247c45 [AUDIT-232] Upgrade to version release-v0.21.1 (#342)
+
+---[2023-08-03 22:44:17] [release-v0.22.0] Adding release tag for hudi-internal release-v0.22.0---
+ddd11b283 Adding support for schema while loading spark dataset in s3 source (#348)
+19f9f9658 [ONHS-10457] Fix NPE for writer schema null (#349)
+0c2b0a7a9 [ONHS-7069] Changes for s3/gcs IncrSource job to taken into sourceLimit during ingestion (#340)
+0dc0616a9 [ONHS-10250] Add logs for meta sync (#344)
+cf1952ca9 [ONHS-10136] Upgrade to version release-v0.21.2 (#346)
