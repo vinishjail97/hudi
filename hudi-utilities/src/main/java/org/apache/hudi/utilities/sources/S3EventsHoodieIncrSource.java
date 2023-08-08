@@ -105,7 +105,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       SparkSession sparkSession,
       SchemaProvider schemaProvider) {
     this(props, sparkContext, sparkSession, schemaProvider, new QueryRunner(sparkSession, props),
-        new CloudDataFetcher(props, props.getString(DATAFILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT)));
+        new CloudDataFetcher(props, props.getString(DATAFILE_FORMAT, props.getString(SOURCE_FILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT))));
   }
 
   public S3EventsHoodieIncrSource(
@@ -120,7 +120,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     this.srcPath = props.getString(HOODIE_SRC_BASE_PATH);
     this.numInstantsPerFetch = props.getInteger(NUM_INSTANTS_PER_FETCH, DEFAULT_NUM_INSTANTS_PER_FETCH);
     this.checkIfFileExists = props.getBoolean(Config.ENABLE_EXISTS_CHECK, Config.DEFAULT_ENABLE_EXISTS_CHECK);
-    this.fileFormat = props.getString(SOURCE_FILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT);
+    this.fileFormat = props.getString(DATAFILE_FORMAT, props.getString(SOURCE_FILE_FORMAT, DEFAULT_SOURCE_FILE_FORMAT));
     this.missingCheckpointStrategy = getMissingCheckpointStrategy(props);
     this.queryRunner = queryRunner;
     this.cloudDataFetcher = cloudDataFetcher;
