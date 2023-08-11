@@ -1063,3 +1063,11 @@ cf1952ca9 [ONHS-10136] Upgrade to version release-v0.21.2 (#346)
 ---[2023-08-09 12:59:14] [release-v0.22.1] upgrade release tag for hudi-internal release-v0.22.1---
 8d73d1ffc1a [ONHS-10659] - Making both s3 and gcs incr job to work on both DATAFILE_FORMAT or SOURCE_FILE_FORMAT (#351)
 d2108675ac1 [AUDIT-259] Upgrade to version release-v0.22.0 (#350)
+
+---[2023-08-11 14:18:51] [release-v0.23.0] Adding release tag for hudi-internal release-v0.23.0---
+657425c06 [ONHS-10771] - Handling empty commit for s3 incr job  (#358)
+dcbfe6a79 [AUDIT-271] Upgrade to version release-v0.22.2 (#357)
+aa4c229c6 [ONHS-10713] - Fixing the info log to fetch column value by name instead of index (#355)
+f3c7afe4a [AUDIT-265]Upgrade to version release-v0.22.1 (#353)
+8d73d1ffc [ONHS-10659] - Making both s3 and gcs incr job to work on both DATAFILE_FORMAT or SOURCE_FILE_FORMAT (#351)
+d2108675a [AUDIT-259] Upgrade to version release-v0.22.0 (#350)
