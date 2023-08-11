@@ -168,19 +168,17 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
     }
 
     Dataset<Row> cloudObjectMetadataDF = queryRunner.run(queryInfo);
-    if (cloudObjectMetadataDF.isEmpty()) {
-      LOG.info("Source of file names is empty. Returning empty result and endInstant: "
-          + queryInfo.getEndInstant());
-      return Pair.of(Option.empty(), queryInfo.getEndInstant());
-    }
-
     LOG.info("Adjusting end checkpoint:" + queryInfo.getEndInstant() + " based on sourceLimit :" + sourceLimit);
-    Pair<CloudObjectIncrCheckpoint, Dataset<Row>> checkPointAndDataset =
+    Pair<CloudObjectIncrCheckpoint, Option<Dataset<Row>>> checkPointAndDataset =
         IncrSourceHelper.filterAndGenerateCheckpointBasedOnSourceLimit(
             cloudObjectMetadataDF, sourceLimit, queryInfo, cloudObjectIncrCheckpoint);
+    if (!checkPointAndDataset.getRight().isPresent()) {
+      LOG.info("Empty source, returning endpoint:" + queryInfo.getEndInstant());
+      return Pair.of(Option.empty(), queryInfo.getEndInstant());
+    }
     LOG.info("Adjusted end checkpoint :" + checkPointAndDataset.getLeft());
 
-    Pair<Option<Dataset<Row>>, String> extractedCheckPointAndDataset = extractData(queryInfo, checkPointAndDataset.getRight());
+    Pair<Option<Dataset<Row>>, String> extractedCheckPointAndDataset = extractData(queryInfo, checkPointAndDataset.getRight().get());
     return Pair.of(extractedCheckPointAndDataset.getLeft(), checkPointAndDataset.getLeft().toString());
   }
 
