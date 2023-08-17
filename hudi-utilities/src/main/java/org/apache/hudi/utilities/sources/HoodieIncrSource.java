@@ -23,12 +23,14 @@ import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.hive.SlashEncodedDayPartitionValueExtractor;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 
+import org.apache.hudi.utilities.sources.helpers.SnapshotLoadQuerySplitter;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -38,9 +40,12 @@ import org.apache.spark.sql.SparkSession;
 
 import java.util.Collections;
 
+import static org.apache.hudi.utilities.sources.helpers.SnapshotLoadQuerySplitter.Config.SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME;
+
 public class HoodieIncrSource extends RowSource {
 
   private static final Logger LOG = LogManager.getLogger(HoodieIncrSource.class);
+  private final Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitter;
 
   public static class Config {
 
@@ -101,6 +106,10 @@ public class HoodieIncrSource extends RowSource {
   public HoodieIncrSource(TypedProperties props, JavaSparkContext sparkContext, SparkSession sparkSession,
                           SchemaProvider schemaProvider) {
     super(props, sparkContext, sparkSession, schemaProvider);
+
+    this.snapshotLoadQuerySplitter = Option.ofNullable(props.getString(SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME, null))
+        .map(className -> (SnapshotLoadQuerySplitter) ReflectionUtils.loadClass(className,
+              new Class<?>[]{TypedProperties.class}, props));
   }
 
   @Override
@@ -152,9 +161,13 @@ public class HoodieIncrSource extends RowSource {
           .load(srcPath);
     } else {
       // if checkpoint is missing from source table, and if strategy is set to READ_UPTO_LATEST_COMMIT, we have to issue snapshot query
-      source = sparkSession.read().format("org.apache.hudi")
+      Dataset<Row> snapshot = sparkSession.read().format("org.apache.hudi")
           .option(DataSourceReadOptions.QUERY_TYPE().key(), DataSourceReadOptions.QUERY_TYPE_SNAPSHOT_OPT_VAL())
-          .load(srcPath)
+          .load(srcPath);
+      if (snapshotLoadQuerySplitter.isPresent()) {
+        queryInfo = snapshotLoadQuerySplitter.get().getNextCheckpoint(snapshot, queryInfo);
+      }
+      source = snapshot
           // add filtering so that only interested records are returned.
           .filter(String.format("%s > '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD,
               queryInfo.getStartInstant()))
