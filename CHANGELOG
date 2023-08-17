@@ -1075,3 +1075,7 @@ d2108675a [AUDIT-259] Upgrade to version release-v0.22.0 (#350)
 ---[2023-08-17 23:18:43] [release-v0.23.1] upgrade release tag for hudi-internal release-v0.23.1---
 328ddface72 Incremental load for SnapshotQueryLoad  (#347)
 852d720ce6b [AUDIT-273] Upgrade to version release-v0.23.0 (#359)
+
+---[2023-08-17 15:30:26] [release-v0.23.2] Adding release tag for hudi-internal release-v0.23.2---
+19eac1e9c Defaulting previous Instant time to init time to enable full read of initial commit
+e211de128 Upgrade to version release-v0.23.1
