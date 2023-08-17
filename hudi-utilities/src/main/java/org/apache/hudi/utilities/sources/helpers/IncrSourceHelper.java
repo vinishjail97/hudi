@@ -50,7 +50,7 @@ import static org.apache.spark.sql.functions.sum;
 public class IncrSourceHelper {
 
   private static final Logger LOG = LogManager.getLogger(IncrSourceHelper.class);
-  public static final String DEFAULT_BEGIN_TIMESTAMP = "000";
+  public static final String DEFAULT_BEGIN_TIMESTAMP = HoodieTimeline.INIT_INSTANT_TS;
   private static final String CUMULATIVE_COLUMN_NAME = "cumulativeSize";
 
   /**
@@ -132,7 +132,7 @@ public class IncrSourceHelper {
       }
     });
 
-    String previousInstantTime = beginInstantTime;
+    String previousInstantTime = DEFAULT_BEGIN_TIMESTAMP;
     if (!beginInstantTime.equals(DEFAULT_BEGIN_TIMESTAMP)) {
       Option<HoodieInstant> previousInstant = activeCommitTimeline.findInstantBefore(beginInstantTime);
       if (previousInstant.isPresent()) {
@@ -173,8 +173,8 @@ public class IncrSourceHelper {
    * @return end instants along with filtered rows.
    */
   public static Pair<CloudObjectIncrCheckpoint, Option<Dataset<Row>>> filterAndGenerateCheckpointBasedOnSourceLimit(Dataset<Row> sourceData,
-                                                                                                            long sourceLimit, QueryInfo queryInfo,
-                                                                                                            CloudObjectIncrCheckpoint cloudObjectIncrCheckpoint) {
+                                                                                                                    long sourceLimit, QueryInfo queryInfo,
+                                                                                                                    CloudObjectIncrCheckpoint cloudObjectIncrCheckpoint) {
     if (sourceData.isEmpty()) {
       return Pair.of(cloudObjectIncrCheckpoint, Option.empty());
     }
