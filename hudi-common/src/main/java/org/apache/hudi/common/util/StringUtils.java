@@ -142,4 +142,14 @@ public class StringUtils {
     }
     return Stream.of(input.split(delimiter)).map(String::trim).filter(s -> !s.isEmpty()).collect(Collectors.toList());
   }
+
+  public static String truncate(String str, int headLength, int tailLength) {
+    if (isNullOrEmpty(str) || str.length() <= headLength + tailLength) {
+      return str;
+    }
+    String head = str.substring(0, headLength);
+    String tail = str.substring(str.length() - tailLength);
+
+    return head + "..." + tail;
+  }
 }
