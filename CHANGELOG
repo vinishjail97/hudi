@@ -1079,3 +1079,10 @@ d2108675a [AUDIT-259] Upgrade to version release-v0.22.0 (#350)
 ---[2023-08-17 15:30:26] [release-v0.23.2] Adding release tag for hudi-internal release-v0.23.2---
 19eac1e9c Defaulting previous Instant time to init time to enable full read of initial commit
 e211de128 Upgrade to version release-v0.23.1
+
+---[2023-08-18 10:51:14] [release-v0.24.0] ---
+0fb92a03c [ONHS-9819] Fix schema fetch failed exception message, truncate url (#354)
+1a42e7e9c [ONHS-10908] Defaulting previous Instant time to init time to enable full read of initial commit (#364)
+7562b2cba [AUDIT-282] Upgrade to version release-v0.23.2 (#365)
+09144e545 [ONHS-10908] Defaulting previous Instant time to init time to enable full read of initial commit (#362)
+ca41aeaca [ONHS-10270] Upgrade to version release-v0.23.1 (#361)
