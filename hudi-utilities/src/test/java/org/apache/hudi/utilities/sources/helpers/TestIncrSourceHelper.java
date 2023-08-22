@@ -340,29 +340,45 @@ class TestIncrSourceHelper extends SparkClientFunctionalTestHarness {
 
   @Test
   void testQueryInfoGeneration() throws IOException {
-    String commitTimeForReads = "1";
-    String commitTimeForWrites = "2";
+    Pair<String, List<HoodieRecord>> inserts = writeS3MetadataRecords("1");
+    inserts = writeS3MetadataRecords("2");
+    inserts = writeS3MetadataRecords("3");
+    inserts = writeS3MetadataRecords("4");
 
-    Pair<String, List<HoodieRecord>> inserts = writeS3MetadataRecords(commitTimeForReads);
-    inserts = writeS3MetadataRecords(commitTimeForWrites);
-
-    String startInstant = commitTimeForReads;
     String orderColumn = "_hoodie_commit_time";
     String keyColumn = "s3.object.key";
     String limitColumn = "s3.object.size";
-    QueryInfo queryInfo = IncrSourceHelper.generateQueryInfo(jsc, basePath(), 5, Option.of(startInstant), null,
+
+    QueryInfo queryInfo = IncrSourceHelper.generateQueryInfo(jsc, basePath(), 5, Option.empty(), IncrSourceHelper.MissingCheckpointStrategy.READ_LATEST,
+        orderColumn, keyColumn, limitColumn, true, Option.empty());
+    assertEquals("2", queryInfo.getPreviousInstant());
+    assertEquals("3", queryInfo.getStartInstant());
+    assertEquals("4", queryInfo.getEndInstant());
+
+    queryInfo = IncrSourceHelper.generateQueryInfo(jsc, basePath(), 5, Option.empty(), IncrSourceHelper.MissingCheckpointStrategy.READ_UPTO_LATEST_COMMIT,
         orderColumn, keyColumn, limitColumn, true, Option.empty());
     assertEquals(HoodieTimeline.INIT_INSTANT_TS, queryInfo.getPreviousInstant());
-    assertEquals(commitTimeForReads, queryInfo.getStartInstant());
-    assertEquals(commitTimeForWrites, queryInfo.getEndInstant());
+    assertEquals(HoodieTimeline.INIT_INSTANT_TS, queryInfo.getStartInstant());
+    assertEquals("4", queryInfo.getEndInstant());
 
-
-    startInstant = commitTimeForWrites;
-    queryInfo = IncrSourceHelper.generateQueryInfo(jsc, basePath(), 5, Option.of(startInstant), null,
+    queryInfo = IncrSourceHelper.generateQueryInfo(jsc, basePath(), 5, Option.of(HoodieTimeline.INIT_INSTANT_TS), null,
         orderColumn, keyColumn, limitColumn, true, Option.empty());
-    assertEquals(commitTimeForReads, queryInfo.getPreviousInstant());
-    assertEquals(commitTimeForWrites, queryInfo.getStartInstant());
-    assertEquals(commitTimeForWrites, queryInfo.getEndInstant());
+    assertEquals(HoodieTimeline.INIT_INSTANT_TS, queryInfo.getPreviousInstant());
+    assertEquals(HoodieTimeline.INIT_INSTANT_TS, queryInfo.getStartInstant());
+    assertEquals("4", queryInfo.getEndInstant());
+
+    queryInfo = IncrSourceHelper.generateQueryInfo(jsc, basePath(), 5, Option.of("1"), null,
+        orderColumn, keyColumn, limitColumn, true, Option.empty());
+    assertEquals(HoodieTimeline.INIT_INSTANT_TS, queryInfo.getPreviousInstant());
+    assertEquals("1", queryInfo.getStartInstant());
+    assertEquals("4", queryInfo.getEndInstant());
+
+
+    queryInfo = IncrSourceHelper.generateQueryInfo(jsc, basePath(), 5, Option.of("2"), null,
+        orderColumn, keyColumn, limitColumn, true, Option.empty());
+    assertEquals("1", queryInfo.getPreviousInstant());
+    assertEquals("2", queryInfo.getStartInstant());
+    assertEquals("4", queryInfo.getEndInstant());
 
   }
 }
