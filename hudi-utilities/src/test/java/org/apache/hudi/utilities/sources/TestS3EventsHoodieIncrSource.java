@@ -398,7 +398,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
 
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
-    when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
+    when(mockQueryRunner.run(Mockito.any(), Mockito.any())).thenReturn(inputDs);
     when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
         .thenReturn(Option.empty());
 
@@ -422,7 +422,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
 
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
-    when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
+    when(mockQueryRunner.run(Mockito.any(), Mockito.any())).thenReturn(inputDs);
     when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
         .thenReturn(Option.empty());
 
@@ -448,7 +448,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
 
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
-    when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
+    when(mockQueryRunner.run(Mockito.any(), Mockito.any())).thenReturn(inputDs);
     when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
         .thenReturn(Option.empty());
 
@@ -480,7 +480,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
 
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
-    when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
+    when(mockQueryRunner.run(Mockito.any(), Mockito.any())).thenReturn(inputDs);
     TypedProperties typedProperties = setProps(READ_UPTO_LATEST_COMMIT);
     typedProperties.setProperty("hoodie.deltastreamer.source.s3incr.ignore.key.prefix", "path/to/skip");
 
@@ -512,7 +512,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
 
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
-    when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
+    when(mockQueryRunner.run(Mockito.any(), Mockito.any())).thenReturn(inputDs);
     when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
         .thenReturn(Option.empty());
     TypedProperties typedProperties = setProps(READ_UPTO_LATEST_COMMIT);
@@ -544,7 +544,7 @@ public class TestS3EventsHoodieIncrSource extends SparkClientFunctionalTestHarne
 
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
-    when(mockQueryRunner.run(Mockito.any())).thenReturn(inputDs);
+    when(mockQueryRunner.run(Mockito.any(), Mockito.any())).thenReturn(inputDs);
     when(mockCloudDataFetcher.getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider)))
         .thenReturn(Option.empty());
     TypedProperties typedProperties = setProps(READ_UPTO_LATEST_COMMIT);

@@ -23,6 +23,7 @@ import org.apache.hudi.common.config.SerializableConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.schema.SchemaProvider;
@@ -30,6 +31,7 @@ import org.apache.hudi.utilities.sources.helpers.CloudDataFetcher;
 import org.apache.hudi.utilities.sources.helpers.CloudObjectIncrCheckpoint;
 import org.apache.hudi.utilities.sources.helpers.CloudObjectMetadata;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
+import org.apache.hudi.utilities.sources.helpers.SnapshotLoadQuerySplitter;
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 import org.apache.hudi.utilities.sources.helpers.QueryRunner;
 
@@ -53,6 +55,7 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.SOURCE_F
 import static org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon.getCloudObjectMetadataPerPartition;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.DATAFILE_FORMAT;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.getMissingCheckpointStrategy;
+import static org.apache.hudi.utilities.sources.helpers.SnapshotLoadQuerySplitter.Config.SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME;
 
 /**
  * This source will use the S3 events meta information from hoodie table generate by {@link S3EventsSource}.
@@ -69,6 +72,8 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
   private final CloudDataFetcher cloudDataFetcher;
 
   private final Option<SchemaProvider> schemaProvider;
+
+  private final Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitter;
 
   public static class Config {
     // control whether we do existence check for files before consuming them
@@ -125,6 +130,9 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     this.queryRunner = queryRunner;
     this.cloudDataFetcher = cloudDataFetcher;
     this.schemaProvider = Option.ofNullable(schemaProvider);
+    this.snapshotLoadQuerySplitter = Option.ofNullable(props.getString(SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME, null))
+        .map(className -> (SnapshotLoadQuerySplitter) ReflectionUtils.loadClass(className,
+            new Class<?>[]{TypedProperties.class}, props));
   }
 
   @Override
@@ -144,8 +152,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       LOG.warn("Already caught up. No new data to process");
       return Pair.of(Option.empty(), queryInfo.getEndInstant());
     }
-
-    Dataset<Row> source = queryRunner.run(queryInfo);
+    Dataset<Row> source = queryRunner.run(queryInfo, snapshotLoadQuerySplitter);
     Dataset<Row> filteredSourceData = applyFilter(source, fileFormat);
 
     LOG.info("Adjusting end checkpoint:" + queryInfo.getEndInstant() + " based on sourceLimit :" + sourceLimit);

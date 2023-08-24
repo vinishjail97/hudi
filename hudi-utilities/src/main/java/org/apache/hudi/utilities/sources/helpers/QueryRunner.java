@@ -22,6 +22,7 @@ import org.apache.hudi.DataSourceReadOptions;
 import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.exception.HoodieException;
 
 import org.apache.log4j.LogManager;
@@ -55,12 +56,12 @@ public class QueryRunner {
     this.sourcePath = props.getString(HOODIE_SRC_BASE_PATH);
   }
 
-  public Dataset<Row> run(QueryInfo queryInfo) {
+  public Dataset<Row> run(QueryInfo queryInfo, Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitterOption) {
     Dataset<Row> dataset = null;
     if (queryInfo.isIncremental()) {
       dataset = runIncrementalQuery(queryInfo);
     } else if (queryInfo.isSnapshot()) {
-      dataset = runSnapshotQuery(queryInfo);
+      dataset = runSnapshotQuery(queryInfo, snapshotLoadQuerySplitterOption);
     } else {
       throw new HoodieException("Unknown query type " + queryInfo.getQueryType());
     }
@@ -83,14 +84,22 @@ public class QueryRunner {
         .option(DataSourceReadOptions.END_INSTANTTIME().key(), queryInfo.getEndInstant()).load(sourcePath);
   }
 
-  public Dataset<Row> runSnapshotQuery(QueryInfo queryInfo) {
+  public Dataset<Row> runSnapshotQuery(QueryInfo queryInfo, Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitterOption) {
     LOG.info("Running snapshot query");
-    return sparkSession.read().format("org.apache.hudi")
-        .option(DataSourceReadOptions.QUERY_TYPE().key(), queryInfo.getQueryType()).load(sourcePath)
+    Dataset<Row> snapshot = sparkSession.read().format("org.apache.hudi")
+        .option(DataSourceReadOptions.QUERY_TYPE().key(), queryInfo.getQueryType()).load(sourcePath);
+    QueryInfo snapshotQueryInfo = snapshotLoadQuerySplitterOption
+        .map(snapshotLoadQuerySplitter -> snapshotLoadQuerySplitter.getNextCheckpoint(snapshot, queryInfo))
+        .orElse(queryInfo);
+    return applySnapshotQueryFilters(snapshot, snapshotQueryInfo);
+  }
+
+  public Dataset<Row> applySnapshotQueryFilters(Dataset<Row> snapshot, QueryInfo snapshotQueryInfo) {
+    return snapshot
         // add filtering so that only interested records are returned.
         .filter(String.format("%s >= '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD,
-            queryInfo.getStartInstant()))
+            snapshotQueryInfo.getStartInstant()))
         .filter(String.format("%s <= '%s'", HoodieRecord.COMMIT_TIME_METADATA_FIELD,
-            queryInfo.getEndInstant()));
+            snapshotQueryInfo.getEndInstant()));
   }
 }
