@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.FileSystem;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -63,10 +64,8 @@ public class BaseFileHandler extends Handler {
 
   public List<BaseFileDTO> getLatestDataFileOn(String basePath, String partitionPath, String instantTime,
                                                String fileId) {
-    List<BaseFileDTO> result = new ArrayList<>();
-    viewManager.getFileSystemView(basePath).getBaseFileOn(partitionPath, instantTime, fileId)
-        .map(BaseFileDTO::fromHoodieBaseFile).ifPresent(result::add);
-    return result;
+    return viewManager.getFileSystemView(basePath).getBaseFileOn(partitionPath, instantTime, fileId)
+        .map(BaseFileDTO::fromHoodieBaseFile).map(Collections::singletonList).orElse(Collections.emptyList());
   }
 
   public List<BaseFileDTO> getLatestDataFilesInRange(String basePath, List<String> instants) {
