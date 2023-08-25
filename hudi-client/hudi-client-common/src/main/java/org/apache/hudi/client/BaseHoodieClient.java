@@ -71,7 +71,7 @@ public abstract class BaseHoodieClient implements Serializable, AutoCloseable {
     this.basePath = clientConfig.getBasePath();
     this.config = clientConfig;
     this.timelineServer = timelineServer;
-    shouldStopTimelineServer = !timelineServer.isPresent();
+    shouldStopTimelineServer = !timelineServer.isPresent(); // if timeline server is passed in, it is not closed with client
     this.heartbeatClient = new HoodieHeartbeatClient(this.fs, this.basePath,
         clientConfig.getHoodieClientHeartbeatIntervalInMs(), clientConfig.getHoodieClientHeartbeatTolerableMisses());
     startEmbeddedServerView();
@@ -91,7 +91,7 @@ public abstract class BaseHoodieClient implements Serializable, AutoCloseable {
     if (timelineServer.isPresent() && shouldStopTimelineServer) {
       // Stop only if owner
       LOG.info("Stopping Timeline service !!");
-      timelineServer.get().stop();
+      timelineServer.get().stopForBasePath(basePath);
     }
 
     timelineServer = Option.empty();

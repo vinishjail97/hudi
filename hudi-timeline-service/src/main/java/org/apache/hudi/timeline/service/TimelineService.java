@@ -53,8 +53,8 @@ public class TimelineService {
   private static final int DEFAULT_NUM_THREADS = -1;
 
   private int serverPort;
-  private Config timelineServerConf;
-  private Configuration conf;
+  private final Config timelineServerConf;
+  private final Configuration conf;
   private transient HoodieEngineContext context;
   private transient FileSystem fs;
   private transient Javalin app = null;

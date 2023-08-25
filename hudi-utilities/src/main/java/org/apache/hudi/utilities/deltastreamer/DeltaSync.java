@@ -1044,6 +1044,7 @@ public class DeltaSync implements Serializable, Closeable {
    * Close all resources.
    */
   public void close() {
+    String basePath = writeClient.getConfig().getBasePath();
     if (writeClient != null) {
       writeClient.close();
       writeClient = null;
@@ -1055,7 +1056,7 @@ public class DeltaSync implements Serializable, Closeable {
 
     LOG.info("Shutting down embedded timeline server");
     if (embeddedTimelineService.isPresent()) {
-      embeddedTimelineService.get().stop();
+      embeddedTimelineService.get().stopForBasePath(basePath);
     }
     if (hoodieMetrics != null && hoodieMetrics.getMetrics() != null) {
       hoodieMetrics.getMetrics().shutdown();

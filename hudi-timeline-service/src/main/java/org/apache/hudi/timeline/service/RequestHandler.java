@@ -79,7 +79,7 @@ public class RequestHandler {
   private final BaseFileHandler dataFileHandler;
   private final MarkerHandler markerHandler;
   private final Registry metricsRegistry = Registry.getRegistry("TimelineService");
-  private ScheduledExecutorService asyncResultService = Executors.newSingleThreadScheduledExecutor();
+  private ScheduledExecutorService asyncResultService = Executors.newSingleThreadScheduledExecutor(); // TODO does this need a larger pool?
 
   public RequestHandler(Javalin app, Configuration conf, TimelineService.Config timelineServiceConfig,
                         HoodieEngineContext hoodieEngineContext, FileSystem fileSystem,
