@@ -43,7 +43,6 @@ import org.apache.hudi.exception.HoodieRemoteException;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.module.afterburner.AfterburnerModule;
 import org.apache.http.Consts;
 import org.apache.http.client.fluent.Request;
 import org.apache.http.client.fluent.Response;
@@ -63,7 +62,6 @@ import java.util.stream.Stream;
  */
 public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, Serializable {
 
-  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().registerModule(new AfterburnerModule());
   private static final String BASE_URL = "/v1/hoodie/view";
   public static final String LATEST_PARTITION_SLICES_URL = String.format("%s/%s", BASE_URL, "slices/partition/latest/");
   public static final String LATEST_PARTITION_SLICE_URL = String.format("%s/%s", BASE_URL, "slices/file/latest/");
@@ -128,20 +126,13 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
 
 
   private static final Logger LOG = LogManager.getLogger(RemoteHoodieTableFileSystemView.class);
-  private static final TypeReference<List<FileSliceDTO>> FILE_SLICE_DTOS_REFERENCE = new TypeReference<List<FileSliceDTO>>() {};
-  private static final TypeReference<List<FileGroupDTO>> FILE_GROUP_DTOS_REFERENCE = new TypeReference<List<FileGroupDTO>>() {};
-  private static final TypeReference<Boolean> BOOLEAN_TYPE_REFERENCE = new TypeReference<Boolean>() {};
-  private static final TypeReference<List<CompactionOpDTO>> COMPACTION_OP_DTOS_REFERENCE = new TypeReference<List<CompactionOpDTO>>() {};
-  private static final TypeReference<List<ClusteringOpDTO>> CLUSTERING_OP_DTOS_REFERENCE = new TypeReference<List<ClusteringOpDTO>>() {};
-  private static final TypeReference<List<InstantDTO>> INSTANT_DTOS_REFERENCE = new TypeReference<List<InstantDTO>>() {};
-  private static final TypeReference<TimelineDTO> TIMELINE_DTO_REFERENCE = new TypeReference<TimelineDTO>() {};
-  private static final TypeReference<List<BaseFileDTO>> BASE_FILE_DTOS_REFERENCE = new TypeReference<List<BaseFileDTO>>() {};
 
   private final String serverHost;
   private final int serverPort;
   private final String basePath;
   private final HoodieTableMetaClient metaClient;
   private HoodieTimeline timeline;
+  private final ObjectMapper mapper;
   private final int timeoutMs;
 
   private boolean closed = false;
@@ -158,6 +149,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
 
   public RemoteHoodieTableFileSystemView(HoodieTableMetaClient metaClient, FileSystemViewStorageConfig viewConf) {
     this.basePath = metaClient.getBasePath();
+    this.mapper = new ObjectMapper();
     this.metaClient = metaClient;
     this.timeline = metaClient.getActiveTimeline().filterCompletedAndCompactionInstants();
     this.serverHost = viewConf.getRemoteViewServerHost();
@@ -173,7 +165,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     }
   }
 
-  private <T> T executeRequest(String requestPath, Map<String, String> queryParameters, TypeReference<T> reference,
+  private <T> T executeRequest(String requestPath, Map<String, String> queryParameters, TypeReference reference,
       RequestMethod method) throws IOException {
     ValidationUtils.checkArgument(!closed, "View already closed");
 
@@ -190,7 +182,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     LOG.info("Sending request : (" + url + ")");
     Response response = retryHelper != null ? retryHelper.start(() -> get(timeoutMs, url, method)) : get(timeoutMs, url, method);
     String content = response.returnContent().asString(Consts.UTF_8);
-    return OBJECT_MAPPER.readValue(content, reference);
+    return (T) mapper.readValue(content, reference);
   }
 
   private Map<String, String> getParamsWithPartitionPath(String partitionPath) {
@@ -248,7 +240,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
   private Stream<HoodieBaseFile> getLatestBaseFilesFromParams(Map<String, String> paramsMap, String requestPath) {
     try {
       List<BaseFileDTO> dataFiles = executeRequest(requestPath, paramsMap,
-          BASE_FILE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<BaseFileDTO>>() {}, RequestMethod.GET);
       return dataFiles.stream().map(BaseFileDTO::toHoodieBaseFile);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -267,7 +259,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
         new String[] {INSTANT_PARAM, FILEID_PARAM}, new String[] {instantTime, fileId});
     try {
       List<BaseFileDTO> dataFiles = executeRequest(LATEST_DATA_FILE_ON_INSTANT_URL, paramsMap,
-          BASE_FILE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<BaseFileDTO>>() {}, RequestMethod.GET);
       return Option.fromJavaOptional(dataFiles.stream().map(BaseFileDTO::toHoodieBaseFile).findFirst());
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -292,7 +284,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithPartitionPath(partitionPath);
     try {
       List<FileSliceDTO> dataFiles = executeRequest(LATEST_PARTITION_SLICES_URL, paramsMap,
-          FILE_SLICE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileSliceDTO>>() {}, RequestMethod.GET);
       return dataFiles.stream().map(FileSliceDTO::toFileSlice);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -304,7 +296,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithAdditionalParam(partitionPath, FILEID_PARAM, fileId);
     try {
       List<FileSliceDTO> dataFiles = executeRequest(LATEST_PARTITION_SLICE_URL, paramsMap,
-          FILE_SLICE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileSliceDTO>>() {}, RequestMethod.GET);
       return Option.fromJavaOptional(dataFiles.stream().map(FileSliceDTO::toFileSlice).findFirst());
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -316,7 +308,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithPartitionPath(partitionPath);
     try {
       List<FileSliceDTO> dataFiles = executeRequest(LATEST_PARTITION_UNCOMPACTED_SLICES_URL, paramsMap,
-          FILE_SLICE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileSliceDTO>>() {}, RequestMethod.GET);
       return dataFiles.stream().map(FileSliceDTO::toFileSlice);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -331,7 +323,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
         new String[] {maxCommitTime, String.valueOf(includeFileSlicesInPendingCompaction)});
     try {
       List<FileSliceDTO> dataFiles = executeRequest(LATEST_SLICES_BEFORE_ON_INSTANT_URL, paramsMap,
-          FILE_SLICE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileSliceDTO>>() {}, RequestMethod.GET);
       return dataFiles.stream().map(FileSliceDTO::toFileSlice);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -343,7 +335,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithAdditionalParam(partitionPath, MAX_INSTANT_PARAM, maxInstantTime);
     try {
       List<FileSliceDTO> dataFiles = executeRequest(LATEST_SLICES_MERGED_BEFORE_ON_INSTANT_URL, paramsMap,
-          FILE_SLICE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileSliceDTO>>() {}, RequestMethod.GET);
       return dataFiles.stream().map(FileSliceDTO::toFileSlice);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -356,7 +348,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
         getParams(INSTANTS_PARAM, StringUtils.join(commitsToReturn.toArray(new String[0]), ","));
     try {
       List<FileSliceDTO> dataFiles = executeRequest(LATEST_SLICES_RANGE_INSTANT_URL, paramsMap,
-          FILE_SLICE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileSliceDTO>>() {}, RequestMethod.GET);
       return dataFiles.stream().map(FileSliceDTO::toFileSlice);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -368,7 +360,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithPartitionPath(partitionPath);
     try {
       List<FileSliceDTO> dataFiles =
-          executeRequest(ALL_SLICES_URL, paramsMap, FILE_SLICE_DTOS_REFERENCE, RequestMethod.GET);
+          executeRequest(ALL_SLICES_URL, paramsMap, new TypeReference<List<FileSliceDTO>>() {}, RequestMethod.GET);
       return dataFiles.stream().map(FileSliceDTO::toFileSlice);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -380,7 +372,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithPartitionPath(partitionPath);
     try {
       List<FileGroupDTO> fileGroups = executeRequest(ALL_FILEGROUPS_FOR_PARTITION_URL, paramsMap,
-          FILE_GROUP_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileGroupDTO>>() {}, RequestMethod.GET);
       return DTOUtils.fileGroupDTOsToFileGroups(fileGroups, metaClient);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -392,7 +384,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithAdditionalParam(partitionPath, MAX_INSTANT_PARAM, maxCommitTime);
     try {
       List<FileGroupDTO> fileGroups = executeRequest(ALL_REPLACED_FILEGROUPS_BEFORE_OR_ON, paramsMap,
-          FILE_GROUP_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileGroupDTO>>() {}, RequestMethod.GET);
       return DTOUtils.fileGroupDTOsToFileGroups(fileGroups, metaClient);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -404,7 +396,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithAdditionalParam(partitionPath, MAX_INSTANT_PARAM, maxCommitTime);
     try {
       List<FileGroupDTO> fileGroups = executeRequest(ALL_REPLACED_FILEGROUPS_BEFORE, paramsMap,
-          FILE_GROUP_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileGroupDTO>>() {}, RequestMethod.GET);
       return DTOUtils.fileGroupDTOsToFileGroups(fileGroups, metaClient);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -416,7 +408,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithPartitionPath(partitionPath);
     try {
       List<FileGroupDTO> fileGroups = executeRequest(ALL_REPLACED_FILEGROUPS_PARTITION, paramsMap,
-          FILE_GROUP_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<FileGroupDTO>>() {}, RequestMethod.GET);
       return DTOUtils.fileGroupDTOsToFileGroups(fileGroups, metaClient);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -428,7 +420,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     try {
       // refresh the local timeline first.
       this.timeline = metaClient.reloadActiveTimeline().filterCompletedAndCompactionInstants();
-      return executeRequest(REFRESH_TABLE, paramsMap, BOOLEAN_TYPE_REFERENCE, RequestMethod.POST);
+      return executeRequest(REFRESH_TABLE, paramsMap, new TypeReference<Boolean>() {}, RequestMethod.POST);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
     }
@@ -439,7 +431,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParams();
     try {
       List<CompactionOpDTO> dtos = executeRequest(PENDING_COMPACTION_OPS, paramsMap,
-          COMPACTION_OP_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<CompactionOpDTO>>() {}, RequestMethod.GET);
       return dtos.stream().map(CompactionOpDTO::toCompactionOperation);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -451,7 +443,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParams();
     try {
       List<CompactionOpDTO> dtos = executeRequest(PENDING_LOG_COMPACTION_OPS, paramsMap,
-          COMPACTION_OP_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<CompactionOpDTO>>() {}, RequestMethod.GET);
       return dtos.stream().map(CompactionOpDTO::toCompactionOperation);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -463,7 +455,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParams();
     try {
       List<ClusteringOpDTO> dtos = executeRequest(PENDING_CLUSTERING_FILEGROUPS, paramsMap,
-          CLUSTERING_OP_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<ClusteringOpDTO>>() {}, RequestMethod.GET);
       return dtos.stream().map(ClusteringOpDTO::toClusteringOperation);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -485,7 +477,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParams();
     try {
       List<InstantDTO> instants =
-          executeRequest(LAST_INSTANT, paramsMap, INSTANT_DTOS_REFERENCE, RequestMethod.GET);
+          executeRequest(LAST_INSTANT, paramsMap, new TypeReference<List<InstantDTO>>() {}, RequestMethod.GET);
       return Option.fromJavaOptional(instants.stream().map(InstantDTO::toInstant).findFirst());
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -497,7 +489,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParams();
     try {
       TimelineDTO timeline =
-          executeRequest(TIMELINE, paramsMap, TIMELINE_DTO_REFERENCE, RequestMethod.GET);
+          executeRequest(TIMELINE, paramsMap, new TypeReference<TimelineDTO>() {}, RequestMethod.GET);
       return TimelineDTO.toTimeline(timeline, metaClient);
     } catch (IOException e) {
       throw new HoodieRemoteException(e);
@@ -514,7 +506,7 @@ public class RemoteHoodieTableFileSystemView implements SyncableFileSystemView, 
     Map<String, String> paramsMap = getParamsWithAdditionalParam(partitionPath, FILEID_PARAM, fileId);
     try {
       List<BaseFileDTO> dataFiles = executeRequest(LATEST_PARTITION_DATA_FILE_URL, paramsMap,
-          BASE_FILE_DTOS_REFERENCE, RequestMethod.GET);
+          new TypeReference<List<BaseFileDTO>>() {}, RequestMethod.GET);
       return Option.fromJavaOptional(dataFiles.stream().map(BaseFileDTO::toHoodieBaseFile).findFirst());
     } catch (IOException e) {
       throw new HoodieRemoteException(e);

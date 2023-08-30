@@ -41,9 +41,9 @@ public class DTOUtils {
     } else if (fileGroups.size() == 1) {
       return Collections.singletonList(FileGroupDTO.fromFileGroup(fileGroups.get(0), true));
     } else {
-      List<FileGroupDTO> fileGroupDTOS = new ArrayList<>(fileGroups.size());
+      List<FileGroupDTO> fileGroupDTOS = new ArrayList<>();
       fileGroupDTOS.add(FileGroupDTO.fromFileGroup(fileGroups.get(0), true));
-      fileGroupDTOS.addAll(fileGroups.stream().skip(1)
+      fileGroupDTOS.addAll(fileGroups.subList(1, fileGroups.size()).stream()
           .map(fg -> FileGroupDTO.fromFileGroup(fg, false)).collect(Collectors.toList()));
       return fileGroupDTOS;
     }

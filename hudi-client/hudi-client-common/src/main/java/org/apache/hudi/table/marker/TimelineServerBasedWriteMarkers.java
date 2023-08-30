@@ -29,7 +29,6 @@ import org.apache.hudi.table.HoodieTable;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.module.afterburner.AfterburnerModule;
 import org.apache.hadoop.fs.Path;
 import org.apache.http.client.fluent.Request;
 import org.apache.http.client.fluent.Response;
@@ -59,10 +58,8 @@ import static org.apache.hudi.common.table.marker.MarkerOperation.MARKER_NAME_PA
  * entries).
  */
 public class TimelineServerBasedWriteMarkers extends WriteMarkers {
-  private static final ObjectMapper MAPPER = new ObjectMapper().registerModule(new AfterburnerModule());
   private static final Logger LOG = LogManager.getLogger(TimelineServerBasedWriteMarkers.class);
-  private static final TypeReference<Boolean> BOOLEAN_TYPE_REFERENCE = new TypeReference<Boolean>() {};
-  private static final TypeReference<Set<String>> SET_TYPE_REFERENCE = new TypeReference<Set<String>>() {};
+  private final ObjectMapper mapper;
   private final String timelineServerHost;
   private final int timelineServerPort;
   private final int timeoutSecs;
@@ -78,6 +75,7 @@ public class TimelineServerBasedWriteMarkers extends WriteMarkers {
   TimelineServerBasedWriteMarkers(String basePath, String markerFolderPath, String instantTime,
                                   String timelineServerHost, int timelineServerPort, int timeoutSecs) {
     super(basePath, markerFolderPath, instantTime);
+    this.mapper = new ObjectMapper();
     this.timelineServerHost = timelineServerHost;
     this.timelineServerPort = timelineServerPort;
     this.timeoutSecs = timeoutSecs;
@@ -88,7 +86,7 @@ public class TimelineServerBasedWriteMarkers extends WriteMarkers {
     Map<String, String> paramsMap = Collections.singletonMap(MARKER_DIR_PATH_PARAM, markerDirPath.toString());
     try {
       return executeRequestToTimelineServer(
-          DELETE_MARKER_DIR_URL, paramsMap, BOOLEAN_TYPE_REFERENCE, RequestMethod.POST);
+          DELETE_MARKER_DIR_URL, paramsMap, new TypeReference<Boolean>() {}, RequestMethod.POST);
     } catch (IOException e) {
       throw new HoodieRemoteException("Failed to delete marker directory " + markerDirPath.toString(), e);
     }
@@ -99,7 +97,7 @@ public class TimelineServerBasedWriteMarkers extends WriteMarkers {
     Map<String, String> paramsMap = Collections.singletonMap(MARKER_DIR_PATH_PARAM, markerDirPath.toString());
     try {
       return executeRequestToTimelineServer(
-          MARKERS_DIR_EXISTS_URL, paramsMap, BOOLEAN_TYPE_REFERENCE, RequestMethod.GET);
+          MARKERS_DIR_EXISTS_URL, paramsMap, new TypeReference<Boolean>() {}, RequestMethod.GET);
     } catch (IOException e) {
       throw new HoodieRemoteException("Failed to check marker directory " + markerDirPath.toString(), e);
     }
@@ -110,7 +108,7 @@ public class TimelineServerBasedWriteMarkers extends WriteMarkers {
     Map<String, String> paramsMap = Collections.singletonMap(MARKER_DIR_PATH_PARAM, markerDirPath.toString());
     try {
       Set<String> markerPaths = executeRequestToTimelineServer(
-          CREATE_AND_MERGE_MARKERS_URL, paramsMap, SET_TYPE_REFERENCE, RequestMethod.GET);
+          CREATE_AND_MERGE_MARKERS_URL, paramsMap, new TypeReference<Set<String>>() {}, RequestMethod.GET);
       return markerPaths.stream().map(WriteMarkers::stripMarkerSuffix).collect(Collectors.toSet());
     } catch (IOException e) {
       throw new HoodieRemoteException("Failed to get CREATE and MERGE data file paths in "
@@ -123,7 +121,7 @@ public class TimelineServerBasedWriteMarkers extends WriteMarkers {
     Map<String, String> paramsMap = Collections.singletonMap(MARKER_DIR_PATH_PARAM, markerDirPath.toString());
     try {
       return executeRequestToTimelineServer(
-          ALL_MARKERS_URL, paramsMap, SET_TYPE_REFERENCE, RequestMethod.GET);
+          ALL_MARKERS_URL, paramsMap, new TypeReference<Set<String>>() {}, RequestMethod.GET);
     } catch (IOException e) {
       throw new HoodieRemoteException("Failed to get all markers in " + markerDirPath.toString(), e);
     }
@@ -145,7 +143,8 @@ public class TimelineServerBasedWriteMarkers extends WriteMarkers {
     boolean success;
     try {
       success = executeRequestToTimelineServer(
-          CREATE_MARKER_URL, paramsMap, BOOLEAN_TYPE_REFERENCE, RequestMethod.POST);
+          CREATE_MARKER_URL, paramsMap, new TypeReference<Boolean>() {
+          }, RequestMethod.POST);
     } catch (IOException e) {
       throw new HoodieRemoteException("Failed to create marker file " + partitionPath + "/" + markerFileName, e);
     }
@@ -159,7 +158,7 @@ public class TimelineServerBasedWriteMarkers extends WriteMarkers {
   }
 
   private <T> T executeRequestToTimelineServer(String requestPath, Map<String, String> queryParameters,
-                                               TypeReference<T> reference, RequestMethod method) throws IOException {
+                                               TypeReference reference, RequestMethod method) throws IOException {
     URIBuilder builder =
         new URIBuilder().setHost(timelineServerHost).setPort(timelineServerPort).setPath(requestPath).setScheme("http");
 
@@ -179,7 +178,7 @@ public class TimelineServerBasedWriteMarkers extends WriteMarkers {
         break;
     }
     String content = response.returnContent().asString();
-    return MAPPER.readValue(content, reference);
+    return (T) mapper.readValue(content, reference);
   }
 
   private enum RequestMethod {
