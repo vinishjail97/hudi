@@ -60,7 +60,9 @@ class SparkHoodieTableFileIndex(spark: SparkSession,
                                 configProperties: TypedProperties,
                                 queryPaths: Seq[Path],
                                 specifiedQueryInstant: Option[String] = None,
-                                @transient fileStatusCache: FileStatusCache = NoopCache)
+                                @transient fileStatusCache: FileStatusCache = NoopCache,
+                                beginInstantTime: Option[String] = None,
+                                endInstantTime: Option[String] = None)
   extends BaseHoodieTableFileIndex(
     new HoodieSparkEngineContext(new JavaSparkContext(spark.sparkContext)),
     metaClient,
@@ -70,7 +72,9 @@ class SparkHoodieTableFileIndex(spark: SparkSession,
     toJavaOption(specifiedQueryInstant),
     false,
     false,
-    SparkHoodieTableFileIndex.adapt(fileStatusCache)
+    SparkHoodieTableFileIndex.adapt(fileStatusCache),
+    toJavaOption(beginInstantTime),
+    toJavaOption(endInstantTime)
   )
     with SparkAdapterSupport
     with Logging {

@@ -30,6 +30,7 @@ import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.table.timeline.TimelineUtils;
 import org.apache.hudi.common.table.view.FileSystemViewStorageConfig;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 import org.apache.hudi.common.util.CollectionUtils;
@@ -80,6 +81,8 @@ public abstract class BaseHoodieTableFileIndex implements AutoCloseable {
 
   private final HoodieTableQueryType queryType;
   private final Option<String> specifiedQueryInstant;
+  private final Option<String> beginInstantTime;
+  private final Option<String> endInstantTime;
   protected final List<Path> queryPaths;
 
   private final boolean shouldIncludePendingCommits;
@@ -112,6 +115,8 @@ public abstract class BaseHoodieTableFileIndex implements AutoCloseable {
    * @param shouldIncludePendingCommits flags whether file-index should exclude any pending operations
    * @param shouldValidateInstant flags to validate whether query instant is present in the timeline
    * @param fileStatusCache transient cache of fetched [[FileStatus]]es
+   * @param beginInstantTime begin instant time for incremental query (optional)
+   * @param endInstantTime end instant time for incremental query (optional)
    */
   public BaseHoodieTableFileIndex(HoodieEngineContext engineContext,
                                   HoodieTableMetaClient metaClient,
@@ -121,7 +126,9 @@ public abstract class BaseHoodieTableFileIndex implements AutoCloseable {
                                   Option<String> specifiedQueryInstant,
                                   boolean shouldIncludePendingCommits,
                                   boolean shouldValidateInstant,
-                                  FileStatusCache fileStatusCache) {
+                                  FileStatusCache fileStatusCache,
+                                  Option<String> beginInstantTime,
+                                  Option<String> endInstantTime) {
     this.partitionColumns = metaClient.getTableConfig().getPartitionFields()
         .orElse(new String[0]);
 
@@ -136,6 +143,8 @@ public abstract class BaseHoodieTableFileIndex implements AutoCloseable {
     this.specifiedQueryInstant = specifiedQueryInstant;
     this.shouldIncludePendingCommits = shouldIncludePendingCommits;
     this.shouldValidateInstant = shouldValidateInstant;
+    this.beginInstantTime = beginInstantTime;
+    this.endInstantTime = endInstantTime;
 
     this.tableType = metaClient.getTableType();
     this.basePath = metaClient.getBasePathV2();
@@ -338,7 +347,17 @@ public abstract class BaseHoodieTableFileIndex implements AutoCloseable {
 
   private List<String> getAllPartitionPathsUnchecked() {
     try {
-      return isPartitionedTable() ? tableMetadata.getAllPartitionPaths() : Collections.singletonList("");
+      if (isPartitionedTable()) {
+        if (queryType == HoodieTableQueryType.INCREMENTAL && beginInstantTime.isPresent()) {
+          HoodieTimeline timelineAfterBeginInstant = TimelineUtils.getCommitsTimelineAfter(metaClient, beginInstantTime.get());
+          HoodieTimeline timelineToQuery = endInstantTime.map(timelineAfterBeginInstant::findInstantsBeforeOrEquals).orElse(timelineAfterBeginInstant);
+          return TimelineUtils.getWrittenPartitions(timelineToQuery);
+        } else {
+          return tableMetadata.getAllPartitionPaths();
+        }
+      } else {
+        return Collections.singletonList("");
+      }
     } catch (IOException e) {
       throw new HoodieIOException("Failed to fetch partition paths for a table", e);
     }
