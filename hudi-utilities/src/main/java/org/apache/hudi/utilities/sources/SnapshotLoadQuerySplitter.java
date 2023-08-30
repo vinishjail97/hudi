@@ -16,10 +16,11 @@
  * limitations under the License.
  */
 
-package org.apache.hudi.utilities.sources.helpers;
+package org.apache.hudi.utilities.sources;
 
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 

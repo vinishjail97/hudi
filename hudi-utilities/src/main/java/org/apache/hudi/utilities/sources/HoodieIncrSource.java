@@ -30,21 +30,19 @@ import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 
-import org.apache.hudi.utilities.sources.helpers.SnapshotLoadQuerySplitter;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import static org.apache.hudi.utilities.sources.SnapshotLoadQuerySplitter.Config.SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 
-import static org.apache.hudi.utilities.sources.helpers.SnapshotLoadQuerySplitter.Config.SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME;
-
 public class HoodieIncrSource extends RowSource {
 
-  private static final Logger LOG = LogManager.getLogger(HoodieIncrSource.class);
+  private static final Logger LOG = LoggerFactory.getLogger(HoodieIncrSource.class);
   private final Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitter;
 
   public static class Config {
@@ -109,7 +107,7 @@ public class HoodieIncrSource extends RowSource {
 
     this.snapshotLoadQuerySplitter = Option.ofNullable(props.getString(SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME, null))
         .map(className -> (SnapshotLoadQuerySplitter) ReflectionUtils.loadClass(className,
-              new Class<?>[]{TypedProperties.class}, props));
+            new Class<?>[] {TypedProperties.class}, props));
   }
 
   @Override
