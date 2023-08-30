@@ -173,8 +173,9 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
       return Pair.of(Option.empty(), queryInfo.getStartInstant());
     }
 
-    Dataset<Row> cloudObjectMetadataDF = queryRunner.run(queryInfo, snapshotLoadQuerySplitter);
-    Dataset<Row> filteredSourceData = gcsObjectMetadataFetcher.applyFilter(cloudObjectMetadataDF);
+    Pair<QueryInfo, Dataset<Row>> queryInfoDatasetPair = queryRunner.run(queryInfo, snapshotLoadQuerySplitter);
+    Dataset<Row> filteredSourceData = gcsObjectMetadataFetcher.applyFilter(queryInfoDatasetPair.getRight());
+    queryInfo = queryInfoDatasetPair.getLeft();
     LOG.info("Adjusting end checkpoint:" + queryInfo.getEndInstant() + " based on sourceLimit :" + sourceLimit);
     Pair<CloudObjectIncrCheckpoint, Option<Dataset<Row>>> checkPointAndDataset =
         IncrSourceHelper.filterAndGenerateCheckpointBasedOnSourceLimit(

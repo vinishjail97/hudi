@@ -23,6 +23,7 @@ import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieException;
 
 import org.apache.hudi.utilities.sources.SnapshotLoadQuerySplitter;
@@ -57,16 +58,14 @@ public class QueryRunner {
     this.sourcePath = props.getString(HOODIE_SRC_BASE_PATH);
   }
 
-  public Dataset<Row> run(QueryInfo queryInfo, Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitterOption) {
-    Dataset<Row> dataset = null;
+  public Pair<QueryInfo, Dataset<Row>> run(QueryInfo queryInfo, Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitterOption) {
     if (queryInfo.isIncremental()) {
-      dataset = runIncrementalQuery(queryInfo);
+      return runIncrementalQuery(queryInfo);
     } else if (queryInfo.isSnapshot()) {
-      dataset = runSnapshotQuery(queryInfo, snapshotLoadQuerySplitterOption);
+      return runSnapshotQuery(queryInfo, snapshotLoadQuerySplitterOption);
     } else {
       throw new HoodieException("Unknown query type " + queryInfo.getQueryType());
     }
-    return dataset;
   }
 
   public static Dataset<Row> applyOrdering(Dataset<Row> dataset, List<String> orderByColumns) {
@@ -77,22 +76,22 @@ public class QueryRunner {
     return dataset;
   }
 
-  public Dataset<Row> runIncrementalQuery(QueryInfo queryInfo) {
+  public Pair<QueryInfo, Dataset<Row>> runIncrementalQuery(QueryInfo queryInfo) {
     LOG.info("Running incremental query");
-    return sparkSession.read().format("org.apache.hudi")
+    return Pair.of(queryInfo, sparkSession.read().format("org.apache.hudi")
         .option(DataSourceReadOptions.QUERY_TYPE().key(), queryInfo.getQueryType())
         .option(DataSourceReadOptions.BEGIN_INSTANTTIME().key(), queryInfo.getPreviousInstant())
-        .option(DataSourceReadOptions.END_INSTANTTIME().key(), queryInfo.getEndInstant()).load(sourcePath);
+        .option(DataSourceReadOptions.END_INSTANTTIME().key(), queryInfo.getEndInstant()).load(sourcePath));
   }
 
-  public Dataset<Row> runSnapshotQuery(QueryInfo queryInfo, Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitterOption) {
+  public Pair<QueryInfo, Dataset<Row>> runSnapshotQuery(QueryInfo queryInfo, Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitterOption) {
     LOG.info("Running snapshot query");
     Dataset<Row> snapshot = sparkSession.read().format("org.apache.hudi")
         .option(DataSourceReadOptions.QUERY_TYPE().key(), queryInfo.getQueryType()).load(sourcePath);
     QueryInfo snapshotQueryInfo = snapshotLoadQuerySplitterOption
         .map(snapshotLoadQuerySplitter -> snapshotLoadQuerySplitter.getNextCheckpoint(snapshot, queryInfo))
         .orElse(queryInfo);
-    return applySnapshotQueryFilters(snapshot, snapshotQueryInfo);
+    return Pair.of(snapshotQueryInfo, applySnapshotQueryFilters(snapshot, snapshotQueryInfo));
   }
 
   public Dataset<Row> applySnapshotQueryFilters(Dataset<Row> snapshot, QueryInfo snapshotQueryInfo) {
