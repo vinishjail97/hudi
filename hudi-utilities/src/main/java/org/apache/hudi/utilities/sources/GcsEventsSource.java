@@ -48,6 +48,10 @@ import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfi
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.ACK_MESSAGES_DEFAULT_VALUE;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.BATCH_SIZE_CONF;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.DEFAULT_BATCH_SIZE;
+import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.DEFAULT_MAX_MESSAGES;
+import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.DEFAULT_MAX_TIME_MESSAGES_MILLIS;
+import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.MAX_MESSAGES_CONF;
+import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.MAX_WAIT_TIME_MESSAGES_CONF;
 import static org.apache.hudi.utilities.sources.helpers.gcs.GcsIngestionConfig.GOOGLE_PROJECT_ID;
 import static org.apache.hudi.utilities.sources.helpers.gcs.GcsIngestionConfig.PUBSUB_SUBSCRIPTION_ID;
 import static org.apache.hudi.utilities.sources.helpers.gcs.MessageValidity.ProcessingDecision.DO_SKIP;
@@ -116,7 +120,9 @@ public class GcsEventsSource extends RowSource {
         props, jsc, spark, schemaProvider,
         new PubsubMessagesFetcher(
             props.getString(GOOGLE_PROJECT_ID), props.getString(PUBSUB_SUBSCRIPTION_ID),
-            props.getInteger(BATCH_SIZE_CONF, DEFAULT_BATCH_SIZE)
+            props.getInteger(BATCH_SIZE_CONF, DEFAULT_BATCH_SIZE),
+            props.getInteger(MAX_MESSAGES_CONF, DEFAULT_MAX_MESSAGES),
+            props.getLong(MAX_WAIT_TIME_MESSAGES_CONF, DEFAULT_MAX_TIME_MESSAGES_MILLIS)
         )
     );
   }
@@ -174,6 +180,7 @@ public class GcsEventsSource extends RowSource {
 
   MessageBatch fetchFileMetadata() {
     List<ReceivedMessage> receivedMessages = pubsubMessagesFetcher.fetchMessages();
+    LOG.debug("Received messages from PubSub: " + receivedMessages.size());
     return processMessages(receivedMessages);
   }
 
@@ -221,9 +228,8 @@ public class GcsEventsSource extends RowSource {
   }
 
   private void logDetails(MetadataMessage message, String msgStr) {
-    LOG.info("eventType: " + message.getEventType() + ", objectId: " + message.getObjectId());
-
     if (LOG.isDebugEnabled()) {
+      LOG.debug("eventType: " + message.getEventType() + ", objectId: " + message.getObjectId());
       LOG.debug("msg: " + msgStr);
     }
   }

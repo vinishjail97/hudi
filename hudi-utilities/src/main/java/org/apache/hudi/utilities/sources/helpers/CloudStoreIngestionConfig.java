@@ -18,13 +18,34 @@
 
 package org.apache.hudi.utilities.sources.helpers;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * Configs that are common during ingestion across different cloud stores
  */
 public class CloudStoreIngestionConfig {
+  /**
+   * Max number of metadata messages to consume in one sync round,
+   * multiple cloud API calls will be done depending on BATCH_SIZE_CONF.
+   * Also see {@link #DEFAULT_MAX_MESSAGES}.
+   */
+  public static final String MAX_MESSAGES_CONF = "hoodie.deltastreamer.source.cloud.meta.max.num_messages";
+
+  public static final int DEFAULT_MAX_MESSAGES = 100000;
 
   /**
-   * How many metadata messages to pull at a time.
+   * Max wait time in millis to consume MAX_MESSAGES_CONF messages from cloud queue.
+   * Cloud event queues like SQS, PubSub can return empty responses even when messages are available the queue,
+   * this config ensures we don't wait forever to consume MAX_MESSAGES_CONF messages.
+   */
+  public static final String MAX_WAIT_TIME_MESSAGES_CONF = "hoodie.deltastreamer.source.cloud.meta.max.wait_time.num_messages";
+
+  public static final long DEFAULT_MAX_TIME_MESSAGES_MILLIS = TimeUnit.MINUTES.toMillis(1);
+
+  /**
+   * Max number of metadata messages to pull in one API call to the cloud events queue.
+   * Multiple API calls with this batch size are sent to cloud events queue,
+   * until we consume MAX_MESSAGES_CONF from the queue or MAX_WAIT_TIME_MESSAGES_CONF amount of time has passed or queue is empty.
    * Also see {@link #DEFAULT_BATCH_SIZE}.
    */
   public static final String BATCH_SIZE_CONF = "hoodie.deltastreamer.source.cloud.meta.batch.size";
