@@ -1103,3 +1103,12 @@ d3471dceb73 [ONHS-10984] Allow for reuse of EmbeddedTimelineService across write
 1a7f635951f [ONHS-11088] performance optimizations and minor tweaks (#375)
 4d39732d050 [ONHS-10984] Cherry pick [HUDI-6741]  (#374)
 cc950e92956 Upgrade to version release-v0.24.1 (#373)
+
+---[2023-08-31 18:06:43] [release-v0.24.3] ---
+cce7ae5076 Use cfg.targetBasePath instead of base path in write client (#385)
+4702b2233c Upgrade to version release-v0.24.2 (#384)
+5fa81e9962 [ONHS-11166] incr query optimization (#383)
+bc9d7f58c1 Revert "[ONHS-11088] performance optimizations and minor tweaks" (#382)
+b1bd1f29ed As queryInfo was not updated inplace, updating it in s3/gcs sources. (#380)
+bafaf994c2 Cherry-pick-6735  (#381)
+12456cb3f2 [ONHS-10998] Fix delay in GcsEventsSource (#379)
