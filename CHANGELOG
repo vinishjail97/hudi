@@ -1112,3 +1112,7 @@ bc9d7f58c1 Revert "[ONHS-11088] performance optimizations and minor tweaks" (#38
 b1bd1f29ed As queryInfo was not updated inplace, updating it in s3/gcs sources. (#380)
 bafaf994c2 Cherry-pick-6735  (#381)
 12456cb3f2 [ONHS-10998] Fix delay in GcsEventsSource (#379)
+
+---[2023-09-03 11:49:59] [release-v0.24.4] ---
+4e73bc56c8e [ONHS-11207] update logic for initializing HMS uri in hadoop configuration (#388)
+727c918aae1 Upgrade to version release-v0.24.3 (#386)
