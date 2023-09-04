@@ -55,6 +55,7 @@ import static org.apache.hudi.common.util.CollectionUtils.isNullOrEmpty;
 import static org.apache.hudi.config.HoodieStorageConfig.PARQUET_MAX_FILE_SIZE;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.PATH_BASED_PARTITION_FIELDS;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.SPARK_DATASOURCE_READER_COMMA_SEPARATED_PATH_FORMAT;
+import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.SOURCE_MAX_BYTES_PER_PARTITION;
 import static org.apache.spark.sql.functions.input_file_name;
 import static org.apache.spark.sql.functions.split;
 
@@ -188,8 +189,10 @@ public class CloudObjectsSelectorCommon {
     }
     // inflate 10% for potential hoodie meta fields
     totalSize *= 1.1;
-    long parquetMaxFileSize = props.getLong(PARQUET_MAX_FILE_SIZE.key(), Long.parseLong(PARQUET_MAX_FILE_SIZE.defaultValue()));
-    int numPartitions = (int) Math.max(totalSize / parquetMaxFileSize, 1);
+    // if source bytes are provided, then give preference to that.
+    long bytesPerPartition = props.containsKey(SOURCE_MAX_BYTES_PER_PARTITION) ? props.getLong(SOURCE_MAX_BYTES_PER_PARTITION) :
+        props.getLong(PARQUET_MAX_FILE_SIZE.key(), Long.parseLong(PARQUET_MAX_FILE_SIZE.defaultValue()));
+    int numPartitions = (int) Math.max(Math.ceil(totalSize / bytesPerPartition), 1);
     boolean isCommaSeparatedPathFormat = props.getBoolean(SPARK_DATASOURCE_READER_COMMA_SEPARATED_PATH_FORMAT, false);
 
     Dataset<Row> dataset;

@@ -125,4 +125,9 @@ public class CloudStoreIngestionConfig {
    * spark.read.format("..").load(new String[]{a.xml,b.xml,c.xml})
    */
   public static final String SPARK_DATASOURCE_READER_COMMA_SEPARATED_PATH_FORMAT = "hoodie.deltastreamer.source.cloud.data.reader.comma.separated.path.format";
+
+  /**
+   * specify this value in bytes, to coalesce partitions of source dataset not greater than specified limit.
+   */
+  public static final String SOURCE_MAX_BYTES_PER_PARTITION = "hoodie.deltastreamer.source.cloud.data.partition.max.size";
 }
