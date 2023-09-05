@@ -1116,3 +1116,8 @@ bafaf994c2 Cherry-pick-6735  (#381)
 ---[2023-09-03 11:49:59] [release-v0.24.4] ---
 4e73bc56c8e [ONHS-11207] update logic for initializing HMS uri in hadoop configuration (#388)
 727c918aae1 Upgrade to version release-v0.24.3 (#386)
+
+---[2023-09-05 17:43:14] [release-v0.25.0] upgrade release tag for hudi-internal release-v0.25.0---
+8ea6bb03b03 reduce is_empty rdd calls (#390)
+3d64be574e0 [ONHS-10270]add support for max bytes per partition (#360)
+c77c6b14685 [ONHS-11207] Upgrade to version release-v0.24.4 (#389)
