@@ -356,10 +356,10 @@ public class DeltaSync implements Serializable, Closeable {
     // Refresh Timeline
     refreshTimeline();
 
-    Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> srcRecordsWithCkpt = readFromSource(commitsTimelineOpt);
+    Pair<SchemaProvider, Pair<String, Option<JavaRDD<HoodieRecord>>>> srcRecordsWithCkpt = readFromSource(commitsTimelineOpt);
 
     if (srcRecordsWithCkpt != null) {
-      final JavaRDD<HoodieRecord> recordsFromSource = srcRecordsWithCkpt.getRight().getRight();
+      final Option<JavaRDD<HoodieRecord>> recordsFromSource = srcRecordsWithCkpt.getRight().getRight();
       // this is the first input batch. If schemaProvider not set, use it and register Avro Schema and start
       // compactor
       if (writeClient == null) {
@@ -417,7 +417,7 @@ public class DeltaSync implements Serializable, Closeable {
    * of schemaProvider, checkpointStr and hoodieRecord
    * @throws Exception in case of any Exception
    */
-  public Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> readFromSource(Option<HoodieTimeline> commitsTimelineOpt) throws IOException {
+  public Pair<SchemaProvider, Pair<String, Option<JavaRDD<HoodieRecord>>>> readFromSource(Option<HoodieTimeline> commitsTimelineOpt) throws IOException {
     // Retrieve the previous round checkpoints, if any
     Option<String> resumeCheckpointStr = Option.empty();
     if (commitsTimelineOpt.isPresent()) {
@@ -451,7 +451,7 @@ public class DeltaSync implements Serializable, Closeable {
 
     int maxRetryCount = cfg.retryOnSourceFailures ? cfg.maxRetryCount : 1;
     int curRetryCount = 0;
-    Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> sourceDataToSync = null;
+    Pair<SchemaProvider, Pair<String, Option<JavaRDD<HoodieRecord>>>> sourceDataToSync = null;
     while (curRetryCount++ < maxRetryCount && sourceDataToSync == null) {
       try {
         sourceDataToSync = fetchFromSource(resumeCheckpointStr);
@@ -471,7 +471,7 @@ public class DeltaSync implements Serializable, Closeable {
     return sourceDataToSync;
   }
 
-  private Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> fetchFromSource(Option<String> resumeCheckpointStr) {
+  private Pair<SchemaProvider, Pair<String, Option<JavaRDD<HoodieRecord>>>> fetchFromSource(Option<String> resumeCheckpointStr) {
     final Option<JavaRDD<GenericRecord>> avroRDDOptional;
     final String checkpointStr;
     SchemaProvider schemaProvider;
@@ -555,28 +555,19 @@ public class DeltaSync implements Serializable, Closeable {
     }
 
     hoodieSparkContext.setJobStatus(this.getClass().getSimpleName(), "Checking if input is empty");
-    if ((!avroRDDOptional.isPresent()) || (avroRDDOptional.get().isEmpty())) {
-      if (!cfg.allowCommitOnNoData) {
-        LOG.info("No new data found, hence nothing to commit.");
-        return null;
-      }
-      LOG.info("No new data, perform empty commit.");
-      return Pair.of(schemaProvider, Pair.of(checkpointStr, hoodieSparkContext.emptyRDD()));
-    }
 
     boolean shouldCombine = cfg.filterDupes || cfg.operation.equals(WriteOperationType.UPSERT);
     Set<String> partitionColumns = getPartitionColumns(keyGenerator, props);
-    JavaRDD<GenericRecord> avroRDD = avroRDDOptional.get();
-    JavaRDD<HoodieRecord> records = avroRDD.map(record -> {
-      GenericRecord gr = isDropPartitionColumns() ? HoodieAvroUtils.removeFields(record, partitionColumns) : record;
-      HoodieRecordPayload payload = shouldCombine ? DataSourceUtils.createPayload(cfg.payloadClassName, gr,
-          (Comparable) HoodieAvroUtils.getNestedFieldVal(gr, cfg.sourceOrderingField, false, props.getBoolean(
-              KeyGeneratorOptions.KEYGENERATOR_CONSISTENT_LOGICAL_TIMESTAMP_ENABLED.key(),
-              Boolean.parseBoolean(KeyGeneratorOptions.KEYGENERATOR_CONSISTENT_LOGICAL_TIMESTAMP_ENABLED.defaultValue()))))
-          : DataSourceUtils.createPayload(cfg.payloadClassName, gr);
-      return new HoodieAvroRecord<>(keyGenerator.getKey(record), payload);
-    });
-
+    Option<JavaRDD<HoodieRecord>> records = avroRDDOptional.map(avroRDD ->
+        avroRDD.map(record -> {
+          GenericRecord gr = isDropPartitionColumns() ? HoodieAvroUtils.removeFields(record, partitionColumns) : record;
+          HoodieRecordPayload payload = shouldCombine ? DataSourceUtils.createPayload(cfg.payloadClassName, gr,
+              (Comparable) HoodieAvroUtils.getNestedFieldVal(gr, cfg.sourceOrderingField, false, props.getBoolean(
+                  KeyGeneratorOptions.KEYGENERATOR_CONSISTENT_LOGICAL_TIMESTAMP_ENABLED.key(),
+                  Boolean.parseBoolean(KeyGeneratorOptions.KEYGENERATOR_CONSISTENT_LOGICAL_TIMESTAMP_ENABLED.defaultValue()))))
+              : DataSourceUtils.createPayload(cfg.payloadClassName, gr);
+          return new HoodieAvroRecord<>(keyGenerator.getKey(record), payload);
+        }));
     return Pair.of(schemaProvider, Pair.of(checkpointStr, records));
   }
 
@@ -661,22 +652,27 @@ public class DeltaSync implements Serializable, Closeable {
   /**
    * Perform Hoodie Write. Run Cleaner, schedule compaction and syncs to hive if needed.
    *
-   * @param records             Input Records
+   * @param recordsOpt           Input Records
    * @param checkpointStr       Checkpoint String
    * @param metrics             Metrics
    * @param overallTimerContext Timer Context
    * @return Option Compaction instant if one is scheduled
    */
-  private Pair<Option<String>, JavaRDD<WriteStatus>> writeToSink(JavaRDD<HoodieRecord> records, String checkpointStr,
+  private Pair<Option<String>, JavaRDD<WriteStatus>> writeToSink(Option<JavaRDD<HoodieRecord>> recordsOpt, String checkpointStr,
                                                                  HoodieIngestionMetrics metrics,
                                                                  Timer.Context overallTimerContext) {
     Option<String> scheduledCompactionInstant = Option.empty();
-    // filter dupes if needed
+    // check isEmpty only if cfg.allowCommitOnNoData=false, as isEmpty can have perf impact.
+    if (!cfg.allowCommitOnNoData && recordsOpt.map(df -> df.isEmpty()).orElse(true)) {
+      LOG.info("No new data found, hence nothing to commit.");
+      return null;
+    }
+
+    JavaRDD<HoodieRecord> records = recordsOpt.orElse(hoodieSparkContext.emptyRDD());
+
     if (cfg.filterDupes) {
       records = DataSourceUtils.dropDuplicates(hoodieSparkContext.jsc(), records, writeClient.getConfig());
     }
-
-    boolean isEmpty = records.isEmpty();
 
     // try to start a new commit
     String instantTime = startCommit();
@@ -752,7 +748,7 @@ public class DeltaSync implements Serializable, Closeable {
           scheduledCompactionInstant = writeClient.scheduleCompaction(Option.empty());
         }
 
-        if (!isEmpty || cfg.forceEmptyMetaSync) {
+        if ((totalRecords - totalErrorRecords) > 0 || cfg.forceEmptyMetaSync) {
           runMetaSync();
         }
       } else {
@@ -867,15 +863,15 @@ public class DeltaSync implements Serializable, Closeable {
    * SchemaProvider creation is a precursor to HoodieWriteClient and AsyncCompactor creation. This method takes care of
    * this constraint.
    */
-  private void setupWriteClient(JavaRDD<HoodieRecord> records) throws IOException {
+  private void setupWriteClient(Option<JavaRDD<HoodieRecord>> recordsOpt) throws IOException {
     if ((null != schemaProvider)) {
       Schema sourceSchema = schemaProvider.getSourceSchema();
       Schema targetSchema = schemaProvider.getTargetSchema();
-      reInitWriteClient(sourceSchema, targetSchema, records);
+      reInitWriteClient(sourceSchema, targetSchema, recordsOpt);
     }
   }
 
-  private void reInitWriteClient(Schema sourceSchema, Schema targetSchema, JavaRDD<HoodieRecord> records) throws IOException {
+  private void reInitWriteClient(Schema sourceSchema, Schema targetSchema, Option<JavaRDD<HoodieRecord>> recordsOpt) throws IOException {
     LOG.info("Setting up new Hoodie Write Client");
     if (isDropPartitionColumns()) {
       targetSchema = HoodieAvroUtils.removeFields(targetSchema, getPartitionColumns(keyGenerator, props));
@@ -883,7 +879,7 @@ public class DeltaSync implements Serializable, Closeable {
     registerAvroSchemas(sourceSchema, targetSchema);
     final HoodieWriteConfig initialWriteConfig = getHoodieClientConfig(targetSchema);
     final HoodieWriteConfig writeConfig = SparkSampleWritesUtils
-        .getWriteConfigWithRecordSizeEstimate(hoodieSparkContext.jsc(), records, initialWriteConfig)
+        .getWriteConfigWithRecordSizeEstimate(hoodieSparkContext.jsc(), recordsOpt, initialWriteConfig)
         .orElse(initialWriteConfig);
 
     if (writeConfig.isEmbeddedTimelineServerEnabled()) {
