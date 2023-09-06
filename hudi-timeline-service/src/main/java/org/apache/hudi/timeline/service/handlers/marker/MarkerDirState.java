@@ -30,6 +30,7 @@ import org.apache.hudi.exception.HoodieIOException;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.module.afterburner.AfterburnerModule;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -62,7 +63,7 @@ import static org.apache.hudi.timeline.service.RequestHandler.jsonifyResult;
  */
 public class MarkerDirState implements Serializable {
   private static final Logger LOG = LogManager.getLogger(MarkerDirState.class);
-  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+  private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper().registerModule(new AfterburnerModule());
   // Marker directory
   private final String markerDirPath;
   private final FileSystem fileSystem;

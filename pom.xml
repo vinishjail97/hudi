@@ -448,6 +448,8 @@
               <include>org.apache.httpcomponents:httpclient</include>
               <include>org.apache.httpcomponents:httpcore</include>
               <include>org.apache.httpcomponents:fluent-hc</include>
+              <!-- afterburner module for jackson performance -->
+              <include>com.fasterxml.jackson.module:jackson-module-afterburner</include>
             </includes>
           </artifactSet>
           <relocations>
@@ -780,6 +782,11 @@
         <groupId>com.fasterxml.jackson.module</groupId>
         <artifactId>jackson-module-scala_${scala.binary.version}</artifactId>
         <version>${fasterxml.jackson.module.scala.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.fasterxml.jackson.module</groupId>
+        <artifactId>jackson-module-afterburner</artifactId>
+        <version>${fasterxml.jackson.databind.version}</version>
       </dependency>
 
       <!-- Glassfish -->
