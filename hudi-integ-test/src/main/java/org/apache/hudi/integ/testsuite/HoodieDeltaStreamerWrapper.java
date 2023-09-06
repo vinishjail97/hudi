@@ -22,6 +22,7 @@ import org.apache.hudi.client.WriteStatus;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.WriteOperationType;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.utilities.deltastreamer.DeltaSync;
 import org.apache.hudi.utilities.deltastreamer.HoodieDeltaStreamer;
 import org.apache.hudi.utilities.schema.SchemaProvider;
@@ -34,9 +35,11 @@ import org.apache.spark.api.java.JavaSparkContext;
  * 2) Piggyback on the suite to test {@link HoodieDeltaStreamer}
  */
 public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
+  private final JavaSparkContext jssc;
 
   public HoodieDeltaStreamerWrapper(Config cfg, JavaSparkContext jssc) throws Exception {
     super(cfg, jssc);
+    this.jssc = jssc;
   }
 
   public JavaRDD<WriteStatus> upsert(WriteOperationType operation) throws Exception {
@@ -54,12 +57,12 @@ public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
   }
 
   public JavaRDD<WriteStatus> insertOverwrite() throws
-          Exception {
+      Exception {
     return upsert(WriteOperationType.INSERT_OVERWRITE);
   }
 
   public JavaRDD<WriteStatus> insertOverwriteTable() throws
-          Exception {
+      Exception {
     return upsert(WriteOperationType.INSERT_OVERWRITE_TABLE);
   }
 
@@ -78,7 +81,8 @@ public class HoodieDeltaStreamerWrapper extends HoodieDeltaStreamer {
   public Pair<SchemaProvider, Pair<String, JavaRDD<HoodieRecord>>> fetchSource() throws Exception {
     DeltaSync service = deltaSyncService.get().getDeltaSync();
     service.refreshTimeline();
-    return service.readFromSource(service.getCommitsTimelineOpt());
+    Pair<SchemaProvider, Pair<String, Option<JavaRDD<HoodieRecord>>>> pair = service.readFromSource(service.getCommitsTimelineOpt());
+    return Pair.of(pair.getLeft(), Pair.of(pair.getRight().getLeft(), pair.getRight().getRight().orElse(jssc.emptyRDD())));
   }
 
 }
