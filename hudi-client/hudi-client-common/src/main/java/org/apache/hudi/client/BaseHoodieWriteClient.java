@@ -195,7 +195,8 @@ public abstract class BaseHoodieWriteClient<T extends HoodieRecordPayload, I, K,
       try {
         Option<Schema> currentSchema = Option.empty();
         try {
-          if (FSUtils.isTableExists(config.getBasePath(), fs) && createMetaClient(true).getCommitsTimeline().countInstants() > 0) {
+          if (FSUtils.isTableExists(config.getBasePath(), fs)
+              && createMetaClient(true).getActiveTimeline().getLastCommitMetadataWithValidSchema().isPresent()) {
             currentSchema = Option.of(new TableSchemaResolver(createMetaClient(true)).getTableAvroSchema());
           }
         } catch (Exception ex) {
