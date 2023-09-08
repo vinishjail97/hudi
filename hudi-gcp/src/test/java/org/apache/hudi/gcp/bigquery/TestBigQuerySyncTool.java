@@ -76,7 +76,7 @@ public class TestBigQuerySyncTool {
     properties.setProperty(BigQuerySyncConfig.BIGQUERY_SYNC_PARTITION_FIELDS.key(), "datestr,type");
     when(mockBqSyncClient.getTableType()).thenReturn(HoodieTableType.COPY_ON_WRITE);
     when(mockBqSyncClient.datasetExists()).thenReturn(true);
-    when(mockBqSyncClient.tableExists(TEST_TABLE)).thenReturn(false);
+    when(mockBqSyncClient.tableNotExistsOrNotUsesManifest(TEST_TABLE)).thenReturn(true);
     Path manifestPath = new Path("file:///local/path");
     when(mockManifestFileWriter.getManifestSourceUri(true)).thenReturn(manifestPath.toUri().getPath());
     when(mockBqSchemaResolver.getTableSchema(any(), eq(Arrays.asList("datestr", "type")))).thenReturn(schema);
@@ -91,7 +91,7 @@ public class TestBigQuerySyncTool {
     properties.setProperty(BigQuerySyncConfig.BIGQUERY_SYNC_USE_BQ_MANIFEST_FILE.key(), "true");
     when(mockBqSyncClient.getTableType()).thenReturn(HoodieTableType.COPY_ON_WRITE);
     when(mockBqSyncClient.datasetExists()).thenReturn(true);
-    when(mockBqSyncClient.tableExists(TEST_TABLE)).thenReturn(false);
+    when(mockBqSyncClient.tableNotExistsOrNotUsesManifest(TEST_TABLE)).thenReturn(true);
     Path manifestPath = new Path("file:///local/path");
     when(mockManifestFileWriter.getManifestSourceUri(true)).thenReturn(manifestPath.toUri().getPath());
     when(mockBqSchemaResolver.getTableSchema(any(), eq(Collections.emptyList()))).thenReturn(schema);
@@ -109,7 +109,7 @@ public class TestBigQuerySyncTool {
     properties.setProperty(BigQuerySyncConfig.BIGQUERY_SYNC_PARTITION_FIELDS.key(), "datestr,type");
     when(mockBqSyncClient.getTableType()).thenReturn(HoodieTableType.COPY_ON_WRITE);
     when(mockBqSyncClient.datasetExists()).thenReturn(true);
-    when(mockBqSyncClient.tableExists(TEST_TABLE)).thenReturn(true);
+    when(mockBqSyncClient.tableNotExistsOrNotUsesManifest(TEST_TABLE)).thenReturn(false);
     Path manifestPath = new Path("file:///local/path");
     when(mockManifestFileWriter.getManifestSourceUri(true)).thenReturn(manifestPath.toUri().getPath());
     List<String> partitionFields = Arrays.asList("datestr", "type");
@@ -125,7 +125,7 @@ public class TestBigQuerySyncTool {
     properties.setProperty(BigQuerySyncConfig.BIGQUERY_SYNC_USE_BQ_MANIFEST_FILE.key(), "true");
     when(mockBqSyncClient.getTableType()).thenReturn(HoodieTableType.COPY_ON_WRITE);
     when(mockBqSyncClient.datasetExists()).thenReturn(true);
-    when(mockBqSyncClient.tableExists(TEST_TABLE)).thenReturn(true);
+    when(mockBqSyncClient.tableNotExistsOrNotUsesManifest(TEST_TABLE)).thenReturn(false);
     Path manifestPath = new Path("file:///local/path");
     when(mockManifestFileWriter.getManifestSourceUri(true)).thenReturn(manifestPath.toUri().getPath());
     when(mockBqSchemaResolver.getTableSchema(any(), eq(Collections.emptyList()))).thenReturn(schema);

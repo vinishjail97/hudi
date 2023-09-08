@@ -137,7 +137,7 @@ public class BigQuerySyncTool extends HoodieSyncTool {
     Schema latestSchema = bqSchemaResolver.getTableSchema(metaClient, partitionFields);
     if (config.getBoolean(BIGQUERY_SYNC_USE_BQ_MANIFEST_FILE)) {
       manifestFileWriter.writeManifestFile(true);
-      if (!tableExists(bqSyncClient, tableName)) {
+      if (bqSyncClient.tableNotExistsOrNotUsesManifest(tableName)) {
         bqSyncClient.createTableUsingBqManifestFile(
             tableName,
             manifestFileWriter.getManifestSourceUri(true),

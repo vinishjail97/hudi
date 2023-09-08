@@ -21,6 +21,7 @@ package org.apache.hudi.gcp.bigquery;
 
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.sync.common.HoodieSyncClient;
+import org.apache.hudi.sync.common.util.ManifestFileWriter;
 
 import com.google.cloud.bigquery.BigQuery;
 import com.google.cloud.bigquery.BigQueryException;
@@ -104,7 +105,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
 
       String query =
           String.format(
-              "CREATE EXTERNAL TABLE `%s.%s` %s OPTIONS (%s "
+              "CREATE OR REPLACE EXTERNAL TABLE `%s.%s` %s OPTIONS (%s "
                   + "uris=[\"%s\"], format=\"PARQUET\", file_set_spec_type=\"NEW_LINE_DELIMITED_MANIFEST\")",
               datasetName,
               tableName,
@@ -260,6 +261,16 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     TableId tableId = TableId.of(projectId, datasetName, tableName);
     Table table = bigquery.getTable(tableId, BigQuery.TableOption.fields());
     return table != null && table.exists();
+  }
+
+  public boolean tableNotExistsOrNotUsesManifest(String tableName) {
+    TableId tableId = TableId.of(projectId, datasetName, tableName);
+    Table table = bigquery.getTable(tableId, BigQuery.TableOption.fields());
+    if (table == null || !table.exists()) {
+      return true;
+    }
+    ExternalTableDefinition externalTableDefinition = table.getDefinition();
+    return externalTableDefinition.getSourceUris() == null || externalTableDefinition.getSourceUris().stream().noneMatch(uri -> uri.contains(ManifestFileWriter.ABSOLUTE_PATH_MANIFEST_FOLDER_NAME));
   }
 
   @Override
