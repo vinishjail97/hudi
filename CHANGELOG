@@ -1121,3 +1121,11 @@ bafaf994c2 Cherry-pick-6735  (#381)
 8ea6bb03b03 reduce is_empty rdd calls (#390)
 3d64be574e0 [ONHS-10270]add support for max bytes per partition (#360)
 c77c6b14685 [ONHS-11207] Upgrade to version release-v0.24.4 (#389)
+
+---[2023-09-08 16:00:46] [release-v0.25.1] ---
+8ad92a28dd3 [ENG-2090] add ability to replace tables created with old approach to allow smooth rollout (#397)
+f33eaece72a [ENG-2021] Handle empty commits in addFieldIds (#396)
+17d4c2eebd6 [ENG-1352] Bigquery cherry-picks for manifest support (#394)
+119fbf081bb [ONHS-11088] performance optimizations and minor tweaks (#392)
+1b400f2211e [ONHS-11269] fix compile issue (#393)
+b36c179ea07 Upgrade to version release-v0.25.0 (#391)
