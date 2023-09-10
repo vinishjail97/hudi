@@ -1129,3 +1129,7 @@ f33eaece72a [ENG-2021] Handle empty commits in addFieldIds (#396)
 119fbf081bb [ONHS-11088] performance optimizations and minor tweaks (#392)
 1b400f2211e [ONHS-11269] fix compile issue (#393)
 b36c179ea07 Upgrade to version release-v0.25.0 (#391)
+
+---[2023-09-09 23:10:22] [release-v0.25.2] ---
+c183c08863b [ENG-1335] remove BigQuery Sync validation call for CoW (#399)
+5db162c399a [ENG-1320] Upgrade to version release-v0.25.1 (#398)
