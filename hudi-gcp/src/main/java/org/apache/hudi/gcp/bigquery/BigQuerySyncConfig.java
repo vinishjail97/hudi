@@ -108,6 +108,11 @@ public class BigQuerySyncConfig extends HoodieSyncConfig implements Serializable
       .withDocumentation("Assume standard yyyy/mm/dd partitioning, this"
           + " exists to support backward compatibility. If you use hoodie 0.3.x, do not set this parameter");
 
+  public static final ConfigProperty<Boolean> BIGQUERY_SYNC_ALWAYS_UPDATE = ConfigProperty
+      .key("hoodie.gcp.bigquery.sync.always_update")
+      .defaultValue(false)
+      .withDocumentation("If true, make an update call to BigQuery to force last updated time in their UI to increase");
+
   public BigQuerySyncConfig(Properties props) {
     super(props);
     setDefaults(BigQuerySyncConfig.class.getName());

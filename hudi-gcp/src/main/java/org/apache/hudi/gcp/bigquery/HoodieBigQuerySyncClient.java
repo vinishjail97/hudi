@@ -52,6 +52,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_ALWAYS_UPDATE;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_DATASET_LOCATION;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_DATASET_NAME;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_PROJECT_ID;
@@ -63,6 +64,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
   protected final BigQuerySyncConfig config;
   private final String projectId;
   private final String datasetName;
+  private final boolean alwaysUpdateSchema;
   private transient BigQuery bigquery;
 
   public HoodieBigQuerySyncClient(final BigQuerySyncConfig config) {
@@ -70,6 +72,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     this.config = config;
     this.projectId = config.getString(BIGQUERY_SYNC_PROJECT_ID);
     this.datasetName = config.getString(BIGQUERY_SYNC_DATASET_NAME);
+    this.alwaysUpdateSchema = config.getBoolean(BIGQUERY_SYNC_ALWAYS_UPDATE);
     this.createBigQueryConnection();
   }
 
@@ -78,6 +81,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     this.config = config;
     this.projectId = config.getString(BIGQUERY_SYNC_PROJECT_ID);
     this.datasetName = config.getString(BIGQUERY_SYNC_DATASET_NAME);
+    this.alwaysUpdateSchema = config.getBoolean(BIGQUERY_SYNC_ALWAYS_UPDATE);
     this.bigquery = bigquery;
   }
 
@@ -175,7 +179,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
         .collect(Collectors.toList());
     updatedTableFields.addAll(schema.getFields());
     Schema finalSchema = Schema.of(updatedTableFields);
-    if (definition.getSchema() != null && definition.getSchema().equals(finalSchema)) {
+    if (! alwaysUpdateSchema && definition.getSchema() != null && definition.getSchema().equals(finalSchema)) {
       return; // No need to update schema.
     }
     Table updatedTable = existingTable.toBuilder()
@@ -265,7 +269,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
 
   public boolean tableNotExistsOrNotUsesManifest(String tableName) {
     TableId tableId = TableId.of(projectId, datasetName, tableName);
-    Table table = bigquery.getTable(tableId, BigQuery.TableOption.fields());
+    Table table = bigquery.getTable(tableId);
     if (table == null || !table.exists()) {
       return true;
     }
