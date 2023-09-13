@@ -113,6 +113,11 @@ public class BigQuerySyncConfig extends HoodieSyncConfig implements Serializable
       .defaultValue(false)
       .withDocumentation("If true, make an update call to BigQuery to force last updated time in their UI to increase");
 
+  public static final ConfigProperty<Boolean> BIGQUERY_SYNC_REQUIRE_PARTITION_FILTER = ConfigProperty
+      .key("hoodie.gcp.bigquery.sync.require_partition_filter")
+      .defaultValue(false)
+      .withDocumentation("If true, configure table to require a partition filter to be specified when querying the table");
+
   public BigQuerySyncConfig(Properties props) {
     super(props);
     setDefaults(BigQuerySyncConfig.class.getName());
