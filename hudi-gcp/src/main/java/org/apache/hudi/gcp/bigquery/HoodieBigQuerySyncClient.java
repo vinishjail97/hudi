@@ -107,7 +107,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
       String extraOptions = "enable_list_inference=true,";
       if (!StringUtils.isNullOrEmpty(sourceUriPrefix)) {
         withClauses += " WITH PARTITION COLUMNS";
-        extraOptions += String.format(" hive_partition_uri_prefix=\"%s\", require_partition_filter=%s,", sourceUriPrefix, requirePartitionFilter);
+        extraOptions += String.format(" hive_partition_uri_prefix=\"%s\", require_hive_partition_filter=%s,", sourceUriPrefix, requirePartitionFilter);
       }
 
       String query =
@@ -124,7 +124,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
       QueryJobConfiguration queryConfig = QueryJobConfiguration.newBuilder(query)
           .setUseLegacySql(false)
           .build();
-      JobId jobId = JobId.newBuilder().setRandomJob().setLocation(config.getString(BIGQUERY_SYNC_DATASET_LOCATION)).build();
+      JobId jobId = JobId.newBuilder().setRandomJob().build();
       Job queryJob = bigquery.create(JobInfo.newBuilder(queryConfig).setJobId(jobId).build());
 
       queryJob = queryJob.waitFor();
