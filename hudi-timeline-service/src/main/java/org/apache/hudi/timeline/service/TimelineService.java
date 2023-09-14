@@ -331,6 +331,10 @@ public class TimelineService {
     LOG.info("Closed Timeline Service");
   }
 
+  public void unregisterBasePath(String basePath) {
+    fsViewsManager.clearFileSystemView(basePath);
+  }
+
   public Configuration getConf() {
     return conf;
   }
