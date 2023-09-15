@@ -49,6 +49,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_ALWAYS_UPDATE;
@@ -184,7 +185,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     updatedTableFields.addAll(schema.getFields());
     Schema finalSchema = Schema.of(updatedTableFields);
     boolean sameSchema = definition.getSchema() != null && definition.getSchema().equals(finalSchema);
-    boolean samePartitionFilter = requirePartitionFilter == definition.getHivePartitioningOptions().getRequirePartitionFilter();
+    boolean samePartitionFilter = partitionFields.isEmpty() || Objects.equals(requirePartitionFilter, definition.getHivePartitioningOptions().getRequirePartitionFilter());
     if (!alwaysUpdateSchema && sameSchema && samePartitionFilter) {
       return; // No need to update schema.
     }
