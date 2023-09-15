@@ -58,6 +58,7 @@ public class TestHoodieBigQuerySyncClient {
   private static String basePath;
   private final BigQuery mockBigQuery = mock(BigQuery.class);
   private HoodieBigQuerySyncClient client;
+  private Properties properties;
 
   @BeforeAll
   static void setupOnce() throws Exception {
@@ -71,17 +72,19 @@ public class TestHoodieBigQuerySyncClient {
 
   @BeforeEach
   void setup() {
-    Properties properties = new Properties();
+    properties = new Properties();
     properties.setProperty(BigQuerySyncConfig.BIGQUERY_SYNC_PROJECT_ID.key(), PROJECT_ID);
     properties.setProperty(BigQuerySyncConfig.BIGQUERY_SYNC_DATASET_NAME.key(), TEST_DATASET);
     properties.setProperty(HoodieSyncConfig.META_SYNC_BASE_PATH.key(), tempDir.toString());
     properties.setProperty(BigQuerySyncConfig.BIGQUERY_SYNC_REQUIRE_PARTITION_FILTER.key(), "true");
-    BigQuerySyncConfig config = new BigQuerySyncConfig(properties);
-    client = new HoodieBigQuerySyncClient(config, mockBigQuery);
   }
 
   @Test
   void createTableWithManifestFile_partitioned() throws Exception {
+    properties.setProperty(BigQuerySyncConfig.BIGQUERY_SYNC_BIG_LAKE_CONNECTION_ID.key(), "my-project.us.bl_connection");
+    BigQuerySyncConfig config = new BigQuerySyncConfig(properties);
+    client = new HoodieBigQuerySyncClient(config, mockBigQuery);
+
     Schema schema = Schema.of(Field.of("field", StandardSQLTypeName.STRING));
     ArgumentCaptor<JobInfo> jobInfoCaptor = ArgumentCaptor.forClass(JobInfo.class);
     Job mockJob = mock(Job.class);
@@ -95,13 +98,17 @@ public class TestHoodieBigQuerySyncClient {
 
     QueryJobConfiguration configuration = jobInfoCaptor.getValue().getConfiguration();
     assertEquals(configuration.getQuery(),
-        String.format("CREATE OR REPLACE EXTERNAL TABLE `%s.%s.%s` ( `field` STRING ) WITH PARTITION COLUMNS OPTIONS (enable_list_inference=true, hive_partition_uri_prefix=\"%s\", "
-            + "require_hive_partition_filter=true, uris=[\"%s\"], format=\"PARQUET\", file_set_spec_type=\"NEW_LINE_DELIMITED_MANIFEST\")",
+        String.format("CREATE OR REPLACE EXTERNAL TABLE `%s.%s.%s` ( `field` STRING ) WITH PARTITION COLUMNS WITH CONNECTION `my-project.us.bl_connection` "
+                + "OPTIONS (enable_list_inference=true, hive_partition_uri_prefix=\"%s\", "
+                + "require_hive_partition_filter=true, uris=[\"%s\"], format=\"PARQUET\", file_set_spec_type=\"NEW_LINE_DELIMITED_MANIFEST\")",
             PROJECT_ID, TEST_DATASET, TEST_TABLE, SOURCE_PREFIX, MANIFEST_FILE_URI));
   }
 
   @Test
   void createTableWithManifestFile_nonPartitioned() throws Exception {
+    BigQuerySyncConfig config = new BigQuerySyncConfig(properties);
+    client = new HoodieBigQuerySyncClient(config, mockBigQuery);
+
     Schema schema = Schema.of(Field.of("field", StandardSQLTypeName.STRING));
     ArgumentCaptor<JobInfo> jobInfoCaptor = ArgumentCaptor.forClass(JobInfo.class);
     Job mockJob = mock(Job.class);

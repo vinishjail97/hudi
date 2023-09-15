@@ -118,6 +118,11 @@ public class BigQuerySyncConfig extends HoodieSyncConfig implements Serializable
       .defaultValue(false)
       .withDocumentation("If true, configure table to require a partition filter to be specified when querying the table");
 
+  public static final ConfigProperty<String> BIGQUERY_SYNC_BIG_LAKE_CONNECTION_ID = ConfigProperty
+      .key("hoodie.onehouse.gcp.bigquery.sync.big_lake_connection_id")
+      .noDefaultValue()
+      .withDocumentation("The Big Lake connection ID to use");
+
   public BigQuerySyncConfig(Properties props) {
     super(props);
     setDefaults(BigQuerySyncConfig.class.getName());

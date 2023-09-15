@@ -49,10 +49,10 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_ALWAYS_UPDATE;
+import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_BIG_LAKE_CONNECTION_ID;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_DATASET_LOCATION;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_DATASET_NAME;
 import static org.apache.hudi.gcp.bigquery.BigQuerySyncConfig.BIGQUERY_SYNC_PROJECT_ID;
@@ -64,6 +64,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
 
   protected final BigQuerySyncConfig config;
   private final String projectId;
+  private final String bigLakeConnectionId;
   private final String datasetName;
   private final boolean alwaysUpdateSchema;
   private final boolean requirePartitionFilter;
@@ -73,6 +74,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     super(config);
     this.config = config;
     this.projectId = config.getString(BIGQUERY_SYNC_PROJECT_ID);
+    this.bigLakeConnectionId = config.getString(BIGQUERY_SYNC_BIG_LAKE_CONNECTION_ID);
     this.datasetName = config.getString(BIGQUERY_SYNC_DATASET_NAME);
     this.alwaysUpdateSchema = config.getBoolean(BIGQUERY_SYNC_ALWAYS_UPDATE);
     this.requirePartitionFilter = config.getBoolean(BIGQUERY_SYNC_REQUIRE_PARTITION_FILTER);
@@ -87,6 +89,7 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     this.alwaysUpdateSchema = config.getBoolean(BIGQUERY_SYNC_ALWAYS_UPDATE);
     this.requirePartitionFilter = config.getBoolean(BIGQUERY_SYNC_REQUIRE_PARTITION_FILTER);
     this.bigquery = bigquery;
+    bigLakeConnectionId = config.getString(BIGQUERY_SYNC_BIG_LAKE_CONNECTION_ID);
   }
 
   private void createBigQueryConnection() {
@@ -109,6 +112,9 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
       if (!StringUtils.isNullOrEmpty(sourceUriPrefix)) {
         withClauses += " WITH PARTITION COLUMNS";
         extraOptions += String.format(" hive_partition_uri_prefix=\"%s\", require_hive_partition_filter=%s,", sourceUriPrefix, requirePartitionFilter);
+      }
+      if (!StringUtils.isNullOrEmpty(bigLakeConnectionId)) {
+        withClauses += String.format(" WITH CONNECTION `%s`", bigLakeConnectionId);
       }
 
       String query =
@@ -185,16 +191,20 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     updatedTableFields.addAll(schema.getFields());
     Schema finalSchema = Schema.of(updatedTableFields);
     boolean sameSchema = definition.getSchema() != null && definition.getSchema().equals(finalSchema);
-    boolean samePartitionFilter = partitionFields.isEmpty() || Objects.equals(requirePartitionFilter, definition.getHivePartitioningOptions().getRequirePartitionFilter());
+    boolean samePartitionFilter = partitionFields.isEmpty()
+        || (requirePartitionFilter == (definition.getHivePartitioningOptions().getRequirePartitionFilter() != null && definition.getHivePartitioningOptions().getRequirePartitionFilter()));
     if (!alwaysUpdateSchema && sameSchema && samePartitionFilter) {
       return; // No need to update schema.
     }
+    ExternalTableDefinition.Builder builder = definition.toBuilder();
+    builder.setSchema(finalSchema);
+    builder.setAutodetect(false);
+    if (definition.getHivePartitioningOptions() != null) {
+      builder.setHivePartitioningOptions(definition.getHivePartitioningOptions().toBuilder().setRequirePartitionFilter(requirePartitionFilter).build());
+    }
     Table updatedTable = existingTable.toBuilder()
-        .setDefinition(definition.toBuilder().setSchema(finalSchema).setAutodetect(false)
-            .setHivePartitioningOptions(definition.getHivePartitioningOptions().toBuilder().setRequirePartitionFilter(requirePartitionFilter).build())
-            .build())
+        .setDefinition(builder.build())
         .build();
-
     bigquery.update(updatedTable);
   }
 
@@ -276,14 +286,21 @@ public class HoodieBigQuerySyncClient extends HoodieSyncClient {
     return table != null && table.exists();
   }
 
-  public boolean tableNotExistsOrNotUsesManifest(String tableName) {
+  public boolean tableNotExistsOrNotUsesManifestOrNotUsesBigLake(String tableName) {
     TableId tableId = TableId.of(projectId, datasetName, tableName);
     Table table = bigquery.getTable(tableId);
     if (table == null || !table.exists()) {
       return true;
     }
     ExternalTableDefinition externalTableDefinition = table.getDefinition();
-    return externalTableDefinition.getSourceUris() == null || externalTableDefinition.getSourceUris().stream().noneMatch(uri -> uri.contains(ManifestFileWriter.ABSOLUTE_PATH_MANIFEST_FOLDER_NAME));
+    boolean manifestDoesNotExist =
+        externalTableDefinition.getSourceUris() == null
+        || externalTableDefinition.getSourceUris().stream().noneMatch(uri -> uri.contains(ManifestFileWriter.ABSOLUTE_PATH_MANIFEST_FOLDER_NAME));
+    if (!StringUtils.isNullOrEmpty(config.getString(BIGQUERY_SYNC_BIG_LAKE_CONNECTION_ID))) {
+      // If bigLakeConnectionId is present and connectionId is not present in table definition, we need to replace the table.
+      return manifestDoesNotExist || externalTableDefinition.getConnectionId() == null;
+    }
+    return manifestDoesNotExist;
   }
 
   @Override
