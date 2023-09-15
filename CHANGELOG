@@ -1141,3 +1141,9 @@ d101819c98f [ENG-1335] Upgrade to version release-v0.25.2 (#400)
 ---[2023-09-12 21:49:07] [release-v0.25.4] ---
 ad8e0dbf58f [ENG-1320] add location to BQ job definition and add partition filter required support (#403)
 703e9dcfd34 [ENG-1352] Upgrade to version release-v0.25.3 (#402)
+
+---[2023-09-14 15:48:19] [release-v0.25.5] ---
+c26cefb9140 [ENG-1325] clear basepath from the view manager stopForBasePath is called (#408)
+42e1aee2fc9 [ENG-2281] Port bug fixes from Dataplane repo back to hudi-internal (#406)
+3763f90fbf0 [ONHS-11388] Upgrade to version release-v0.25.4 (#404)
+7d81e2a748f [ONHS-11369] add option to fallback to full table scan if files are deleted due to… (#405)

@@ -244,7 +244,9 @@ public class EmbeddedTimelineService {
         RUNNING_SERVICES.remove(serverPort);
       }
     }
-    this.server.unregisterBasePath(basePath);
+    if (this.server != null) {
+      this.server.unregisterBasePath(basePath);
+    }
     // continue rest of shutdown outside of the synchronized block to avoid excess blocking
     if (basePaths.isEmpty() && null != server) {
       LOG.info("Closing Timeline server");

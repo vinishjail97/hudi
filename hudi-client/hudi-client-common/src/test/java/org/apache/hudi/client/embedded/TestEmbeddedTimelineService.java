@@ -68,8 +68,10 @@ public class TestEmbeddedTimelineService extends HoodieCommonTestHarness {
     // test shutdown happens after the last path is removed
     service1.stopForBasePath(writeConfig2.getBasePath());
     verify(mockService, never()).close();
+    verify(mockService, times(1)).unregisterBasePath(writeConfig2.getBasePath());
 
     service2.stopForBasePath(writeConfig1.getBasePath());
+    verify(mockService, times(1)).unregisterBasePath(writeConfig1.getBasePath());
     verify(mockService, times(1)).close();
   }
 
@@ -138,9 +140,11 @@ public class TestEmbeddedTimelineService extends HoodieCommonTestHarness {
 
     // test shutdown happens immediately since each server has only one path associated with it
     service1.stopForBasePath(writeConfig1.getBasePath());
+    verify(mockService, times(1)).unregisterBasePath(writeConfig1.getBasePath());
     verify(mockService, times(1)).close();
 
     service2.stopForBasePath(writeConfig2.getBasePath());
+    verify(mockService2, times(1)).unregisterBasePath(writeConfig2.getBasePath());
     verify(mockService2, times(1)).close();
   }
 
@@ -175,9 +179,11 @@ public class TestEmbeddedTimelineService extends HoodieCommonTestHarness {
 
     // test shutdown happens immediately since each server has only one path associated with it
     service1.stopForBasePath(writeConfig1.getBasePath());
+    verify(mockService, times(1)).unregisterBasePath(writeConfig1.getBasePath());
     verify(mockService, times(1)).close();
 
     service2.stopForBasePath(writeConfig2.getBasePath());
+    verify(mockService2, times(1)).unregisterBasePath(writeConfig2.getBasePath());
     verify(mockService2, times(1)).close();
   }
 }
