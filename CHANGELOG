@@ -1147,3 +1147,9 @@ c26cefb9140 [ENG-1325] clear basepath from the view manager stopForBasePath is c
 42e1aee2fc9 [ENG-2281] Port bug fixes from Dataplane repo back to hudi-internal (#406)
 3763f90fbf0 [ONHS-11388] Upgrade to version release-v0.25.4 (#404)
 7d81e2a748f [ONHS-11369] add option to fallback to full table scan if files are deleted due to… (#405)
+
+---[2023-09-17 07:36:47] [release-v0.26.0] Adding release tag for hudi-internal release-v0.26.0---
+48cd1bc15 [ENG-1320] Use bigLakeConnectionId for BQ manifest sync (#411)
+da84e11dc [ENG-2294] Manifest File Writer: avoid creating view per partition (#412)
+dc6b9b924 [ENG-2280] fix handling of require partition filter updates (#410)
+e39518556 [AUDIT-370] Upgrade to version release-v0.25.5 (#409)
