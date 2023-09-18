@@ -846,10 +846,10 @@ public class DeltaSync implements Serializable, Closeable {
           LOG.error("[MetaSync] SyncTool class " + impl.trim() + " failed with exception", e);
           failedMetaSyncs.put(impl, e);
         }
-        long metaSyncTimeMs = syncContext != null ? syncContext.stop() : 0;
-        metrics.updateDeltaStreamerMetaSyncMetrics(getSyncClassShortName(impl), metaSyncTimeMs);
+        long metaSyncTimeNanos = syncContext != null ? syncContext.stop() : 0;
+        metrics.updateDeltaStreamerMetaSyncMetrics(getSyncClassShortName(impl), metaSyncTimeNanos);
         if (success) {
-          LOG.info("[MetaSync] SyncTool class " + impl.trim() + " completed successfully and took " + metaSyncTimeMs);
+          LOG.info("[MetaSync] SyncTool class " + impl.trim() + " completed successfully and took " + metaSyncTimeNanos + " nanos");
         }
       }
       if (!failedMetaSyncs.isEmpty()) {
