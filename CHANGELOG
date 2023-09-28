@@ -1153,3 +1153,9 @@ c26cefb9140 [ENG-1325] clear basepath from the view manager stopForBasePath is c
 da84e11dc [ENG-2294] Manifest File Writer: avoid creating view per partition (#412)
 dc6b9b924 [ENG-2280] fix handling of require partition filter updates (#410)
 e39518556 [AUDIT-370] Upgrade to version release-v0.25.5 (#409)
+
+---[2023-09-28 11:49:58] [release-v0.27.0] upgrade release tag for hudi-internal release-v0.27.0---
+fd5fe5f2412 [ENG-2126] Standalone table services (#414)
+e7c8dfc30b4 [ENG-2126] Cherry pick 6481 (#417)
+15c1676d5a7 [ONHS-11455] Use appropriate Naming and Logging (#415)
+89f1d2bd862 [AUDIT-376] - Upgrade to version release-v0.26.0 (#413)
