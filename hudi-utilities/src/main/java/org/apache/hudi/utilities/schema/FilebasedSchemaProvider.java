@@ -25,6 +25,7 @@ import org.apache.hudi.common.fs.FSUtils;
 import org.apache.hudi.common.util.FileIOUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.utilities.sources.helpers.SanitizationUtils;
 import org.apache.hudi.utilities.exception.HoodieSchemaProviderException;
 
 import com.fasterxml.jackson.core.JsonParser;
@@ -42,9 +43,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-import static org.apache.hudi.utilities.deltastreamer.SourceFormatAdapter.SourceFormatAdapterConfig.AVRO_FIELD_NAME_INVALID_CHAR_MASK;
-import static org.apache.hudi.utilities.deltastreamer.SourceFormatAdapter.SourceFormatAdapterConfig.SANITIZE_AVRO_FIELD_NAMES;
 
 /**
  * A simple schema provider, that reads off files on DFS.
@@ -151,14 +149,16 @@ public class FilebasedSchemaProvider extends SchemaProvider {
 
   public FilebasedSchemaProvider(TypedProperties props, JavaSparkContext jssc) {
     super(props, jssc);
-    DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(Config.SOURCE_SCHEMA_FILE_PROP));
-    String sourceFile = props.getString(Config.SOURCE_SCHEMA_FILE_PROP);
-    boolean sanitizeSchema = props.getBoolean(SANITIZE_AVRO_FIELD_NAMES.key(), SANITIZE_AVRO_FIELD_NAMES.defaultValue());
-    String invalidCharMask = props.getString(AVRO_FIELD_NAME_INVALID_CHAR_MASK.key(), AVRO_FIELD_NAME_INVALID_CHAR_MASK.defaultValue());
+    DataSourceUtils.checkRequiredProperties(props, Collections.singletonList(FilebasedSchemaProvider.Config.SOURCE_SCHEMA_FILE_PROP));
+    String sourceFile = props.getString(FilebasedSchemaProvider.Config.SOURCE_SCHEMA_FILE_PROP);
+    boolean sanitizeSchema = props.getBoolean(SanitizationUtils.Config.SANITIZE_AVRO_FIELD_NAMES.key(),
+        SanitizationUtils.Config.SANITIZE_AVRO_FIELD_NAMES.defaultValue());
+    String invalidCharMask = props.getString(SanitizationUtils.Config.AVRO_FIELD_NAME_INVALID_CHAR_MASK.key(),
+        SanitizationUtils.Config.AVRO_FIELD_NAME_INVALID_CHAR_MASK.defaultValue());
     this.fs = FSUtils.getFs(sourceFile, jssc.hadoopConfiguration(), true);
     this.sourceSchema = readAvroSchemaFromFile(sourceFile, this.fs, sanitizeSchema, invalidCharMask);
-    if (props.containsKey(Config.TARGET_SCHEMA_FILE_PROP)) {
-      this.targetSchema = readAvroSchemaFromFile(props.getString(Config.TARGET_SCHEMA_FILE_PROP), this.fs, sanitizeSchema, invalidCharMask);
+    if (props.containsKey(FilebasedSchemaProvider.Config.TARGET_SCHEMA_FILE_PROP)) {
+      this.targetSchema = readAvroSchemaFromFile(props.getString(FilebasedSchemaProvider.Config.TARGET_SCHEMA_FILE_PROP), this.fs, sanitizeSchema, invalidCharMask);
     }
   }
 

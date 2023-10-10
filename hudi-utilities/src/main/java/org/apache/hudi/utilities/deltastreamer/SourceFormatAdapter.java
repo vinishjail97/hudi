@@ -20,9 +20,6 @@ package org.apache.hudi.utilities.deltastreamer;
 
 import org.apache.hudi.AvroConversionUtils;
 import org.apache.hudi.HoodieSparkUtils;
-import org.apache.hudi.avro.HoodieAvroUtils;
-import org.apache.hudi.common.config.ConfigProperty;
-import org.apache.hudi.common.config.HoodieConfig;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.exception.HoodieIOException;
@@ -40,10 +37,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.types.ArrayType;
-import org.apache.spark.sql.types.DataType;
 import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
@@ -51,6 +45,7 @@ import org.apache.spark.sql.types.StructType;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
 import scala.util.Either;
@@ -64,31 +59,10 @@ import static org.apache.hudi.utilities.schema.RowBasedSchemaProvider.HOODIE_REC
  */
 public final class SourceFormatAdapter implements Closeable {
 
-  public static class SourceFormatAdapterConfig extends HoodieConfig {
-    // sanitizes invalid columns both in the data read from source and also in the schema.
-    // invalid definition here goes by avro naming convention (https://avro.apache.org/docs/current/spec.html#names).
-    public static final ConfigProperty<Boolean> SANITIZE_AVRO_FIELD_NAMES = ConfigProperty
-        .key("hoodie.deltastreamer.source.sanitize.invalid.column.names")
-        .defaultValue(false)
-        .withDocumentation("Sanitizes invalid column names both in the data and also in the schema");
-
-    public static final ConfigProperty<String> AVRO_FIELD_NAME_INVALID_CHAR_MASK =  ConfigProperty
-        .key("hoodie.deltastreamer.source.sanitize.invalid.char.mask")
-        .defaultValue("__")
-        .withDocumentation("Character mask to be used as replacement for invalid field names");
-
-    public SourceFormatAdapterConfig() {
-      super();
-    }
-
-    public SourceFormatAdapterConfig(TypedProperties props) {
-      super(props);
-    }
-  }
+  private static final Logger LOG = Logger.getLogger(SourceFormatAdapter.class.getName());
 
   private final Source source;
   private final Option<QuarantineTableWriterInterface> quarantineTableWriterInterface;
-  private final SourceFormatAdapterConfig config;
 
   public SourceFormatAdapter(Source source) {
     this(source, Option.empty(), Option.empty());
@@ -99,7 +73,6 @@ public final class SourceFormatAdapter implements Closeable {
                              Option<TypedProperties> props) {
     this.source = source;
     this.quarantineTableWriterInterface = quarantineTableWriterInterface;
-    this.config = props.isPresent() ? new SourceFormatAdapterConfig(props.get()) : new SourceFormatAdapterConfig();
   }
 
   /**
@@ -119,87 +92,6 @@ public final class SourceFormatAdapter implements Closeable {
         return rdd.map(convertor::fromJson);
       }
     }).orElse(null);
-  }
-
-  /**
-   * Config that automatically sanitizes the field names as per avro naming rules.
-   * @return enabled status.
-   */
-  private boolean isNameSanitizingEnabled() {
-    return config.getBooleanOrDefault(SourceFormatAdapterConfig.SANITIZE_AVRO_FIELD_NAMES);
-  }
-
-  /**
-   * Replacement mask for invalid characters encountered in avro names.
-   * @return sanitized value.
-   */
-  private String getInvalidCharMask() {
-    return config.getStringOrDefault(SourceFormatAdapterConfig.AVRO_FIELD_NAME_INVALID_CHAR_MASK);
-  }
-
-  private static DataType sanitizeDataTypeForAvro(DataType dataType, String invalidCharMask) {
-    if (dataType instanceof ArrayType) {
-      ArrayType arrayType = (ArrayType) dataType;
-      DataType sanitizedDataType = sanitizeDataTypeForAvro(arrayType.elementType(), invalidCharMask);
-      return new ArrayType(sanitizedDataType, arrayType.containsNull());
-    } else if (dataType instanceof MapType) {
-      MapType mapType = (MapType) dataType;
-      DataType sanitizedKeyDataType = sanitizeDataTypeForAvro(mapType.keyType(), invalidCharMask);
-      DataType sanitizedValueDataType = sanitizeDataTypeForAvro(mapType.valueType(), invalidCharMask);
-      return new MapType(sanitizedKeyDataType, sanitizedValueDataType, mapType.valueContainsNull());
-    } else if (dataType instanceof StructType) {
-      return sanitizeStructTypeForAvro((StructType) dataType, invalidCharMask);
-    }
-    return dataType;
-  }
-
-  // TODO: Rebase this to use InternalSchema when it is ready.
-  public static StructType sanitizeStructTypeForAvro(StructType structType, String invalidCharMask) {
-    StructType sanitizedStructType = new StructType();
-    StructField[] structFields = structType.fields();
-    for (StructField s : structFields) {
-      DataType currFieldDataTypeSanitized = sanitizeDataTypeForAvro(s.dataType(), invalidCharMask);
-      StructField structFieldCopy = new StructField(HoodieAvroUtils.sanitizeName(s.name(), invalidCharMask),
-            currFieldDataTypeSanitized, s.nullable(), s.metadata());
-      sanitizedStructType = sanitizedStructType.add(structFieldCopy);
-    }
-    return sanitizedStructType;
-  }
-
-  private static Dataset<Row> sanitizeColumnNamesForAvro(Dataset<Row> inputDataset, String invalidCharMask) {
-    StructField[] inputFields = inputDataset.schema().fields();
-    Dataset<Row> targetDataset = inputDataset;
-    for (StructField sf : inputFields) {
-      DataType sanitizedFieldDataType = sanitizeDataTypeForAvro(sf.dataType(), invalidCharMask);
-      if (!sanitizedFieldDataType.equals(sf.dataType())) {
-        // Sanitizing column names for nested types can be thought of as going from one schema to another
-        // which are structurally similar except for actual column names itself. So casting is safe and sufficient.
-        targetDataset = targetDataset.withColumn(sf.name(), targetDataset.col(sf.name()).cast(sanitizedFieldDataType));
-      }
-      String possibleRename = HoodieAvroUtils.sanitizeName(sf.name(), invalidCharMask);
-      if (!sf.name().equals(possibleRename)) {
-        targetDataset = targetDataset.withColumnRenamed(sf.name(), possibleRename);
-      }
-    }
-    return targetDataset;
-  }
-
-  /**
-   * Sanitize all columns including nested ones as per Avro conventions.
-   * @param srcBatch
-   * @param shouldSanitize
-   * @param invalidCharMask
-   * @return sanitized batch.
-   */
-  private static InputBatch<Dataset<Row>> trySanitizeFieldNames(InputBatch<Dataset<Row>> srcBatch,
-                                                                boolean shouldSanitize,
-                                                                String invalidCharMask) {
-    if (!shouldSanitize || !srcBatch.getBatch().isPresent()) {
-      return srcBatch;
-    }
-    Dataset<Row> srcDs = srcBatch.getBatch().get();
-    Dataset<Row> targetDs = sanitizeColumnNamesForAvro(srcDs, invalidCharMask);
-    return new InputBatch<>(Option.ofNullable(targetDs), srcBatch.getCheckpointForNextBatch(), srcBatch.getSchemaProvider());
   }
 
   /**
@@ -234,8 +126,7 @@ public final class SourceFormatAdapter implements Closeable {
         return new InputBatch<>(Option.ofNullable(eventsRdd),r.getCheckpointForNextBatch(), r.getSchemaProvider());
       }
       case ROW: {
-        InputBatch<Dataset<Row>> r = trySanitizeFieldNames(((Source<Dataset<Row>>) source).fetchNext(lastCkptStr, sourceLimit),
-            isNameSanitizingEnabled(), getInvalidCharMask());
+        InputBatch<Dataset<Row>> r = (((Source<Dataset<Row>>) source).fetchNext(lastCkptStr, sourceLimit));
         return new InputBatch<>(Option.ofNullable(r.getBatch().map(
             rdd -> {
                 SchemaProvider originalProvider = UtilHelpers.getOriginalSchemaProvider(r.getSchemaProvider());
@@ -267,8 +158,7 @@ public final class SourceFormatAdapter implements Closeable {
   public InputBatch<Dataset<Row>> fetchNewDataInRowFormat(Option<String> lastCkptStr, long sourceLimit) {
     switch (source.getSourceType()) {
       case ROW:
-        InputBatch<Dataset<Row>> datasetInputBatch = trySanitizeFieldNames(((Source<Dataset<Row>>) source).fetchNext(lastCkptStr, sourceLimit),
-            isNameSanitizingEnabled(), getInvalidCharMask());
+        InputBatch<Dataset<Row>> datasetInputBatch = ((Source<Dataset<Row>>) source).fetchNext(lastCkptStr, sourceLimit);
         return new InputBatch<>(transformDatasetWithQuarantineEvents(datasetInputBatch.getBatch(), QuarantineEvent.QuarantineReason.JSON_ROW_DESERIALIZATION_FAILURE),
             datasetInputBatch.getCheckpointForNextBatch(), datasetInputBatch.getSchemaProvider());
       case AVRO: {

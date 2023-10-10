@@ -19,13 +19,18 @@
 
 package org.apache.hudi.utilities.deltastreamer;
 
+import org.apache.hudi.AvroConversionUtils;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.utilities.schema.OnehouseSchemaProviderWithPostProcessor;
+import org.apache.hudi.utilities.schema.RowBasedSchemaProvider;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.InputBatch;
-import org.apache.hudi.utilities.sources.Source;
+import org.apache.hudi.utilities.sources.RowSource;
 
+import org.apache.hudi.utilities.sources.helpers.SanitizationUtils;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
@@ -155,89 +160,92 @@ public class TestSourceFormatAdapter {
     return personStruct;
   }
 
-  private void setupSource(Dataset<Row> ds) {
-    SchemaProvider nullSchemaProvider = new InputBatch.NullSchemaProvider();
-    InputBatch<Dataset<Row>> batch = new InputBatch<>(Option.of(ds), DUMMY_CHECKPOINT, nullSchemaProvider);
-    testDataSource = new TestDataSource(new TypedProperties(), jsc, spark, nullSchemaProvider, batch);
+  private void setupSource(Dataset<Row> ds, TypedProperties properties, SchemaProvider schemaProvider) {
+    InputBatch<Dataset<Row>> batch = new InputBatch<>(Option.of(ds), DUMMY_CHECKPOINT, schemaProvider);
+    testDataSource = new TestDataSource(properties, jsc, spark, schemaProvider, batch);
   }
 
-  private InputBatch<Dataset<Row>> fetchData(Dataset<Row> inputDs) {
+  private InputBatch<Dataset<Row>> fetchData(Dataset<Row> inputDs, SchemaProvider schemaProvider) {
     TypedProperties typedProperties = new TypedProperties();
-    typedProperties.put(SourceFormatAdapter.SourceFormatAdapterConfig.SANITIZE_AVRO_FIELD_NAMES.key(), true);
-    typedProperties.put(SourceFormatAdapter.SourceFormatAdapterConfig.AVRO_FIELD_NAME_INVALID_CHAR_MASK.key(), "__");
-    setupSource(inputDs);
+    typedProperties.put(SanitizationUtils.Config.SANITIZE_AVRO_FIELD_NAMES.key(), true);
+    typedProperties.put(SanitizationUtils.Config.AVRO_FIELD_NAME_INVALID_CHAR_MASK.key(), "__");
+
+    setupSource(inputDs, typedProperties, schemaProvider);
     SourceFormatAdapter sourceFormatAdapter = new SourceFormatAdapter(testDataSource, Option.empty(), Option.of(typedProperties));
     return sourceFormatAdapter.fetchNewDataInRowFormat(Option.of(DUMMY_CHECKPOINT), 10L);
   }
 
-  @Test
-  public void nestedTypeWithProperNaming() {
-    JavaRDD<String> rdd = jsc.textFile("src/test/resources/data/avro_sanitization.json");
-    StructType inputSchema = getSchemaWithProperNaming();
-    Dataset<Row> inputDs = spark.read().schema(inputSchema).json(rdd);
-    InputBatch<Dataset<Row>> inputBatch = fetchData(inputDs);
+  private void runCommonAssertions(InputBatch<Dataset<Row>> inputBatch,
+                                   StructType expectedSchema,
+                                   String expectedDataFilePath) {
     assertTrue(inputBatch.getBatch().isPresent());
     Dataset<Row> ds = inputBatch.getBatch().get();
     assertTrue(ds.collectAsList().size() == 2);
-    assertTrue(inputSchema.equals(ds.schema()));
-    JavaRDD<String> expectedData = jsc.textFile("src/test/resources/data/avro_sanitization.json");
+    assertTrue(expectedSchema.equals(ds.schema()));
+
+    // OnehouseSchemaProviderWithPostProcessor this is only part of hudi-internal
+    if (inputBatch.getSchemaProvider() instanceof OnehouseSchemaProviderWithPostProcessor
+        || inputBatch.getSchemaProvider() instanceof RowBasedSchemaProvider) {
+      assertEquals(AvroConversionUtils.convertStructTypeToAvroSchema(
+              expectedSchema,
+              "hoodie_source", "hoodie.source"),
+          inputBatch.getSchemaProvider().getSourceSchema());
+    }
+
+    JavaRDD<String> expectedData = jsc.textFile(expectedDataFilePath);
     assertEquals(expectedData.collect(), ds.toJSON().collectAsList());
+  }
+
+  @Test
+  public void nestedTypeWithProperNaming() {
+    runTest("src/test/resources/data/avro_sanitization.json",
+        getSchemaWithProperNaming(),
+        getSchemaWithProperNaming(),
+        "src/test/resources/data/avro_sanitization.json");
   }
 
   @Test
   public void structTypeAndBadNaming() {
-    JavaRDD<String> rdd = jsc.textFile("src/test/resources/data/avro_sanitization_bad_naming_in.json");
-    StructType readSchema = getSchemaWithBadAvroNamingForStructType(false);
-    Dataset<Row> inputDs = spark.read().schema(readSchema).json(rdd);
-    InputBatch<Dataset<Row>> inputBatch = fetchData(inputDs);
-    assertTrue(inputBatch.getBatch().isPresent());
-    Dataset<Row> ds = inputBatch.getBatch().get();
-    assertTrue(ds.collectAsList().size() == 2);
-    assertTrue(getSchemaWithBadAvroNamingForStructType(true).equals(ds.schema()));
-    JavaRDD<String> expectedData = jsc.textFile("src/test/resources/data/avro_sanitization_bad_naming_out.json");
-    assertEquals(expectedData.collect(), ds.toJSON().collectAsList());
+    runTest("src/test/resources/data/avro_sanitization_bad_naming_in.json",
+        getSchemaWithBadAvroNamingForStructType(false),
+        getSchemaWithBadAvroNamingForStructType(true),
+        "src/test/resources/data/avro_sanitization_bad_naming_out.json");
   }
 
   @Test
   public void arrayTypeAndBadNaming() {
-    JavaRDD<String> rdd = jsc.textFile("src/test/resources/data/avro_sanitization_bad_naming_nested_array_in.json");
-    StructType readSchema = getSchemaWithBadAvroNamingForArrayType(false);
-    Dataset<Row> inputDs = spark.read().schema(readSchema).json(rdd);
-    InputBatch<Dataset<Row>> inputBatch = fetchData(inputDs);
-    assertTrue(inputBatch.getBatch().isPresent());
-    Dataset<Row> ds = inputBatch.getBatch().get();
-    assertTrue(ds.collectAsList().size() == 2);
-    assertTrue(getSchemaWithBadAvroNamingForArrayType(true).equals(ds.schema()));
-    JavaRDD<String> expectedData = jsc.textFile("src/test/resources/data/avro_sanitization_bad_naming_nested_array_out.json");
-    assertEquals(expectedData.collect(), ds.toJSON().collectAsList());
+    runTest("src/test/resources/data/avro_sanitization_bad_naming_nested_array_in.json",
+        getSchemaWithBadAvroNamingForArrayType(false),
+        getSchemaWithBadAvroNamingForArrayType(true),
+        "src/test/resources/data/avro_sanitization_bad_naming_nested_array_out.json");
   }
 
   @Test
   public void mapTypeAndBadNaming() {
-    JavaRDD<String> rdd = jsc.textFile("src/test/resources/data/avro_sanitization_bad_naming_nested_map_in.json");
-    StructType readSchema = getSchemaWithBadAvroNamingForMapType(false);
-    Dataset<Row> inputDs = spark.read().schema(readSchema).json(rdd);
-    InputBatch<Dataset<Row>> inputBatch = fetchData(inputDs);
-    assertTrue(inputBatch.getBatch().isPresent());
-    Dataset<Row> ds = inputBatch.getBatch().get();
-    assertTrue(ds.collectAsList().size() == 2);
-    assertTrue(getSchemaWithBadAvroNamingForMapType(true).equals(ds.schema()));
-    JavaRDD<String> expectedData = jsc.textFile("src/test/resources/data/avro_sanitization_bad_naming_nested_map_out.json");
-    assertEquals(expectedData.collect(), ds.toJSON().collectAsList());
+    runTest("src/test/resources/data/avro_sanitization_bad_naming_nested_map_in.json",
+        getSchemaWithBadAvroNamingForMapType(false),
+        getSchemaWithBadAvroNamingForMapType(true),
+        "src/test/resources/data/avro_sanitization_bad_naming_nested_map_out.json");
   }
 
-  public static class TestDataSource extends Source<Dataset<Row>> {
-    private final InputBatch<Dataset<Row>> batch;
+  private void runTest(String inputFilePath, StructType readerSchema, StructType expectedSchema, String expectedDataFilePath) {
+    JavaRDD<String> rdd = jsc.textFile(inputFilePath);
+    Dataset<Row> inputDs = spark.read().schema(readerSchema).json(rdd);
+    InputBatch<Dataset<Row>> inputBatch = fetchData(inputDs, null);
+    runCommonAssertions(inputBatch, expectedSchema, expectedDataFilePath);
+  }
 
+  public static class TestDataSource extends RowSource {
+    private final InputBatch<Dataset<Row>> batch;
     public TestDataSource(TypedProperties props, JavaSparkContext sparkContext, SparkSession sparkSession,
-                     SchemaProvider schemaProvider, InputBatch<Dataset<Row>> batch) {
-      super(props, sparkContext, sparkSession, schemaProvider, SourceType.ROW);
+                          SchemaProvider schemaProvider, InputBatch<Dataset<Row>> batch) {
+      super(props, sparkContext, sparkSession, schemaProvider);
       this.batch = batch;
     }
 
     @Override
-    protected InputBatch<Dataset<Row>> fetchNewData(Option<String> lastCkptStr, long sourceLimit) {
-      return batch;
+    protected Pair<Option<Dataset<Row>>, String> fetchNextBatch(Option<String> lastCkptStr, long sourceLimit) {
+      return Pair.of(batch.getBatch(), batch.getCheckpointForNextBatch());
     }
   }
 }

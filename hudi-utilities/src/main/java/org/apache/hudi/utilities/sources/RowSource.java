@@ -24,6 +24,7 @@ import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 
+import org.apache.hudi.utilities.sources.helpers.SanitizationUtils;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -32,7 +33,7 @@ import org.apache.spark.sql.SparkSession;
 public abstract class RowSource extends Source<Dataset<Row>> {
 
   public RowSource(TypedProperties props, JavaSparkContext sparkContext, SparkSession sparkSession,
-      SchemaProvider schemaProvider) {
+                   SchemaProvider schemaProvider) {
     super(props, sparkContext, sparkSession, schemaProvider, SourceType.ROW);
   }
 
@@ -42,9 +43,10 @@ public abstract class RowSource extends Source<Dataset<Row>> {
   protected final InputBatch<Dataset<Row>> fetchNewData(Option<String> lastCkptStr, long sourceLimit) {
     Pair<Option<Dataset<Row>>, String> res = fetchNextBatch(lastCkptStr, sourceLimit);
     return res.getKey().map(dsr -> {
+      Dataset<Row> sanitizedDSR = SanitizationUtils.sanitizeColumnNamesForAvro(dsr, props);
       SchemaProvider rowSchemaProvider =
-          UtilHelpers.createRowBasedSchemaProvider(dsr.schema(), props, sparkContext);
-      return new InputBatch<>(res.getKey(), res.getValue(), rowSchemaProvider);
+          UtilHelpers.createRowBasedSchemaProvider(sanitizedDSR.schema(), props, sparkContext);
+      return new InputBatch<>(Option.of(sanitizedDSR), res.getValue(), rowSchemaProvider);
     }).orElseGet(() -> new InputBatch<>(res.getKey(), res.getValue()));
   }
 }
