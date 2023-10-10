@@ -31,7 +31,6 @@ import org.apache.hudi.table.HoodieTable;
 
 import org.apache.hadoop.fs.Path;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -55,14 +54,14 @@ public class HoodieKeyLocationFetchHandle<T extends HoodieRecordPayload, I, K, O
   public Stream<Pair<HoodieKey, HoodieRecordLocation>> locations() {
     HoodieBaseFile baseFile = partitionPathBaseFilePair.getRight();
     BaseFileUtils baseFileUtils = BaseFileUtils.getInstance(baseFile.getPath());
-    List<HoodieKey> hoodieKeyList = new ArrayList<>();
+    List<HoodieKey> hoodieKeyList;
     if (keyGeneratorOpt.isPresent()) {
       hoodieKeyList = baseFileUtils.fetchHoodieKeys(hoodieTable.getHadoopConf(), new Path(baseFile.getPath()), keyGeneratorOpt);
     } else {
       hoodieKeyList = baseFileUtils.fetchHoodieKeys(hoodieTable.getHadoopConf(), new Path(baseFile.getPath()));
     }
-    return hoodieKeyList.stream()
-        .map(entry -> Pair.of(entry,
-            new HoodieRecordLocation(baseFile.getCommitTime(), baseFile.getFileId())));
+    String commitTime = baseFile.getCommitTime();
+    String fileId = baseFile.getFileId();
+    return hoodieKeyList.stream().map(entry -> Pair.of(entry, new HoodieRecordLocation(commitTime, fileId)));
   }
 }
