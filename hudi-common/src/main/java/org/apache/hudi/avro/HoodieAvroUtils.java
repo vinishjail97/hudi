@@ -322,7 +322,8 @@ public class HoodieAvroUtils {
    * @param withOperationField Whether to include the '_hoodie_operation' field
    */
   public static Schema addMetadataFields(Schema schema, boolean withOperationField) {
-    List<Schema.Field> parentFields = new ArrayList<>();
+    int newFieldsSize = HoodieRecord.HOODIE_META_COLUMNS.size() + (withOperationField ? 1 : 0);
+    List<Schema.Field> parentFields = new ArrayList<>(schema.getFields().size() + newFieldsSize);
 
     Schema.Field commitTimeField =
         new Schema.Field(HoodieRecord.COMMIT_TIME_METADATA_FIELD, METADATA_FIELD_SCHEMA, "", JsonProperties.NULL_VALUE);
@@ -559,6 +560,9 @@ public class HoodieAvroUtils {
     } else if (field.defaultVal() instanceof JsonProperties.Null) {
       newRecord.put(field.pos(), null);
     } else {
+      if (!field.schema().isNullable() && field.defaultVal() == null) {
+        throw new SchemaCompatibilityException("Field " + field.name() + " has no default value and is null in old record");
+      }
       newRecord.put(field.pos(), field.defaultVal());
     }
   }
