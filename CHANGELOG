@@ -1159,3 +1159,10 @@ fd5fe5f2412 [ENG-2126] Standalone table services (#414)
 e7c8dfc30b4 [ENG-2126] Cherry pick 6481 (#417)
 15c1676d5a7 [ONHS-11455] Use appropriate Naming and Logging (#415)
 89f1d2bd862 [AUDIT-376] - Upgrade to version release-v0.26.0 (#413)
+
+---[2023-10-11 22:50:21] [release-v0.28.0] ---
+e9efc7d5834 [ENG-1053]  updates for failing tests after performance changes (#429)
+5785a5ff2e4 [ENG-1053] Performance: right size field array, throw exception when required field is not set (#427)
+89bb4f3f078 [ENG-1053] fix inefficient portions of the code (#424)
+1ca33377927 [ONHS-11577] Adding sanitization for rowSource (#420)
+d2b01768960 [ENG-2740] Fix custom key generator (#421)
