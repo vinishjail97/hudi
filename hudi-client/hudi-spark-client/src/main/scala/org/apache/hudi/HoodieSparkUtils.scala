@@ -151,7 +151,7 @@ object HoodieSparkUtils extends SparkAdapterSupport with SparkVersionsSupport {
     // We check whether passed in reader schema is identical to writer schema to avoid costly serde loop of
     // making Spark deserialize its internal representation [[InternalRow]] into [[Row]] for subsequent conversion
     // (and back)
-    val sameSchema = AvroConversionUtils.areSchemasEquivalent(writerAvroSchema, readerAvroSchema)
+    val sameSchema = writerAvroSchema.equals(readerAvroSchema)
     val (nullable, _) = AvroConversionUtils.resolveAvroTypeNullability(writerAvroSchema)
 
     // NOTE: We have to serialize Avro schema, and then subsequently parse it on the executor node, since Spark
