@@ -1166,3 +1166,7 @@ e9efc7d5834 [ENG-1053]  updates for failing tests after performance changes (#42
 89bb4f3f078 [ENG-1053] fix inefficient portions of the code (#424)
 1ca33377927 [ONHS-11577] Adding sanitization for rowSource (#420)
 d2b01768960 [ENG-2740] Fix custom key generator (#421)
+
+---[2023-10-16 22:01:00] [release-v0.28.1] ---
+1c636211b2b [ENG-1053] do deep copy if schemas are different at all (#431)
+4513cb23588 [AUDIT-439] Upgrade to version release-v0.28.0 (#430)
