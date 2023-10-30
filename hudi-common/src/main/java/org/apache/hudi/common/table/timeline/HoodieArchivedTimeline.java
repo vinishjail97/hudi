@@ -101,16 +101,30 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
   }
 
   /**
-   * Loads completed instants from startTs(inclusive).
-   * Note that there is no lazy loading, so this may not work if really early startTs is specified.
+   * Loads completed instants satisfying the given time range filter.
+   * Note that there is no lazy loading, so a wide time range may not work.
    */
-  public HoodieArchivedTimeline(HoodieTableMetaClient metaClient, String startTs) {
+  public HoodieArchivedTimeline(HoodieTableMetaClient metaClient, TimeRangeFilter timeRangeFilter) {
     this.metaClient = metaClient;
-    setInstants(loadInstants(new StartTsFilter(startTs), true,
+    setInstants(loadInstants(timeRangeFilter, true,
         record -> HoodieInstant.State.COMPLETED.toString().equals(record.get(ACTION_STATE).toString())));
     // multiple casts will make this lambda serializable -
     // http://docs.oracle.com/javase/specs/jls/se8/html/jls-15.html#jls-15.16
     this.details = (Function<HoodieInstant, Option<byte[]>> & Serializable) this::getInstantDetails;
+  }
+
+  /**
+   * Loads completed instants from startTs(inclusive).
+   */
+  public HoodieArchivedTimeline(HoodieTableMetaClient metaClient, String startTs) {
+    this(metaClient, new StartTsFilter(startTs));
+  }
+
+  /**
+   * Loads completed instants from startTs(inclusive) to endTs(inclusive).
+   */
+  public HoodieArchivedTimeline(HoodieTableMetaClient metaClient, String startTs, String endTs) {
+    this(metaClient, new InclusiveStartAndEndTsFilter(startTs, endTs));
   }
 
   /**
@@ -149,7 +163,7 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
 
   public void loadCompactionDetailsInMemory(String startTs, String endTs) {
     // load compactionPlan
-    loadInstants(new TimeRangeFilter(startTs, endTs), true, record ->
+    loadInstants(new InclusiveStartAndEndTsFilter(startTs, endTs), true, record ->
         record.get(ACTION_TYPE_KEY).toString().equals(HoodieTimeline.COMPACTION_ACTION)
             && HoodieInstant.State.INFLIGHT.toString().equals(record.get(ACTION_STATE).toString())
     );
@@ -173,9 +187,13 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
     return new HoodieArchivedTimeline(metaClient);
   }
 
-  private HoodieInstant readCommit(GenericRecord record, boolean loadDetails) {
+  private Option<HoodieInstant> readCommit(GenericRecord record, boolean loadDetails, TimeRangeFilter timeRangeFilter) {
     final String instantTime = record.get(HoodiePartitionMetadata.COMMIT_TIME_KEY).toString();
     final String action = record.get(ACTION_TYPE_KEY).toString();
+    final HoodieInstant hoodieInstant = new HoodieInstant(HoodieInstant.State.valueOf(record.get(ACTION_STATE).toString()), action, instantTime);
+    if (timeRangeFilter != null && !timeRangeFilter.isInRange(hoodieInstant)) {
+      return Option.empty();
+    }
     if (loadDetails) {
       getMetadataKey(action).map(key -> {
         Object actionData = record.get(key);
@@ -189,7 +207,7 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
         return null;
       });
     }
-    return new HoodieInstant(HoodieInstant.State.valueOf(record.get(ACTION_STATE).toString()), action, instantTime);
+    return Option.of(hoodieInstant);
   }
 
   @Nonnull
@@ -262,8 +280,9 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
                 StreamSupport.stream(Spliterators.spliteratorUnknownSize(itr, Spliterator.IMMUTABLE), true)
                     // Filter blocks in desired time window
                     .filter(r -> commitsFilter.apply((GenericRecord) r))
-                    .map(r -> readCommit((GenericRecord) r, loadInstantDetails))
-                    .filter(c -> filter == null || filter.isInRange(c))
+                    .map(r -> readCommit((GenericRecord) r, loadInstantDetails, filter))
+                    .filter(Option::isPresent)
+                    .map(Option::get)
                     .forEach(instantsInRange::add);
               }
             }
@@ -333,6 +352,21 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
 
     public boolean isInRange(HoodieInstant instant) {
       return HoodieTimeline.compareTimestamps(instant.getTimestamp(), GREATER_THAN_OR_EQUALS, startTs);
+    }
+  }
+
+  private static class InclusiveStartAndEndTsFilter extends TimeRangeFilter {
+    private final String startTs;
+    private final String endTs;
+
+    public InclusiveStartAndEndTsFilter(String startTs, String endTs) {
+      super(startTs, endTs);
+      this.startTs = startTs;
+      this.endTs = endTs;
+    }
+
+    public boolean isInRange(HoodieInstant instant) {
+      return HoodieTimeline.isInClosedRange(instant.getTimestamp(), this.startTs, this.endTs);
     }
   }
 
