@@ -1170,3 +1170,7 @@ d2b01768960 [ENG-2740] Fix custom key generator (#421)
 ---[2023-10-16 22:01:00] [release-v0.28.1] ---
 1c636211b2b [ENG-1053] do deep copy if schemas are different at all (#431)
 4513cb23588 [AUDIT-439] Upgrade to version release-v0.28.0 (#430)
+
+---[2023-10-30 20:38:01] [release-v0.29.0] Adding release tag for hudi-internal release-v0.29.0---
+713a2b76e6c [ENG-3680] Fix archived timeline filter bug (#434)
+f6a2500867a [ENG-1053] Upgrade to version release-v0.28.1 to release fix (#432)
