@@ -73,9 +73,9 @@ public class HoodieFileSliceReader<T extends HoodieRecordPayload> implements Ite
       String preCombineField, Option<Pair<String, String>> simpleKeyGenFieldsOpt) {
     return simpleKeyGenFieldsOpt.isPresent()
         ? SpillableMapUtils.convertToHoodieRecordPayload(record,
-        payloadClass, preCombineField, simpleKeyGenFieldsOpt.get(), scanner.isWithOperationField(), Option.empty())
+        payloadClass, preCombineField, simpleKeyGenFieldsOpt.get(), scanner.isWithOperationField(), Option.empty(), Option.empty())
         : SpillableMapUtils.convertToHoodieRecordPayload(record,
-        payloadClass, preCombineField, scanner.isWithOperationField(), scanner.getPartitionName());
+        payloadClass, preCombineField, scanner.isWithOperationField(), scanner.getPartitionName(), Option.empty());
   }
 
   private HoodieFileSliceReader(Iterator<HoodieRecord<T>> recordsItr) {

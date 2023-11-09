@@ -678,7 +678,7 @@ public abstract class AbstractHoodieLogRecordReader {
           preCombineField, withOperationField);
     } else {
       return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) rec, payloadClassFQN,
-          preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName);
+          preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName, Option.empty());
     }
   }
 

@@ -79,7 +79,7 @@ public class HoodieMetadataMergedLogRecordReader extends HoodieMergedLogRecordSc
     // When meta fields are not available, create the record using the
     // preset key field and the known partition name
     return SpillableMapUtils.convertToHoodieRecordPayload((GenericRecord) rec, payloadClassFQN,
-        preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName);
+        preCombineField, simpleKeyGenFields.get(), withOperationField, partitionName, Option.empty());
   }
 
   /**

@@ -18,8 +18,6 @@
 
 package org.apache.hudi.io;
 
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hudi.common.model.HoodieBaseFile;
 import org.apache.hudi.common.model.HoodieRecordPayload;
 import org.apache.hudi.common.util.Option;
@@ -28,6 +26,9 @@ import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.io.storage.HoodieFileReader;
 import org.apache.hudi.io.storage.HoodieFileReaderFactory;
 import org.apache.hudi.table.HoodieTable;
+
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 
 import java.io.IOException;
 
@@ -44,6 +45,14 @@ public abstract class HoodieReadHandle<T extends HoodieRecordPayload, I, K, O> e
     this.partitionPathFileIDPair = partitionPathFileIDPair;
   }
 
+  public HoodieReadHandle(HoodieWriteConfig config,
+                          Option<String> instantTime,
+                          HoodieTable<T, I, K, O> hoodieTable,
+                          Pair<String, String> partitionPathFileIDPair) {
+    super(config, instantTime, hoodieTable);
+    this.partitionPathFileIDPair = partitionPathFileIDPair;
+  }
+
   @Override
   protected FileSystem getFileSystem() {
     return hoodieTable.getMetaClient().getFs();
@@ -57,13 +66,13 @@ public abstract class HoodieReadHandle<T extends HoodieRecordPayload, I, K, O> e
     return partitionPathFileIDPair.getRight();
   }
 
-  protected HoodieBaseFile getLatestDataFile() {
+  protected HoodieBaseFile getLatestBaseFile() {
     return hoodieTable.getBaseFileOnlyView()
         .getLatestBaseFile(partitionPathFileIDPair.getLeft(), partitionPathFileIDPair.getRight()).get();
   }
 
   protected HoodieFileReader createNewFileReader() throws IOException {
     return HoodieFileReaderFactory.getFileReader(hoodieTable.getHadoopConf(),
-        new Path(getLatestDataFile().getPath()));
+        new Path(getLatestBaseFile().getPath()));
   }
 }

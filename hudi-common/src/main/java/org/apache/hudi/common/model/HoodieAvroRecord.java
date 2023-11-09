@@ -32,12 +32,26 @@ public class HoodieAvroRecord<T extends HoodieRecordPayload> extends HoodieRecor
     super(record);
   }
 
+  public HoodieAvroRecord(
+      HoodieKey key,
+      T data,
+      HoodieOperation operation,
+      HoodieRecordLocation currentLocation,
+      HoodieRecordLocation newLocation) {
+    super(key, data, operation, currentLocation, newLocation);
+  }
+
   public HoodieAvroRecord() {
   }
 
   @Override
   public HoodieRecord<T> newInstance() {
     return new HoodieAvroRecord<>(this);
+  }
+
+  @Override
+  public HoodieRecord<T> newInstance(HoodieKey key) {
+    return new HoodieAvroRecord<>(key, data);
   }
 
   @Override

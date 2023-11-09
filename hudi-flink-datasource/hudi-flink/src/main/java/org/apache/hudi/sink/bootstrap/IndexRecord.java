@@ -19,6 +19,7 @@
 package org.apache.hudi.sink.bootstrap;
 
 import org.apache.hudi.common.model.HoodieAvroRecord;
+import org.apache.hudi.common.model.HoodieKey;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.model.HoodieRecordPayload;
 
@@ -35,5 +36,10 @@ public class IndexRecord<T extends HoodieRecordPayload> extends HoodieAvroRecord
   @Override
   public HoodieRecord<T> newInstance() {
     return new IndexRecord<>(this);
+  }
+
+  @Override
+  public HoodieRecord<T> newInstance(HoodieKey key) {
+    throw new UnsupportedOperationException("Key constructor not implemented for IndexRecord");
   }
 }

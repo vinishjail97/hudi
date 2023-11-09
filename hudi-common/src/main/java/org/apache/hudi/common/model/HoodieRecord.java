@@ -43,6 +43,25 @@ public abstract class HoodieRecord<T> implements Serializable {
   public static final String OPERATION_METADATA_FIELD = "_hoodie_operation";
   public static final String HOODIE_IS_DELETED = "_hoodie_is_deleted";
 
+  public enum HoodieMetadataField {
+    COMMIT_TIME_METADATA_FIELD("_hoodie_commit_time"),
+    COMMIT_SEQNO_METADATA_FIELD("_hoodie_commit_seqno"),
+    RECORD_KEY_METADATA_FIELD("_hoodie_record_key"),
+    PARTITION_PATH_METADATA_FIELD("_hoodie_partition_path"),
+    FILENAME_METADATA_FIELD("_hoodie_file_name"),
+    OPERATION_METADATA_FIELD("_hoodie_operation");
+
+    private final String fieldName;
+
+    HoodieMetadataField(String fieldName) {
+      this.fieldName = fieldName;
+    }
+
+    public String getFieldName() {
+      return fieldName;
+    }
+  }
+
   public static final List<String> HOODIE_META_COLUMNS =
       CollectionUtils.createImmutableList(COMMIT_TIME_METADATA_FIELD, COMMIT_SEQNO_METADATA_FIELD,
           RECORD_KEY_METADATA_FIELD, PARTITION_PATH_METADATA_FIELD, FILENAME_METADATA_FIELD);
@@ -67,7 +86,7 @@ public abstract class HoodieRecord<T> implements Serializable {
   /**
    * Identifies the record across the table.
    */
-  private HoodieKey key;
+  HoodieKey key;
 
   /**
    * Actual payload of the record.
@@ -92,7 +111,7 @@ public abstract class HoodieRecord<T> implements Serializable {
   /**
    * The cdc operation.
    */
-  private HoodieOperation operation;
+  HoodieOperation operation;
 
   public HoodieRecord(HoodieKey key, T data) {
     this(key, data, null);
@@ -115,10 +134,25 @@ public abstract class HoodieRecord<T> implements Serializable {
     this.operation = record.operation;
   }
 
+  public HoodieRecord(
+      HoodieKey key,
+      T data,
+      HoodieOperation operation,
+      HoodieRecordLocation currentLocation,
+      HoodieRecordLocation newLocation) {
+    this.key = key;
+    this.data = data;
+    this.currentLocation = currentLocation;
+    this.newLocation = newLocation;
+    this.operation = operation;
+  }
+
   public HoodieRecord() {
   }
 
   public abstract HoodieRecord<T> newInstance();
+
+  public abstract HoodieRecord<T> newInstance(HoodieKey key);
 
   public HoodieKey getKey() {
     return key;
