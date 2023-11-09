@@ -205,6 +205,11 @@ public class HoodieDeltaStreamerTestBase extends UtilitiesTestBase {
 
   @AfterAll
   public static void cleanupClass() {
+    try {
+      FileSystem.closeAll();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
     UtilitiesTestBase.cleanupClass();
     if (testUtils != null) {
       testUtils.teardown();

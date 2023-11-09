@@ -1174,3 +1174,7 @@ d2b01768960 [ENG-2740] Fix custom key generator (#421)
 ---[2023-10-30 20:38:01] [release-v0.29.0] Adding release tag for hudi-internal release-v0.29.0---
 713a2b76e6c [ENG-3680] Fix archived timeline filter bug (#434)
 f6a2500867a [ENG-1053] Upgrade to version release-v0.28.1 to release fix (#432)
+
+---[2023-11-09 16:08:57] [release-v0.30.0] Adding release tag for hudi-internal release-v0.30.0---
+3454e557f77 [ENG-3705] Cherry pick GlobalSimpleIndex duplicate fix from OSS (#435)
+a044797b4d5 [AUDIT-470] Upgrade to version release-v0.29.0 (#437)

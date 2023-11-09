@@ -49,12 +49,14 @@ public class TestSparkSampleWritesUtils extends SparkClientFunctionalTestHarness
 
   @BeforeEach
   public void setUp() throws IOException {
+    super.runBeforeEach();
     dataGen = new HoodieTestDataGenerator(0xDEED);
     metaClient = getHoodieMetaClient(HoodieTableType.COPY_ON_WRITE);
   }
 
   @AfterEach
-  public void tearDown() {
+  public void tearDown() throws IOException {
+    super.closeFileSystem();
     dataGen.close();
   }
 
