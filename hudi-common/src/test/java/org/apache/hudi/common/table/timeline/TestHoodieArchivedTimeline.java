@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -135,6 +136,53 @@ public class TestHoodieArchivedTimeline extends HoodieCommonTestHarness {
     assertEquals(instants, timeline.getInstants().collect(Collectors.toList()));
   }
 
+  @Test
+  public void testLoadAllArchivedCompletedInstantsByLogFilePaths() throws Exception {
+    List<HoodieInstant> instants = createInstants();
+
+    List<String> archivedLogFilePaths = getArchiveLogFilePaths();
+    timeline = new HoodieArchivedTimeline(metaClient, new HashSet<>(archivedLogFilePaths));
+
+    // Instants 01 and 11 should not be loaded to memory since they are not completed
+    validateInstantsLoaded(timeline, Arrays.asList("01", "11"), false);
+    validateInstantsLoaded(timeline, Arrays.asList("03", "05", "08", "09"), true);
+
+    // All the completed instants should be returned
+    assertEquals(instants.stream().filter(HoodieInstant::isCompleted).collect(Collectors.toList()), timeline.getInstants().collect(Collectors.toList()));
+  }
+
+  @Test
+  public void testLoadFilteredArchivedCompletedInstantsBySingleLogFilePath() throws Exception {
+    List<HoodieInstant> instants = createInstants();
+
+    List<String> archivedLogFilePaths = getArchiveLogFilePaths();
+    timeline = new HoodieArchivedTimeline(metaClient, Collections.singleton(archivedLogFilePaths.get(0)));
+
+    // Instants 03 should be loaded to memory (since they are in log file 0)
+    validateInstantsLoaded(timeline, Arrays.asList("03"), true);
+    validateInstantsLoaded(timeline, Arrays.asList("01", "05", "08", "09", "11"), false);
+
+    assertEquals(instants.stream().filter(HoodieInstant::isCompleted)
+        .filter(instant -> Collections.singletonList("03").contains(instant.getTimestamp())).collect(Collectors.toList()),
+        timeline.getInstants().collect(Collectors.toList()));
+  }
+
+  @Test
+  public void testLoadFilteredArchivedCompletedInstantsByMultipleLogFilePath() throws Exception {
+    List<HoodieInstant> instants = createInstants();
+
+    List<String> archivedLogFilePaths = getArchiveLogFilePaths();
+    timeline = new HoodieArchivedTimeline(metaClient, new HashSet<>(archivedLogFilePaths.subList(0, 2)));
+
+    // Instants 03, 05, 08, 09 should be loaded to memory (since they are in log file 0 and 1)
+    validateInstantsLoaded(timeline, Arrays.asList("03", "05", "08", "09"), true);
+    validateInstantsLoaded(timeline, Arrays.asList("01", "11"), false);
+
+    assertEquals(instants.stream().filter(HoodieInstant::isCompleted)
+            .filter(instant -> Arrays.asList("03", "05", "08", "09").contains(instant.getTimestamp())).collect(Collectors.toList()),
+        timeline.getInstants().collect(Collectors.toList()));
+  }
+
   /**
    * Validate whether the instants of given timestamps of the hudi archived timeline are loaded to memory or not.
    * @param hoodieArchivedTimeline archived timeline to test against
@@ -165,6 +213,10 @@ public class TestHoodieArchivedTimeline extends HoodieCommonTestHarness {
    * archived commit 1 - instant1, instant2
    * archived commit 2 - instant3, instant4, instant5
    * archived commit 3 - instant6
+   *
+   * log file 1 - 01 (inflight), 03 (complete), and 05 (inflight)
+   * log file 2 - instant 05 (complete), 08 (complete), and 09 (complete)
+   * log file 3 - instant 11 (inflight)
    */
   private List<HoodieInstant> createInstants() throws Exception {
     HoodieInstant instant1Requested = new HoodieInstant(HoodieInstant.State.REQUESTED, HoodieTimeline.COMMIT_ACTION, "01");
@@ -206,12 +258,12 @@ public class TestHoodieArchivedTimeline extends HoodieCommonTestHarness {
 
     records.add(createArchivedMetaWrapper(instant2Inflight));
     records.add(createArchivedMetaWrapper(instant2Complete));
+    records.add(createArchivedMetaWrapper(instant3Requested));
     writeArchiveLog(writer, records);
     writer.close();
 
     // Write archive commit 2
     writer = buildWriter(archiveFilePath);
-    records.add(createArchivedMetaWrapper(instant3Requested));
     records.add(createArchivedMetaWrapper(instant3Inflight));
     writeArchiveLog(writer, records);
 
@@ -233,6 +285,14 @@ public class TestHoodieArchivedTimeline extends HoodieCommonTestHarness {
     writer.close();
 
     return instants;
+  }
+
+  /**
+   * Get list of archived log file paths.
+   */
+  private List<String> getArchiveLogFilePaths() throws IOException {
+    return Arrays.stream(metaClient.getFs().globStatus(new Path(metaClient.getArchivePath() + "/.commits_.archive*")))
+        .map(x -> x.getPath().toString()).collect(Collectors.toList());
   }
 
   private HoodieArchivedMetaEntry createArchivedMetaWrapper(HoodieInstant hoodieInstant) throws IOException {
