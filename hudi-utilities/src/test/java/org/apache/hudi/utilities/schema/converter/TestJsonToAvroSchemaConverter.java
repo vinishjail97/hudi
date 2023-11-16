@@ -42,7 +42,8 @@ class TestJsonToAvroSchemaConverter {
       "single-properties",
       "schema-repeating-names",
       "complex-json-union-types",
-      "not-null-default-value-schema"
+      "not-null-default-value-schema",
+      "array-with-item-type-union"
   })
   void testConvertJsonSchemaToAvroSchema(String inputCase) throws IOException {
     String jsonSchema = loadJsonSchema(inputCase);

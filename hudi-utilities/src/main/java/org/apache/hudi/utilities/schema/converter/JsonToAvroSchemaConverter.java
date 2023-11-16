@@ -108,7 +108,7 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
                       .or(() -> tryConvertEnumProperty(name, jsonProperties.get(name), schemaCounter, seenNames))
                       .orElse(
                           convertProperty(
-                              name, jsonProperties.get(name), required.contains(name), schemaCounter, seenNames)));
+                              name, jsonProperties.get(name), required.contains(name), schemaCounter, seenNames, false)));
             });
     return MAPPER.createArrayNode().addAll(avroFields);
   }
@@ -155,7 +155,7 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
                   "fields", convertProperties(jsonItems.get("properties"), getRequired(jsonItems),
                               schemaCounter, seenNames));
     } else {
-      avroItems = convertProperty(itemName, jsonItems, true, schemaCounter, seenNames);
+      avroItems = convertProperty(itemName, jsonItems, true, schemaCounter, seenNames, true);
     }
     JsonNode avroNode =
         MAPPER
@@ -193,7 +193,8 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
   }
 
   private static JsonNode convertProperty(String name, JsonNode jsonProperty, boolean isRequired,
-                                          AtomicInteger schemaCounter, Set<String> seenNames) {
+                                          AtomicInteger schemaCounter, Set<String> seenNames,
+                                          boolean isArrayType) {
     ObjectNode avroNode =
         MAPPER
             .createObjectNode()
@@ -212,7 +213,9 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     // infer `types`
     Set<String> avroSimpleTypeSet = new HashSet<>();
     List<JsonNode> avroComplexTypeSet = new ArrayList<>();
+    boolean unionType = false;
     if (jsonProperty.hasNonNull("oneOf") || jsonProperty.hasNonNull("allOf")) {
+      unionType = true;
       // prefer to look for `oneOf` and `allOf` for types
       Option<JsonNode> oneOfTypes = Option.ofNullable(jsonProperty.get("oneOf"));
       Pair<Set<String>, List<JsonNode>> allOneOfTypes = getAllTypesFromOneOfAllOfTypes(oneOfTypes, name, schemaCounter, seenNames);
@@ -244,9 +247,10 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     List<JsonNode> allTypes =
         avroTypes.stream().map(TextNode::valueOf).collect(Collectors.toList());
     allTypes.addAll(avroComplexTypeSet);
+    ArrayNode typeValue = MAPPER.createArrayNode().addAll(allTypes);
     avroNode.set(
-        "type", allTypes.size() > 1 ? MAPPER.createArrayNode().addAll(allTypes) : allTypes.get(0));
-    return avroNode;
+        "type", allTypes.size() > 1 ? typeValue : allTypes.get(0));
+    return unionType && isArrayType ? typeValue : avroNode;
   }
 
   private static Pair<Set<String>, List<JsonNode>> getAllTypesFromOneOfAllOfTypes(Option<JsonNode> jsonUnionType, String name, AtomicInteger schemaCounter, Set<String> seenNames) {
