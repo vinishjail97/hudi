@@ -1178,3 +1178,9 @@ f6a2500867a [ENG-1053] Upgrade to version release-v0.28.1 to release fix (#432)
 ---[2023-11-09 16:08:57] [release-v0.30.0] Adding release tag for hudi-internal release-v0.30.0---
 3454e557f77 [ENG-3705] Cherry pick GlobalSimpleIndex duplicate fix from OSS (#435)
 a044797b4d5 [AUDIT-470] Upgrade to version release-v0.29.0 (#437)
+
+---[2023-11-16 15:11:23] [release-v0.30.2] Adding release tag for hudi-internal release-v0.30.2---
+ee3edf2c8 [ENG-4147] Fix json schema conversion when array item type is a union schema (#444)
+69efe8e03 [AUDIT-518] Upgrade to version release-v0.30.0 (#439)
+02b83b919 [ENG-3744] Add log file filter (#438)
+586b62746 [ENG-4003] Fix failure in TestSparkSampleWritesUtils (#440)
