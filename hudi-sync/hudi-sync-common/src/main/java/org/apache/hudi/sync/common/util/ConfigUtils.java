@@ -18,6 +18,8 @@
 
 package org.apache.hudi.sync.common.util;
 
+import org.apache.hudi.common.config.ConfigProperty;
+import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 
 import org.apache.hadoop.conf.Configuration;
@@ -97,4 +99,42 @@ public class ConfigUtils {
     return hadoopConf;
   }
 
+  /**
+   * Gets the raw value for a {@link ConfigProperty} config from properties. The key and
+   * alternative keys are used to fetch the config.
+   *
+   * @param props          Configs in {@link Properties}.
+   * @param configProperty {@link ConfigProperty} config to fetch.
+   * @return {@link Option} of value if the config exists; empty {@link Option} otherwise.
+   */
+  public static Option<Object> getRawValueWithAltKeys(Properties props,
+                                                      ConfigProperty<?> configProperty) {
+    if (props.containsKey(configProperty.key())) {
+      return Option.ofNullable(props.get(configProperty.key()));
+    }
+    for (String alternative : configProperty.getAlternatives()) {
+      if (props.containsKey(alternative)) {
+        return Option.ofNullable(props.get(alternative));
+      }
+    }
+    return Option.empty();
+  }
+
+  /**
+   * Gets the boolean value for a {@link ConfigProperty} config from properties. The key and
+   * alternative keys are used to fetch the config. The default value of {@link ConfigProperty}
+   * config, if exists, is returned if the config is not found in the properties.
+   *
+   * @param props          Configs in {@link Properties}.
+   * @param configProperty {@link ConfigProperty} config to fetch.
+   * @return boolean value if the config exists; default boolean value if the config does not exist
+   * and there is default value defined in the {@link ConfigProperty} config; {@code false} otherwise.
+   */
+  public static boolean getBooleanWithAltKeys(Properties props,
+                                              ConfigProperty<?> configProperty) {
+    Option<Object> rawValue = getRawValueWithAltKeys(props, configProperty);
+    boolean defaultValue = configProperty.hasDefaultValue()
+        ? Boolean.parseBoolean(configProperty.defaultValue().toString()) : false;
+    return rawValue.map(v -> Boolean.parseBoolean(v.toString())).orElse(defaultValue);
+  }
 }

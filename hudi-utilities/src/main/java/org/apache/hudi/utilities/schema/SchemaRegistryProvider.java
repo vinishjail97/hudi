@@ -74,7 +74,8 @@ public class SchemaRegistryProvider extends SchemaProvider {
     String schema = fetchSchemaFromRegistry(registryUrl);
     try {
       SchemaConverter converter = config.containsKey(Config.SCHEMA_CONVERTER_PROP)
-          ? ReflectionUtils.loadClass(config.getString(Config.SCHEMA_CONVERTER_PROP))
+          ? (SchemaConverter) ReflectionUtils.loadClass(
+          config.getString(Config.SCHEMA_CONVERTER_PROP), new Class<?>[] {TypedProperties.class}, config)
           : s -> s;
       return new Schema.Parser().parse(converter.convert(schema));
     } catch (Exception e) {

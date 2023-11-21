@@ -19,14 +19,19 @@
 
 package org.apache.hudi.utilities.schema.converter;
 
+import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.util.JsonUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.collection.Pair;
+import org.apache.hudi.sync.common.util.ConfigUtils;
 import org.apache.hudi.utilities.schema.SchemaRegistryProvider;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.BooleanNode;
+import com.fasterxml.jackson.databind.node.DoubleNode;
+import com.fasterxml.jackson.databind.node.LongNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -44,6 +49,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import static org.apache.hudi.utilities.schema.converter.JsonToAvroSchemaConverterConfig.CONVERT_DEFAULT_VALUE_TYPE;
+import static org.apache.hudi.utilities.schema.converter.JsonToAvroSchemaConverterConfig.STRIP_DEFAULT_VALUE_QUOTES;
 
 /**
  * Converts a JSON schema to an Avro schema.
@@ -68,6 +76,15 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
   private static final String DOUBLE_TYPE = "double";
   private static final String BOOLEAN_TYPE = "boolean";
   private static final String STRING_TYPE = "string";
+  private static final String DEFAULT_FIELD = "default";
+
+  private final boolean convertDefaultValueType;
+  private final boolean stripDefaultValueQuotes;
+
+  public JsonToAvroSchemaConverter(TypedProperties config) {
+    this.convertDefaultValueType = ConfigUtils.getBooleanWithAltKeys(config, CONVERT_DEFAULT_VALUE_TYPE);
+    this.stripDefaultValueQuotes = ConfigUtils.getBooleanWithAltKeys(config, STRIP_DEFAULT_VALUE_QUOTES);
+  }
 
   public String convert(String jsonSchema) throws IOException {
     JsonNode jsonNode = MAPPER.readTree(jsonSchema);
@@ -75,7 +92,7 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     return avroRecord.toString();
   }
 
-  private static ObjectNode convertJsonNodeToAvroNode(JsonNode jsonNode, AtomicInteger schemaCounter, Set<String> seenNames) {
+  private ObjectNode convertJsonNodeToAvroNode(JsonNode jsonNode, AtomicInteger schemaCounter, Set<String> seenNames) {
     ObjectNode avroRecord =
         MAPPER
             .createObjectNode()
@@ -95,8 +112,8 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     return avroRecord;
   }
 
-  private static ArrayNode convertProperties(JsonNode jsonProperties, Set<String> required, AtomicInteger schemaCounter,
-                                             Set<String> seenNames) {
+  private ArrayNode convertProperties(JsonNode jsonProperties, Set<String> required, AtomicInteger schemaCounter,
+                                      Set<String> seenNames) {
     List<JsonNode> avroFields = new ArrayList<>();
     jsonProperties
         .fieldNames()
@@ -113,8 +130,8 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     return MAPPER.createArrayNode().addAll(avroFields);
   }
 
-  private static Option<JsonNode> tryConvertNestedProperty(String name, JsonNode jsonProperty,
-                                                           AtomicInteger schemaCounter, Set<String> seenNames) {
+  private Option<JsonNode> tryConvertNestedProperty(String name, JsonNode jsonProperty,
+                                                    AtomicInteger schemaCounter, Set<String> seenNames) {
     if (!isJsonNestedType(jsonProperty)) {
       return Option.empty();
     }
@@ -137,8 +154,8 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     return Option.of(avroNode);
   }
 
-  private static Option<JsonNode> tryConvertArrayProperty(String name, JsonNode jsonProperty,
-                                                          AtomicInteger schemaCounter, Set<String> seenNames) {
+  private Option<JsonNode> tryConvertArrayProperty(String name, JsonNode jsonProperty,
+                                                   AtomicInteger schemaCounter, Set<String> seenNames) {
     if (!isJsonArrayType(jsonProperty)) {
       return Option.empty();
     }
@@ -192,39 +209,36 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     return Option.of(avroNode);
   }
 
-  private static JsonNode convertProperty(String name, JsonNode jsonProperty, boolean isRequired,
-                                          AtomicInteger schemaCounter, Set<String> seenNames,
-                                          boolean isArrayType) {
+  private JsonNode convertProperty(String name, JsonNode jsonProperty, boolean isRequired,
+                                   AtomicInteger schemaCounter, Set<String> seenNames,
+                                   boolean isArrayType) {
     ObjectNode avroNode =
         MAPPER
             .createObjectNode()
             .put("name", sanitizeAsAvroName(name))
             .put("doc", getAvroDoc(jsonProperty));
 
-    // infer `default`
     boolean nullable = !isRequired;
-    JsonNode defaultNode = jsonProperty.has("default") ? jsonProperty.get("default") : NullNode.getInstance();
-    if (jsonProperty.has("default")) {
-      avroNode.set("default", defaultNode);
-    } else if (nullable) {
-      avroNode.set("default",defaultNode);
-    }
 
     // infer `types`
     Set<String> avroSimpleTypeSet = new HashSet<>();
+    List<JsonNode> defaultValueList = new ArrayList<>();
     List<JsonNode> avroComplexTypeSet = new ArrayList<>();
     boolean unionType = false;
     if (jsonProperty.hasNonNull("oneOf") || jsonProperty.hasNonNull("allOf")) {
       unionType = true;
       // prefer to look for `oneOf` and `allOf` for types
       Option<JsonNode> oneOfTypes = Option.ofNullable(jsonProperty.get("oneOf"));
-      Pair<Set<String>, List<JsonNode>> allOneOfTypes = getAllTypesFromOneOfAllOfTypes(oneOfTypes, name, schemaCounter, seenNames);
-      avroSimpleTypeSet.addAll(allOneOfTypes.getLeft());
+      Pair<Pair<Set<String>, List<JsonNode>>, List<JsonNode>> allOneOfTypes =
+          getAllTypesFromOneOfAllOfTypes(oneOfTypes, name, schemaCounter, seenNames);
+      avroSimpleTypeSet.addAll(allOneOfTypes.getLeft().getLeft());
+      defaultValueList.addAll(allOneOfTypes.getLeft().getRight());
       avroComplexTypeSet.addAll(allOneOfTypes.getRight());
 
       Option<JsonNode> allOfTypes = Option.ofNullable(jsonProperty.get("allOf"));
-      Pair<Set<String>, List<JsonNode>> allAllOfTypes = getAllTypesFromOneOfAllOfTypes(allOfTypes, name, schemaCounter, seenNames);
-      avroSimpleTypeSet.addAll(allAllOfTypes.getLeft());
+      Pair<Pair<Set<String>, List<JsonNode>>, List<JsonNode>> allAllOfTypes =
+          getAllTypesFromOneOfAllOfTypes(allOfTypes, name, schemaCounter, seenNames);
+      avroSimpleTypeSet.addAll(allAllOfTypes.getLeft().getLeft());
       avroComplexTypeSet.addAll(allAllOfTypes.getRight());
     } else if (jsonProperty.has("type")) {
       // fall back to `type` parameter
@@ -243,6 +257,42 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     }
     avroSimpleTypeSet.remove("null");
     avroTypes.addAll(avroSimpleTypeSet);
+
+    // infer `default`
+    // Either there is explicit default value defined for a single simple type,
+    // e.g., "field":{"type":"integer","default":50},
+    // or we take the default value from the single simple type in "oneOf" type,
+    // e.g., "oneOf":[{"type":"null"},{"type":"integer","default":"60"}],
+    // in which the default value is 60.
+    JsonNode defaultNode = jsonProperty.has(DEFAULT_FIELD) ? jsonProperty.get(DEFAULT_FIELD)
+        : (avroComplexTypeSet.isEmpty() && avroSimpleTypeSet.size() == 1 && !defaultValueList.isEmpty())
+        ? defaultValueList.get(0) : NullNode.getInstance();
+    if (jsonProperty.has(DEFAULT_FIELD)
+        || (avroComplexTypeSet.isEmpty() && avroSimpleTypeSet.size() == 1 && !defaultValueList.isEmpty())) {
+      if (this.convertDefaultValueType && avroComplexTypeSet.isEmpty() && avroSimpleTypeSet.size() == 1) {
+        String defaultType = avroSimpleTypeSet.stream().findFirst().get();
+        switch (defaultType) {
+          case LONG_TYPE:
+            defaultNode = LongNode.valueOf(Long.parseLong(defaultNode.asText()));
+            break;
+          case DOUBLE_TYPE:
+            defaultNode = DoubleNode.valueOf(Double.parseDouble(defaultNode.asText()));
+            break;
+          case BOOLEAN_TYPE:
+            defaultNode = BooleanNode.valueOf(Boolean.parseBoolean(defaultNode.asText()));
+            break;
+          case STRING_TYPE:
+            if (this.stripDefaultValueQuotes) {
+              defaultNode = TextNode.valueOf(stripQuotesFromStringValue(defaultNode.asText()));
+            }
+            break;
+          default:
+        }
+      }
+      avroNode.set(DEFAULT_FIELD, defaultNode);
+    } else if (nullable) {
+      avroNode.set(DEFAULT_FIELD, defaultNode);
+    }
     avroTypes = arrangeTypeOrderOnDefault(avroTypes, defaultNode);
     List<JsonNode> allTypes =
         avroTypes.stream().map(TextNode::valueOf).collect(Collectors.toList());
@@ -253,32 +303,37 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
     return unionType && isArrayType ? typeValue : avroNode;
   }
 
-  private static Pair<Set<String>, List<JsonNode>> getAllTypesFromOneOfAllOfTypes(Option<JsonNode> jsonUnionType, String name, AtomicInteger schemaCounter, Set<String> seenNames) {
+  private Pair<Pair<Set<String>, List<JsonNode>>, List<JsonNode>> getAllTypesFromOneOfAllOfTypes(Option<JsonNode> jsonUnionType, String name, AtomicInteger schemaCounter, Set<String> seenNames) {
     Set<String> avroSimpleTypeSet = new HashSet<>();
+    List<JsonNode> defaultValueList = new ArrayList<>();
     List<JsonNode> avroComplexTypeSet = new ArrayList<>();
     if (jsonUnionType.isPresent()) {
       jsonUnionType
-            .get()
-            .elements()
-            .forEachRemaining(
-                e -> {
-                  String simpleType = JSON_TO_AVRO_TYPE.get(e.get("type").asText());
-                  if (simpleType == null) {
-                    if (isJsonNestedType(e)) {
-                      avroComplexTypeSet.add(tryConvertNestedProperty(name, e, schemaCounter, seenNames).get().get("type"));
-                    } else if (isJsonArrayType(e)) {
-                      avroComplexTypeSet.add(tryConvertArrayProperty(name, e, schemaCounter, seenNames).get().get("type"));
-                    } else if (isJsonEnumType(e)) {
-                      avroComplexTypeSet.add(tryConvertEnumProperty(name, e, schemaCounter, seenNames).get().get("type"));
-                    } else {
-                      throw new RuntimeException("unknown complex type encountered");
-                    }
+          .get()
+          .elements()
+          .forEachRemaining(
+              e -> {
+                String simpleType = JSON_TO_AVRO_TYPE.get(e.get("type").asText());
+                if (simpleType == null) {
+                  if (isJsonNestedType(e)) {
+                    avroComplexTypeSet.add(tryConvertNestedProperty(name, e, schemaCounter, seenNames).get().get("type"));
+                  } else if (isJsonArrayType(e)) {
+                    avroComplexTypeSet.add(tryConvertArrayProperty(name, e, schemaCounter, seenNames).get().get("type"));
+                  } else if (isJsonEnumType(e)) {
+                    avroComplexTypeSet.add(tryConvertEnumProperty(name, e, schemaCounter, seenNames).get().get("type"));
                   } else {
-                    avroSimpleTypeSet.add(simpleType);
+                    throw new RuntimeException("unknown complex type encountered");
                   }
-                });
+                } else {
+                  avroSimpleTypeSet.add(simpleType);
+                  if (e.has(DEFAULT_FIELD)) {
+                    // This is only valid if one simple-type exists in the oneOf type
+                    defaultValueList.add(e.get(DEFAULT_FIELD));
+                  }
+                }
+              });
     }
-    return Pair.of(avroSimpleTypeSet, avroComplexTypeSet);
+    return Pair.of(Pair.of(avroSimpleTypeSet, defaultValueList), avroComplexTypeSet);
   }
 
   private static List<String> arrangeTypeOrderOnDefault(List<String> avroTypes, JsonNode defaultNode) {
@@ -399,5 +454,13 @@ public class JsonToAvroSchemaConverter implements SchemaRegistryProvider.SchemaC
       return input;
     }
     return input.substring(0, i);
+  }
+
+  public static String stripQuotesFromStringValue(String input) {
+    if (input != null && input.length() >= 2
+        && input.charAt(0) == '\"' && input.charAt(input.length() - 1) == '\"') {
+      return input.substring(1, input.length() - 1);
+    }
+    return input;
   }
 }
