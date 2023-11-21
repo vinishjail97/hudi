@@ -1184,3 +1184,9 @@ ee3edf2c8 [ENG-4147] Fix json schema conversion when array item type is a union 
 69efe8e03 [AUDIT-518] Upgrade to version release-v0.30.0 (#439)
 02b83b919 [ENG-3744] Add log file filter (#438)
 586b62746 [ENG-4003] Fix failure in TestSparkSampleWritesUtils (#440)
+
+---[2023-11-21 15:35:25] [release-v0.30.3] ---
+3a460e006 [ENG-4236] Fix default value parsing in JSON schema converter (#448)
+dc6c56c9c [ENG-4195] Include kafka-json-schema-serializer artifact in hudi-utilities-bundle (#447)
+5a904d6f8 [AUDIT-528] - Upgrade hudi-internal image to version release-v0.30.2 (#446)
+ba5e069f4 [AUDIT-470] Hudi internal release v0.29.2 (#443)
