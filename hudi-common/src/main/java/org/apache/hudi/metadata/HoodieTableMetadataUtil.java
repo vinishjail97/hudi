@@ -125,12 +125,11 @@ public class HoodieTableMetadataUtil {
    * Collects {@link HoodieColumnRangeMetadata} for the provided collection of records, pretending
    * as if provided records have been persisted w/in given {@code filePath}
    *
-   * @param records target records to compute column range metadata for
+   * @param records      target records to compute column range metadata for
    * @param targetFields columns (fields) to be collected
-   * @param filePath file path value required for {@link HoodieColumnRangeMetadata}
-   *
+   * @param filePath     file path value required for {@link HoodieColumnRangeMetadata}
    * @return map of {@link HoodieColumnRangeMetadata} for each of the provided target fields for
-   *         the collection of provided records
+   * the collection of provided records
    */
   public static Map<String, HoodieColumnRangeMetadata<Comparable>> collectColumnRangeMetadata(List<IndexedRecord> records,
                                                                                               List<Schema.Field> targetFields,
@@ -213,27 +212,6 @@ public class HoodieTableMetadataUtil {
         columnStats.getValueCount(),
         columnStats.getTotalSize(),
         columnStats.getTotalUncompressedSize());
-  }
-
-  /**
-   * Delete the metadata table for the dataset. This will be invoked during upgrade/downgrade operation during which
-   * no other
-   * process should be running.
-   *
-   * @param basePath base path of the dataset
-   * @param context  instance of {@link HoodieEngineContext}.
-   */
-  public static void deleteMetadataTable(String basePath, HoodieEngineContext context) {
-    final String metadataTablePathStr = HoodieTableMetadata.getMetadataTableBasePath(basePath);
-    FileSystem fs = FSUtils.getFs(metadataTablePathStr, context.getHadoopConf().get());
-    try {
-      Path metadataTablePath = new Path(metadataTablePathStr);
-      if (fs.exists(metadataTablePath)) {
-        fs.delete(metadataTablePath, true);
-      }
-    } catch (Exception e) {
-      throw new HoodieMetadataException("Failed to remove metadata table from path " + metadataTablePathStr, e);
-    }
   }
 
   /**
@@ -1141,8 +1119,8 @@ public class HoodieTableMetadataUtil {
   }
 
   private static Stream<HoodieRecord> translateWriteStatToColumnStats(HoodieWriteStat writeStat,
-                                                                     HoodieTableMetaClient datasetMetaClient,
-                                                                     List<String> columnsToIndex) {
+                                                                      HoodieTableMetaClient datasetMetaClient,
+                                                                      List<String> columnsToIndex) {
     if (writeStat instanceof HoodieDeltaWriteStat && ((HoodieDeltaWriteStat) writeStat).getColumnStats().isPresent()) {
       Map<String, HoodieColumnRangeMetadata<Comparable>> columnRangeMap = ((HoodieDeltaWriteStat) writeStat).getColumnStats().get();
       Collection<HoodieColumnRangeMetadata<Comparable>> columnRangeMetadataList = columnRangeMap.values();
@@ -1284,9 +1262,9 @@ public class HoodieTableMetadataUtil {
   /**
    * Given a schema, coerces provided value to instance of {@link Comparable<?>} such that
    * it could subsequently used in column stats
-   *
+   * <p>
    * NOTE: This method has to stay compatible with the semantic of
-   *      {@link ParquetUtils#readRangeFromParquetMetadata} as they are used in tandem
+   * {@link ParquetUtils#readRangeFromParquetMetadata} as they are used in tandem
    */
   private static Comparable<?> coerceToComparable(Schema schema, Object val) {
     if (val == null) {
@@ -1359,6 +1337,19 @@ public class HoodieTableMetadataUtil {
     Set<String> inflightAndCompletedPartitions = getInflightMetadataPartitions(tableConfig);
     inflightAndCompletedPartitions.addAll(tableConfig.getMetadataPartitions());
     return inflightAndCompletedPartitions;
+  }
+
+  /**
+   * Delete the metadata table for the dataset. This will be invoked during upgrade/downgrade operation during which
+   * no other
+   * process should be running.
+   *
+   * @param basePath base path of the dataset
+   * @param context  instance of {@link HoodieEngineContext}.
+   */
+  public static void deleteMetadataTable(String basePath, HoodieEngineContext context) {
+    HoodieTableMetaClient dataMetaClient = HoodieTableMetaClient.builder().setBasePath(basePath).setConf(context.getHadoopConf().get()).build();
+    deleteMetadataTable(dataMetaClient, context, false);
   }
 
   /**
