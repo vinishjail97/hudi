@@ -22,7 +22,6 @@ import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.CloudDataFetcher;
@@ -50,7 +49,6 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.DEFAULT_
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_SRC_BASE_PATH;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.NUM_INSTANTS_PER_FETCH;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.SOURCE_FILE_FORMAT;
-import static org.apache.hudi.utilities.sources.SnapshotLoadQuerySplitter.Config.SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.DATAFILE_FORMAT;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.DEFAULT_ENABLE_EXISTS_CHECK;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.ENABLE_EXISTS_CHECK;
@@ -147,10 +145,7 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
     this.gcsObjectDataFetcher = gcsObjectDataFetcher;
     this.queryRunner = queryRunner;
     this.schemaProvider = Option.ofNullable(schemaProvider);
-    this.snapshotLoadQuerySplitter = Option.ofNullable(props.getString(SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME, null))
-        .map(className -> (SnapshotLoadQuerySplitter) ReflectionUtils.loadClass(className,
-            new Class<?>[]{TypedProperties.class}, props));
-
+    this.snapshotLoadQuerySplitter = SnapshotLoadQuerySplitter.getInstance(props);
     LOG.info("srcPath: " + srcPath);
     LOG.info("missingCheckpointStrategy: " + missingCheckpointStrategy);
     LOG.info("numInstantsPerFetch: " + numInstantsPerFetch);

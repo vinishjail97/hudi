@@ -23,7 +23,6 @@ import org.apache.hudi.common.config.SerializableConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.schema.SchemaProvider;
@@ -51,7 +50,6 @@ import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.DEFAULT_
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.HOODIE_SRC_BASE_PATH;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.NUM_INSTANTS_PER_FETCH;
 import static org.apache.hudi.utilities.sources.HoodieIncrSource.Config.SOURCE_FILE_FORMAT;
-import static org.apache.hudi.utilities.sources.SnapshotLoadQuerySplitter.Config.SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME;
 import static org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon.getCloudObjectMetadataPerPartition;
 import static org.apache.hudi.utilities.sources.helpers.CloudStoreIngestionConfig.DATAFILE_FORMAT;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.getMissingCheckpointStrategy;
@@ -129,9 +127,8 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
     this.queryRunner = queryRunner;
     this.cloudDataFetcher = cloudDataFetcher;
     this.schemaProvider = Option.ofNullable(schemaProvider);
-    this.snapshotLoadQuerySplitter = Option.ofNullable(props.getString(SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME, null))
-        .map(className -> (SnapshotLoadQuerySplitter) ReflectionUtils.loadClass(className,
-            new Class<?>[]{TypedProperties.class}, props));
+    this.snapshotLoadQuerySplitter =  SnapshotLoadQuerySplitter.getInstance(props);
+
   }
 
   @Override

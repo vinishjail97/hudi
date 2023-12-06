@@ -23,14 +23,12 @@ import org.apache.hudi.DataSourceUtils;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.common.util.ReflectionUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.hive.SlashEncodedDayPartitionValueExtractor;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 
-import static org.apache.hudi.utilities.sources.SnapshotLoadQuerySplitter.Config.SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -105,9 +103,7 @@ public class HoodieIncrSource extends RowSource {
                           SchemaProvider schemaProvider) {
     super(props, sparkContext, sparkSession, schemaProvider);
 
-    this.snapshotLoadQuerySplitter = Option.ofNullable(props.getString(SNAPSHOT_LOAD_QUERY_SPLITTER_CLASS_NAME, null))
-        .map(className -> (SnapshotLoadQuerySplitter) ReflectionUtils.loadClass(className,
-            new Class<?>[] {TypedProperties.class}, props));
+    this.snapshotLoadQuerySplitter = SnapshotLoadQuerySplitter.getInstance(props);
   }
 
   @Override
