@@ -21,6 +21,8 @@ package org.apache.hudi.common.table.timeline;
 
 import org.apache.hudi.avro.model.HoodieArchivedMetaEntry;
 import org.apache.hudi.avro.model.HoodieCompactionPlan;
+import org.apache.hudi.avro.model.HoodieReplaceCommitMetadata;
+import org.apache.hudi.avro.model.HoodieRequestedReplaceMetadata;
 import org.apache.hudi.common.model.ActionType;
 import org.apache.hudi.common.model.HoodieArchivedLogFile;
 import org.apache.hudi.common.table.log.HoodieLogFormat;
@@ -130,7 +132,20 @@ public class TestHoodieArchivedTimeline extends HoodieCommonTestHarness {
 
     // Only compaction commit (timestamp 08) should be loaded to memory
     validateInstantsLoaded(timeline, Arrays.asList("01", "03", "05", "09", "11"), false);
-    validateInstantsLoaded(timeline, Arrays.asList("08"), true);
+    validateInstantsLoaded(timeline, Arrays.asList("08"), true, Arrays.asList(HoodieInstant.State.INFLIGHT));
+
+    // All the instants should be returned although only compaction instants should be loaded to memory
+    assertEquals(instants, timeline.getInstants().collect(Collectors.toList()));
+  }
+
+  @Test
+  public void testLoadArchivedInstantsToMemory() throws Exception {
+    List<HoodieInstant> instants = createInstants();
+
+    timeline = new HoodieArchivedTimeline(metaClient);
+    timeline.loadInstantDetailsInMemory("02", "11");
+
+    validateInstantsLoaded(timeline, Arrays.asList("03", "05", "08", "09", "11"), true, Arrays.asList(HoodieInstant.State.REQUESTED, HoodieInstant.State.COMPLETED));
 
     // All the instants should be returned although only compaction instants should be loaded to memory
     assertEquals(instants, timeline.getInstants().collect(Collectors.toList()));
@@ -201,6 +216,24 @@ public class TestHoodieArchivedTimeline extends HoodieCommonTestHarness {
   }
 
   /**
+   * Validate whether the instants of given timestamps of the hudi archived timeline are loaded to memory or not.
+   * @param hoodieArchivedTimeline archived timeline to test against
+   * @param instantTsList list of instant timestamps to validate
+   * @param isInstantLoaded flag to check whether the instants are loaded to memory or not
+   * @param acceptableStates list of states to filter the instants to validate
+   */
+  private void validateInstantsLoaded(HoodieArchivedTimeline hoodieArchivedTimeline, List<String> instantTsList, boolean isInstantLoaded, List<HoodieInstant.State> acceptableStates) {
+    Set<String> instantTsSet = new HashSet<>(instantTsList);
+    timeline.getInstants().filter(instant -> instantTsSet.contains(instant.getTimestamp()) && (acceptableStates.isEmpty() || acceptableStates.contains(instant.getState()))).forEach(instant -> {
+      if (isInstantLoaded) {
+        assertTrue(hoodieArchivedTimeline.getInstantDetails(instant).isPresent());
+      } else {
+        assertFalse(hoodieArchivedTimeline.getInstantDetails(instant).isPresent());
+      }
+    });
+  }
+
+  /**
    * Get list of completed hoodie instants for given timestamps.
    */
   private List<HoodieInstant> getCompletedInstantForTs(List<HoodieInstant> instants, List<String> instantTsList) {
@@ -222,9 +255,9 @@ public class TestHoodieArchivedTimeline extends HoodieCommonTestHarness {
     HoodieInstant instant1Requested = new HoodieInstant(HoodieInstant.State.REQUESTED, HoodieTimeline.COMMIT_ACTION, "01");
     HoodieInstant instant1Inflight = new HoodieInstant(HoodieInstant.State.INFLIGHT, HoodieTimeline.COMMIT_ACTION, "01");
 
-    HoodieInstant instant2Requested = new HoodieInstant(HoodieInstant.State.REQUESTED, HoodieTimeline.COMMIT_ACTION, "03");
-    HoodieInstant instant2Inflight = new HoodieInstant(HoodieInstant.State.INFLIGHT, HoodieTimeline.COMMIT_ACTION, "03");
-    HoodieInstant instant2Complete = new HoodieInstant(false, HoodieTimeline.COMMIT_ACTION, "03");
+    HoodieInstant instant2Requested = new HoodieInstant(HoodieInstant.State.REQUESTED, HoodieTimeline.REPLACE_COMMIT_ACTION, "03");
+    HoodieInstant instant2Inflight = new HoodieInstant(HoodieInstant.State.INFLIGHT, HoodieTimeline.REPLACE_COMMIT_ACTION, "03");
+    HoodieInstant instant2Complete = new HoodieInstant(false, HoodieTimeline.REPLACE_COMMIT_ACTION, "03");
 
     HoodieInstant instant3Requested = new HoodieInstant(HoodieInstant.State.REQUESTED, HoodieTimeline.COMMIT_ACTION, "05");
     HoodieInstant instant3Inflight = new HoodieInstant(HoodieInstant.State.INFLIGHT, HoodieTimeline.COMMIT_ACTION, "05");
@@ -308,6 +341,14 @@ public class TestHoodieArchivedTimeline extends HoodieCommonTestHarness {
       case HoodieTimeline.COMPACTION_ACTION:
         archivedMetaWrapper.setActionType(ActionType.compaction.name());
         archivedMetaWrapper.setHoodieCompactionPlan(HoodieCompactionPlan.newBuilder().build());
+        break;
+      case HoodieTimeline.REPLACE_COMMIT_ACTION:
+        archivedMetaWrapper.setActionType(ActionType.replacecommit.name());
+        if (hoodieInstant.isCompleted()) {
+          archivedMetaWrapper.setHoodieReplaceCommitMetadata(HoodieReplaceCommitMetadata.newBuilder().build());
+        } else {
+          archivedMetaWrapper.setHoodieRequestedReplaceMetadata(HoodieRequestedReplaceMetadata.newBuilder().build());
+        }
         break;
       default:
         break;

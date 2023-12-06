@@ -83,7 +83,7 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
   private static final String ACTION_TYPE_KEY = "actionType";
   private static final String ACTION_STATE = "actionState";
   private HoodieTableMetaClient metaClient;
-  private final Map<String, byte[]> readCommits = new HashMap<>();
+  private final Map<String, Map<HoodieInstant.State, byte[]>> readCommits = new HashMap<>();
 
   private static final Logger LOG = LogManager.getLogger(HoodieArchivedTimeline.class);
 
@@ -191,7 +191,7 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
 
   @Override
   public Option<byte[]> getInstantDetails(HoodieInstant instant) {
-    return Option.ofNullable(readCommits.get(instant.getTimestamp()));
+    return Option.ofNullable(readCommits.getOrDefault(instant.getTimestamp(), new HashMap<>()).get(instant.getState()));
   }
 
   public HoodieArchivedTimeline reload() {
@@ -206,13 +206,14 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
       return Option.empty();
     }
     if (loadDetails) {
-      getMetadataKey(action).map(key -> {
+      getMetadataKey(hoodieInstant).map(key -> {
         Object actionData = record.get(key);
         if (actionData != null) {
+          this.readCommits.computeIfAbsent(instantTime, k -> new HashMap<>());
           if (action.equals(HoodieTimeline.COMPACTION_ACTION)) {
-            this.readCommits.put(instantTime, HoodieAvroUtils.indexedRecordToBytes((IndexedRecord) actionData));
+            readCommits.get(instantTime).put(hoodieInstant.getState(), HoodieAvroUtils.indexedRecordToBytes((IndexedRecord) actionData));
           } else {
-            this.readCommits.put(instantTime, actionData.toString().getBytes(StandardCharsets.UTF_8));
+            readCommits.get(instantTime).put(hoodieInstant.getState(), actionData.toString().getBytes(StandardCharsets.UTF_8));
           }
         }
         return null;
@@ -222,8 +223,8 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
   }
 
   @Nonnull
-  private Option<String> getMetadataKey(String action) {
-    switch (action) {
+  private Option<String> getMetadataKey(HoodieInstant instant) {
+    switch (instant.getAction()) {
       case HoodieTimeline.CLEAN_ACTION:
         return Option.of("hoodieCleanMetadata");
       case HoodieTimeline.COMMIT_ACTION:
@@ -237,11 +238,14 @@ public class HoodieArchivedTimeline extends HoodieDefaultTimeline {
       case HoodieTimeline.LOG_COMPACTION_ACTION:
         return Option.of("hoodieCompactionPlan");
       case HoodieTimeline.REPLACE_COMMIT_ACTION:
+        if (instant.isRequested()) {
+          return Option.of("hoodieRequestedReplaceMetadata");
+        }
         return Option.of("hoodieReplaceCommitMetadata");
       case HoodieTimeline.INDEXING_ACTION:
         return Option.of("hoodieIndexCommitMetadata");
       default:
-        LOG.error(String.format("Unknown action in metadata (%s)", action));
+        LOG.error(String.format("Unknown action in metadata (%s)", instant.getAction()));
         return Option.empty();
     }
   }
