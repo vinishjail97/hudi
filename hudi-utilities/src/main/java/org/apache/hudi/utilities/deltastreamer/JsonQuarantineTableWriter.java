@@ -240,6 +240,12 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
         .map(rdd -> {
           String instantTime = startCommit();
           JavaRDD<WriteStatus> writeStatusJavaRDD = quarantineTableWriteClient.insert(rdd, instantTime);
+          long totalRecords = writeStatusJavaRDD.mapToDouble(WriteStatus::getTotalRecords).sum().longValue();
+          if (totalRecords == 0) {
+            LOG.info("Rolling back empty commit");
+            quarantineTableWriteClient.rollback(instantTime);
+            return true;
+          }
           boolean success = quarantineTableWriteClient.commit(instantTime, writeStatusJavaRDD, Option.empty(),
               HoodieActiveTimeline.COMMIT_ACTION, Collections.emptyMap());
           LOG.info("Error events ingestion Commit " + instantTime + " " + success);
@@ -266,7 +272,7 @@ public class JsonQuarantineTableWriter<T extends QuarantineEvent> implements Qua
 
   public Option<JavaRDD<HoodieAvroRecord>> createErrorEventsRdd(Optional<JavaRDD<Row>> errorEventsRdd) {
     LOG.info("processing createErrorEventsRdd");
-    if (!errorEventsRdd.isPresent() || errorEventsRdd.get().isEmpty()) {
+    if (!errorEventsRdd.isPresent()) {
       LOG.info("Returning empty ErrorEventsRdd");
       return Option.empty();
     }
