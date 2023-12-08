@@ -255,8 +255,6 @@ public class DeltaSync implements Serializable, Closeable {
     this.processedSchema = new SchemaSet();
     this.keyGenerator = HoodieSparkKeyGeneratorFactory.createKeyGenerator(props);
     refreshTimeline();
-    // Register User Provided schema first
-    registerAvroSchemas(schemaProvider);
 
     this.metrics = (HoodieIngestionMetrics) ReflectionUtils.loadClass(cfg.ingestionMetricsClass, getHoodieClientConfig(this.schemaProvider));
     this.hoodieMetrics = new HoodieMetrics(getHoodieClientConfig(this.schemaProvider));
