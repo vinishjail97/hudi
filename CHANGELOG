@@ -1190,3 +1190,8 @@ ee3edf2c8 [ENG-4147] Fix json schema conversion when array item type is a union 
 dc6c56c9c [ENG-4195] Include kafka-json-schema-serializer artifact in hudi-utilities-bundle (#447)
 5a904d6f8 [AUDIT-528] - Upgrade hudi-internal image to version release-v0.30.2 (#446)
 ba5e069f4 [AUDIT-470] Hudi internal release v0.29.2 (#443)
+
+---[2023-12-08 14:08:57] [release-v0.32.0] ---
+5ba33da10bd [ENG-4733] only register schemas once sync is called (#473)
+58d5ec0e8f3 [ENG-4067] Create nested node path if does not exist for zookeeper. (#475)
+8dcc23636ed [ENG-4486] Removing isEmpty check in quarantine writer (#471)
