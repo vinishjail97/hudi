@@ -162,8 +162,6 @@ public interface HoodieTimeline extends Serializable {
    */
   HoodieTimeline filterCompletedAndCompactionInstants();
 
-  HoodieTimeline filterCompactionInstants();
-
   HoodieTimeline filterCompletedOrMajorOrMinorCompactionInstants();
 
   /**
