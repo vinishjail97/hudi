@@ -1201,3 +1201,6 @@ ba5e069f4 [AUDIT-470] Hudi internal release v0.29.2 (#443)
 16253dbfa9 Revert "[ENG-4369] Adding mis fixes related with table services testing" (#482)
 5f7b365e83 [AUDIT-563] Upgrade to version release-v0.32.0 (#480)
 cca4fea7c0 [ENG-4369] Adding mis fixes related with table services testing (#476)
+
+---[2023-12-12 01:51:57] [release-v0.32.2] Upgrade to version release-v0.32.2---
+a083165e55 [ENG-4369] Upgrade to version release-v0.32.1 (#481)
