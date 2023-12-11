@@ -1195,3 +1195,9 @@ ba5e069f4 [AUDIT-470] Hudi internal release v0.29.2 (#443)
 5ba33da10bd [ENG-4733] only register schemas once sync is called (#473)
 58d5ec0e8f3 [ENG-4067] Create nested node path if does not exist for zookeeper. (#475)
 8dcc23636ed [ENG-4486] Removing isEmpty check in quarantine writer (#471)
+
+---[2023-12-12 01:23:10] [release-v0.32.1] Upgrade to version release-v0.32.1---
+08036ac945 [HUDI-7197] Adding mis fixes related with table services testing (#483)
+16253dbfa9 Revert "[ENG-4369] Adding mis fixes related with table services testing" (#482)
+5f7b365e83 [AUDIT-563] Upgrade to version release-v0.32.0 (#480)
+cca4fea7c0 [ENG-4369] Adding mis fixes related with table services testing (#476)
