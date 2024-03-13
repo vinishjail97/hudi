@@ -53,7 +53,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static org.apache.hudi.common.config.HoodieStorageConfig.PARQUET_MAX_FILE_SIZE;
 import static org.apache.hudi.common.util.CollectionUtils.isNullOrEmpty;
 import static org.apache.hudi.common.util.ConfigUtils.containsConfigProperty;
 import static org.apache.hudi.common.util.ConfigUtils.getStringWithAltKeys;
@@ -62,7 +61,6 @@ import static org.apache.hudi.utilities.config.CloudSourceConfig.IGNORE_RELATIVE
 import static org.apache.hudi.utilities.config.CloudSourceConfig.IGNORE_RELATIVE_PATH_SUBSTR;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.PATH_BASED_PARTITION_FIELDS;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.SELECT_RELATIVE_PATH_PREFIX;
-import static org.apache.hudi.utilities.config.CloudSourceConfig.SOURCE_MAX_BYTES_PER_PARTITION;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.SPARK_DATASOURCE_READER_COMMA_SEPARATED_PATH_FORMAT;
 import static org.apache.hudi.utilities.config.S3EventsHoodieIncrSourceConfig.S3_IGNORE_KEY_PREFIX;
 import static org.apache.hudi.utilities.config.S3EventsHoodieIncrSourceConfig.S3_IGNORE_KEY_SUBSTRING;
@@ -206,7 +204,7 @@ public class CloudObjectsSelectorCommon {
   }
 
   public static Option<Dataset<Row>> loadAsDataset(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata,
-                                                   TypedProperties props, String fileFormat, Option<SchemaProvider> schemaProviderOption) {
+                                                   TypedProperties props, String fileFormat, Option<SchemaProvider> schemaProviderOption, int numPartitions) {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Extracted distinct files " + cloudObjectMetadata.size()
           + " and some samples " + cloudObjectMetadata.stream().map(CloudObjectMetadata::getPath).limit(10).collect(Collectors.toList()));
@@ -239,17 +237,9 @@ public class CloudObjectsSelectorCommon {
       reader = reader.options(sparkOptionsMap);
     }
     List<String> paths = new ArrayList<>();
-    long totalSize = 0;
     for (CloudObjectMetadata o : cloudObjectMetadata) {
       paths.add(o.getPath());
-      totalSize += o.getSize();
     }
-    // inflate 10% for potential hoodie meta fields
-    totalSize *= 1.1;
-    // if source bytes are provided, then give preference to that.
-    long bytesPerPartition = props.containsKey(SOURCE_MAX_BYTES_PER_PARTITION.key()) ? props.getLong(SOURCE_MAX_BYTES_PER_PARTITION.key()) :
-        props.getLong(PARQUET_MAX_FILE_SIZE.key(), Long.parseLong(PARQUET_MAX_FILE_SIZE.defaultValue()));
-    int numPartitions = (int) Math.max(Math.ceil(totalSize / bytesPerPartition), 1);
     boolean isCommaSeparatedPathFormat = props.getBoolean(SPARK_DATASOURCE_READER_COMMA_SEPARATED_PATH_FORMAT.key(), false);
 
     Dataset<Row> dataset;
@@ -282,10 +272,6 @@ public class CloudObjectsSelectorCommon {
       dataset = dataset.coalesce(numPartitions);
     }
     return dataset;
-  }
-
-  public static Option<Dataset<Row>> loadAsDataset(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata, TypedProperties props, String fileFormat) {
-    return loadAsDataset(spark, cloudObjectMetadata, props, fileFormat, Option.empty());
   }
 
   private static Option<String> getPropVal(TypedProperties props, ConfigProperty<String> configProperty) {
