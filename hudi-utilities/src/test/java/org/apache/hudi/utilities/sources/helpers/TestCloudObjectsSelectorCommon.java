@@ -99,7 +99,7 @@ public class TestCloudObjectsSelectorCommon extends HoodieSparkClientTestHarness
     TypedProperties properties = new TypedProperties();
     properties.put("hoodie.deltastreamer.source.cloud.data.reader.comma.separated.path.format", "false");
     properties.put("hoodie.deltastreamer.source.cloud.data.partition.fields.from.path", "unknown");
-    Option<Dataset<Row>> result = CloudObjectsSelectorCommon.loadAsDataset(sparkSession, input, properties, "json" , Option.empty(), 1);
+    Option<Dataset<Row>> result = CloudObjectsSelectorCommon.loadAsDataset(sparkSession, input, properties, "json", Option.empty(), 1);
     Assertions.assertTrue(result.isPresent());
     Assertions.assertEquals(1, result.get().count());
     Row expected = RowFactory.create("some data", null);
