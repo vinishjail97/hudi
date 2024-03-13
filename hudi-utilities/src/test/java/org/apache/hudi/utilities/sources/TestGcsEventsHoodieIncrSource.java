@@ -36,14 +36,19 @@ import org.apache.hudi.config.HoodieArchivalConfig;
 import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.testutils.SparkClientFunctionalTestHarness;
+import org.apache.hudi.utilities.UtilHelpers;
 import org.apache.hudi.utilities.config.CloudSourceConfig;
+import org.apache.hudi.utilities.ingestion.HoodieIngestionMetrics;
 import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
 import org.apache.hudi.utilities.schema.SchemaProvider;
+import org.apache.hudi.utilities.sources.TestS3EventsHoodieIncrSource.TestSourceProfile;
 import org.apache.hudi.utilities.sources.helpers.CloudDataFetcher;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 import org.apache.hudi.utilities.sources.helpers.QueryRunner;
 import org.apache.hudi.utilities.sources.helpers.gcs.GcsObjectMetadataFetcher;
+import org.apache.hudi.utilities.streamer.DefaultStreamContext;
+import org.apache.hudi.utilities.streamer.SourceProfileSupplier;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,6 +66,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
@@ -78,7 +84,10 @@ import java.util.stream.Collectors;
 
 import static org.apache.hudi.testutils.Assertions.assertNoWriteErrors;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.MissingCheckpointStrategy.READ_UPTO_LATEST_COMMIT;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -101,6 +110,8 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
   QueryRunner queryRunner;
   @Mock
   QueryInfo queryInfo;
+  @Mock
+  SourceProfileSupplier sourceProfileSupplier;
 
   protected Option<SchemaProvider> schemaProvider;
   private HoodieTableMetaClient metaClient;
@@ -151,7 +162,7 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
     setMockQueryRunner(inputDs);
-
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(null);
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 100L, "1#path/to/file1.json");
   }
 
@@ -170,7 +181,7 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
     setMockQueryRunner(inputDs);
-
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(null);
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 250L, "1#path/to/file2.json");
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file2.json"), 250L, "1#path/to/file3.json");
   }
@@ -193,7 +204,7 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
 
     setMockQueryRunner(inputDs);
-
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(null);
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 250L, "1#path/to/file10006.json");
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file10006.json"), 250L, "1#path/to/file10007.json");
   }
@@ -227,15 +238,19 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     filePathSizeAndCommitTime.add(Triple.of(String.format("path/to/file5%s", extension), 150L, "2"));
 
     Dataset<Row> inputDs = generateDataset(filePathSizeAndCommitTime);
-
+    List<Integer> numPartitions = Arrays.asList(1, 2, 3);
     setMockQueryRunner(inputDs);
 
-    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1"), 100L,
-                  "1#path/to/file1" + extension, typedProperties);
-    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file1" + extension), 100L,
-                  "1#path/to/file2" + extension, typedProperties);
-    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file2" + extension), 1000L,
-                  "2#path/to/file5" + extension, typedProperties);
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(new TestSourceProfile(100L, numPartitions.get(0)));
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1"), 100L, "1#path/to/file1" + extension, typedProperties);
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(new TestSourceProfile(100L, numPartitions.get(1)));
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file1" + extension), 100L, "1#path/to/file2" + extension, typedProperties);
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(new TestSourceProfile(1000L, numPartitions.get(2)));
+    readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file2" + extension), 1000L, "2#path/to/file5" + extension, typedProperties);
+    // Verify the partitions being passed in getCloudObjectDataDF are correct.
+    ArgumentCaptor<Integer> argumentCaptor = ArgumentCaptor.forClass(Integer.class);
+    verify(gcsObjectDataFetcher, atLeastOnce()).getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider), argumentCaptor.capture());
+    Assertions.assertEquals(numPartitions, argumentCaptor.getAllValues());
   }
 
   @ParameterizedTest
@@ -264,15 +279,39 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     setMockQueryRunner(inputDs, Option.of(snapshotCheckPoint));
     TypedProperties typedProperties = setProps(READ_UPTO_LATEST_COMMIT);
     typedProperties.setProperty("hoodie.deltastreamer.source.cloud.data.ignore.relpath.prefix", "path/to/skip");
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(null);
+    List<Integer> numPartitions = Arrays.asList(1, 2, 3, 4);
+
     //1. snapshot query, read all records
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(new TestSourceProfile(50000L, numPartitions.get(0)));
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.empty(), 50000L, exptected1, typedProperties);
     //2. incremental query, as commit is present in timeline
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(new TestSourceProfile(10L, numPartitions.get(1)));
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(exptected1), 10L, exptected2, typedProperties);
     //3. snapshot query with source limit less than first commit size
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(new TestSourceProfile(50L, numPartitions.get(2)));
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.empty(), 50L, exptected3, typedProperties);
     typedProperties.setProperty("hoodie.deltastreamer.source.cloud.data.ignore.relpath.prefix", "path/to");
     //4. As snapshotQuery will return 1 -> same would be return as nextCheckpoint (dataset is empty due to ignore prefix).
+    when(sourceProfileSupplier.getSourceProfile()).thenReturn(new TestSourceProfile(50L, numPartitions.get(3)));
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.empty(), 50L, exptected4, typedProperties);
+    // Verify the partitions being passed in getCloudObjectDataDF are correct.
+    ArgumentCaptor<Integer> argumentCaptor = ArgumentCaptor.forClass(Integer.class);
+    verify(gcsObjectDataFetcher, atLeastOnce()).getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider), argumentCaptor.capture());
+    if (snapshotCheckPoint.equals("3")) {
+      Assertions.assertEquals(Arrays.asList(numPartitions.get(0), numPartitions.get(2)), argumentCaptor.getAllValues());
+    } else {
+      Assertions.assertEquals(numPartitions.subList(0, 3), argumentCaptor.getAllValues());
+    }
+  }
+
+  @Test
+  public void testCreateSource() throws IOException {
+    TypedProperties typedProperties = setProps(READ_UPTO_LATEST_COMMIT);
+    HoodieIngestionMetrics metrics = mock(HoodieIngestionMetrics.class);
+    Source gcsSource = UtilHelpers.createSource(GcsEventsHoodieIncrSource.class.getName(), typedProperties, jsc(), spark(), metrics,
+        new DefaultStreamContext(schemaProvider.orElse(null), Option.of(sourceProfileSupplier)));
+    assertEquals(Source.SourceType.ROW, gcsSource.getSourceType());
   }
 
   private void setMockQueryRunner(Dataset<Row> inputDs) {
@@ -302,7 +341,7 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
                              TypedProperties typedProperties) {
 
     GcsEventsHoodieIncrSource incrSource = new GcsEventsHoodieIncrSource(typedProperties, jsc(),
-        spark(), schemaProvider.orElse(null), new GcsObjectMetadataFetcher(typedProperties), gcsObjectDataFetcher, queryRunner);
+        spark(), new GcsObjectMetadataFetcher(typedProperties), gcsObjectDataFetcher, queryRunner, new DefaultStreamContext(schemaProvider.orElse(null), Option.of(sourceProfileSupplier)));
 
     Pair<Option<Dataset<Row>>, String> dataAndCheckpoint = incrSource.fetchNextBatch(checkpointToPull, sourceLimit);
 

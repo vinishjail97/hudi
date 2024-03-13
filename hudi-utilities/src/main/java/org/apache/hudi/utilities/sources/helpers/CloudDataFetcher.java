@@ -32,8 +32,10 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.util.List;
 
+import static org.apache.hudi.common.config.HoodieStorageConfig.PARQUET_MAX_FILE_SIZE;
 import static org.apache.hudi.common.util.ConfigUtils.getStringWithAltKeys;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.DATAFILE_FORMAT;
+import static org.apache.hudi.utilities.config.CloudSourceConfig.SOURCE_MAX_BYTES_PER_PARTITION;
 import static org.apache.hudi.utilities.config.HoodieIncrSourceConfig.SOURCE_FILE_FORMAT;
 import static org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon.loadAsDataset;
 
@@ -65,6 +67,21 @@ public class CloudDataFetcher implements Serializable {
 
   public Option<Dataset<Row>> getCloudObjectDataDF(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata,
                                                    TypedProperties props, Option<SchemaProvider> schemaProviderOption) {
-    return loadAsDataset(spark, cloudObjectMetadata, props, getFileFormat(props), schemaProviderOption);
+    long totalSize = 0;
+    for (CloudObjectMetadata o : cloudObjectMetadata) {
+      totalSize += o.getSize();
+    }
+    // inflate 10% for potential hoodie meta fields
+    totalSize *= 1.1;
+    // if source bytes are provided, then give preference to that.
+    long bytesPerPartition = props.containsKey(SOURCE_MAX_BYTES_PER_PARTITION.key()) ? props.getLong(SOURCE_MAX_BYTES_PER_PARTITION.key()) :
+        props.getLong(PARQUET_MAX_FILE_SIZE.key(), Long.parseLong(PARQUET_MAX_FILE_SIZE.defaultValue()));
+    int numPartitions = (int) Math.max(Math.ceil(totalSize / bytesPerPartition), 1);
+    return loadAsDataset(spark, cloudObjectMetadata, props, getFileFormat(props), schemaProviderOption, numPartitions);
+  }
+
+  public Option<Dataset<Row>> getCloudObjectDataDF(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata,
+                                                   TypedProperties props, Option<SchemaProvider> schemaProviderOption, int numPartitions) {
+    return loadAsDataset(spark, cloudObjectMetadata, props, getFileFormat(props), schemaProviderOption, numPartitions);
   }
 }
