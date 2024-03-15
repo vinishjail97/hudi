@@ -52,10 +52,8 @@ import org.apache.spark.sql.avro.HoodieAvroDeserializer;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.types.StructType;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -91,9 +89,7 @@ public class HoodieStreamerUtils {
                 props.setProperty(KeyGenUtils.RECORD_KEY_GEN_INSTANT_TIME_CONFIG, instantTime);
               }
               BuiltinKeyGenerator builtinKeyGenerator = (BuiltinKeyGenerator) HoodieSparkKeyGeneratorFactory.createKeyGenerator(props);
-              List<Either<HoodieRecord,String>> avroRecords = new ArrayList<>();
-              while (genericRecordIterator.hasNext()) {
-                GenericRecord genRec = genericRecordIterator.next();
+              return new CloseableMappingIterator<>(ClosableIterator.wrap(genericRecordIterator), genRec -> {
                 try {
                   HoodieKey hoodieKey = new HoodieKey(builtinKeyGenerator.getRecordKey(genRec), builtinKeyGenerator.getPartitionPath(genRec));
                   GenericRecord gr = isDropPartitionColumns(props) ? HoodieAvroUtils.removeFields(genRec, partitionColumns) : genRec;
@@ -102,15 +98,14 @@ public class HoodieStreamerUtils {
                           KeyGeneratorOptions.KEYGENERATOR_CONSISTENT_LOGICAL_TIMESTAMP_ENABLED.key(),
                           Boolean.parseBoolean(KeyGeneratorOptions.KEYGENERATOR_CONSISTENT_LOGICAL_TIMESTAMP_ENABLED.defaultValue()))))
                       : DataSourceUtils.createPayload(cfg.payloadClassName, gr);
-                  avroRecords.add(Either.left(new HoodieAvroRecord<>(hoodieKey, payload)));
+                  return Either.left(new HoodieAvroRecord<>(hoodieKey, payload));
                 } catch (Exception e) {
                   if (!shouldErrorTable) {
-                    throw e;
+                    throw new HoodieException(e);
                   }
-                  avroRecords.add(generateErrorRecord(genRec));
+                  return generateErrorRecord(genRec);
                 }
-              }
-              return avroRecords.iterator();
+              });
             });
 
       } else if (recordType == HoodieRecord.HoodieRecordType.SPARK) {
