@@ -26,13 +26,10 @@ import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.helpers.CloudDataFetcher;
 import org.apache.hudi.utilities.sources.helpers.CloudObjectIncrCheckpoint;
-import org.apache.hudi.utilities.sources.helpers.CloudObjectMetadata;
 import org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon;
-import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.MissingCheckpointStrategy;
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 import org.apache.hudi.utilities.sources.helpers.QueryRunner;
-import org.apache.hudi.utilities.sources.helpers.gcs.GcsObjectMetadataFetcher;
 import org.apache.hudi.utilities.streamer.DefaultStreamContext;
 import org.apache.hudi.utilities.streamer.StreamContext;
 
@@ -44,7 +41,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
-import java.util.List;
 
 import static org.apache.hudi.common.util.ConfigUtils.checkRequiredConfigProperties;
 import static org.apache.hudi.common.util.ConfigUtils.getBooleanWithAltKeys;
@@ -54,6 +50,7 @@ import static org.apache.hudi.common.util.StringUtils.isNullOrEmpty;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.ENABLE_EXISTS_CHECK;
 import static org.apache.hudi.utilities.config.HoodieIncrSourceConfig.HOODIE_SRC_BASE_PATH;
 import static org.apache.hudi.utilities.config.HoodieIncrSourceConfig.NUM_INSTANTS_PER_FETCH;
+import static org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon.Type.GCS;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.generateQueryInfo;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.getHollowCommitHandleMode;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.getMissingCheckpointStrategy;
@@ -111,8 +108,7 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
   private final int numInstantsPerFetch;
 
   private final MissingCheckpointStrategy missingCheckpointStrategy;
-  private final GcsObjectMetadataFetcher gcsObjectMetadataFetcher;
-  private final CloudDataFetcher gcsObjectDataFetcher;
+  private final CloudDataFetcher cloudDataFetcher;
   private final QueryRunner queryRunner;
   private final Option<SchemaProvider> schemaProvider;
   private final Option<SnapshotLoadQuerySplitter> snapshotLoadQuerySplitter;
@@ -123,8 +119,7 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
                                    SchemaProvider schemaProvider) {
 
     this(props, jsc, spark,
-        new GcsObjectMetadataFetcher(props),
-        new CloudDataFetcher(props),
+        new CloudDataFetcher(props, jsc, spark),
         new QueryRunner(spark, props),
         new DefaultStreamContext(schemaProvider, Option.empty())
     );
@@ -134,15 +129,14 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
                                    StreamContext streamContext) {
 
     this(props, jsc, spark,
-        new GcsObjectMetadataFetcher(props),
-        new CloudDataFetcher(props),
+        new CloudDataFetcher(props, jsc, spark),
         new QueryRunner(spark, props),
         streamContext
     );
   }
 
   GcsEventsHoodieIncrSource(TypedProperties props, JavaSparkContext jsc, SparkSession spark,
-                            GcsObjectMetadataFetcher gcsObjectMetadataFetcher, CloudDataFetcher gcsObjectDataFetcher, QueryRunner queryRunner, StreamContext streamContext) {
+                            CloudDataFetcher cloudDataFetcher, QueryRunner queryRunner, StreamContext streamContext) {
     super(props, jsc, spark, streamContext);
 
     checkRequiredConfigProperties(props, Collections.singletonList(HOODIE_SRC_BASE_PATH));
@@ -151,8 +145,7 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
     numInstantsPerFetch = getIntWithAltKeys(props, NUM_INSTANTS_PER_FETCH);
     checkIfFileExists = getBooleanWithAltKeys(props, ENABLE_EXISTS_CHECK);
 
-    this.gcsObjectMetadataFetcher = gcsObjectMetadataFetcher;
-    this.gcsObjectDataFetcher = gcsObjectDataFetcher;
+    this.cloudDataFetcher = cloudDataFetcher;
     this.queryRunner = queryRunner;
     this.schemaProvider = Option.ofNullable(streamContext.getSchemaProvider());
     this.snapshotLoadQuerySplitter = SnapshotLoadQuerySplitter.getInstance(props);
@@ -182,37 +175,6 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
           + queryInfo.getStartInstant());
       return Pair.of(Option.empty(), queryInfo.getStartInstant());
     }
-    return fetchPartitionedSource(cloudObjectIncrCheckpoint, queryRunner.run(queryInfo, snapshotLoadQuerySplitter), sourceLimit);
-  }
-
-  private Pair<Option<Dataset<Row>>, String> fetchPartitionedSource(CloudObjectIncrCheckpoint cloudObjectIncrCheckpoint, Pair<QueryInfo, Dataset<Row>> queryInfoDatasetPair, long sourceLimit) {
-    if (this.sourceProfileSupplier.isPresent() && this.sourceProfileSupplier.get().getSourceProfile() != null) {
-      LOG.debug("Using source limit from source profile sourceLimitFromConfig {} sourceLimitFromProfile {}", sourceLimit, this.sourceProfileSupplier.get().getSourceProfile().getMaxSourceBytes());
-      sourceLimit = this.sourceProfileSupplier.get().getSourceProfile().getMaxSourceBytes();
-    }
-
-    QueryInfo queryInfo = queryInfoDatasetPair.getLeft();
-    Dataset<Row> filteredSourceData = gcsObjectMetadataFetcher.applyFilter(queryInfoDatasetPair.getRight());
-
-    LOG.info("Adjusting end checkpoint:" + queryInfo.getEndInstant() + " based on sourceLimit :" + sourceLimit);
-    Pair<CloudObjectIncrCheckpoint, Option<Dataset<Row>>> checkPointAndDataset =
-        IncrSourceHelper.filterAndGenerateCheckpointBasedOnSourceLimit(
-            filteredSourceData, sourceLimit, queryInfo, cloudObjectIncrCheckpoint);
-    if (!checkPointAndDataset.getRight().isPresent()) {
-      LOG.info("Empty source, returning endpoint:" + queryInfo.getEndInstant());
-      return Pair.of(Option.empty(), queryInfo.getEndInstant());
-    }
-    LOG.info("Adjusted end checkpoint :" + checkPointAndDataset.getLeft());
-
-    List<CloudObjectMetadata> cloudObjectMetadata = gcsObjectMetadataFetcher.getGcsObjectMetadata(sparkContext, checkPointAndDataset.getRight().get(), checkIfFileExists);
-    LOG.info("Total number of files to process :" + cloudObjectMetadata.size());
-
-    Option<Dataset<Row>> datasetOption;
-    if (this.sourceProfileSupplier.isPresent() && this.sourceProfileSupplier.get().getSourceProfile() != null) {
-      datasetOption = gcsObjectDataFetcher.getCloudObjectDataDF(sparkSession, cloudObjectMetadata, props, schemaProvider, this.sourceProfileSupplier.get().getSourceProfile().getSourcePartitions());
-    } else {
-      datasetOption = gcsObjectDataFetcher.getCloudObjectDataDF(sparkSession, cloudObjectMetadata, props, schemaProvider);
-    }
-    return Pair.of(datasetOption, checkPointAndDataset.getLeft().toString());
+    return cloudDataFetcher.fetchPartitionedSource(GCS, cloudObjectIncrCheckpoint, this.sourceProfileSupplier, queryRunner.run(queryInfo, snapshotLoadQuerySplitter), this.schemaProvider, sourceLimit);
   }
 }

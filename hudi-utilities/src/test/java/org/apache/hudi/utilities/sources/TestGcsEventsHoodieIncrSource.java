@@ -43,10 +43,10 @@ import org.apache.hudi.utilities.schema.FilebasedSchemaProvider;
 import org.apache.hudi.utilities.schema.SchemaProvider;
 import org.apache.hudi.utilities.sources.TestS3EventsHoodieIncrSource.TestSourceProfile;
 import org.apache.hudi.utilities.sources.helpers.CloudDataFetcher;
+import org.apache.hudi.utilities.sources.helpers.CloudObjectsSelectorCommon;
 import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 import org.apache.hudi.utilities.sources.helpers.QueryRunner;
-import org.apache.hudi.utilities.sources.helpers.gcs.GcsObjectMetadataFetcher;
 import org.apache.hudi.utilities.streamer.DefaultStreamContext;
 import org.apache.hudi.utilities.streamer.SourceProfileSupplier;
 
@@ -68,7 +68,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -85,10 +84,11 @@ import java.util.stream.Collectors;
 import static org.apache.hudi.testutils.Assertions.assertNoWriteErrors;
 import static org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.MissingCheckpointStrategy.READ_UPTO_LATEST_COMMIT;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -104,12 +104,11 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
   protected java.nio.file.Path tempDir;
 
   @Mock
-  CloudDataFetcher gcsObjectDataFetcher;
-
-  @Mock
   QueryRunner queryRunner;
   @Mock
   QueryInfo queryInfo;
+  @Mock
+  CloudObjectsSelectorCommon cloudObjectsSelectorCommon;
   @Mock
   SourceProfileSupplier sourceProfileSupplier;
 
@@ -144,9 +143,6 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     Pair<String, List<HoodieRecord>> inserts = writeGcsMetadataRecords(commitTimeForWrites);
 
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of(commitTimeForReads), 100L, inserts.getKey());
-
-    verify(gcsObjectDataFetcher, times(0)).getCloudObjectDataDF(
-        Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider));
   }
 
   @Test
@@ -249,7 +245,7 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.of("1#path/to/file2" + extension), 1000L, "2#path/to/file5" + extension, typedProperties);
     // Verify the partitions being passed in getCloudObjectDataDF are correct.
     ArgumentCaptor<Integer> argumentCaptor = ArgumentCaptor.forClass(Integer.class);
-    verify(gcsObjectDataFetcher, atLeastOnce()).getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider), argumentCaptor.capture());
+    verify(cloudObjectsSelectorCommon, atLeastOnce()).loadAsDataset(any(), any(), any(), eq(schemaProvider), argumentCaptor.capture());
     Assertions.assertEquals(numPartitions, argumentCaptor.getAllValues());
   }
 
@@ -297,7 +293,7 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     readAndAssert(READ_UPTO_LATEST_COMMIT, Option.empty(), 50L, exptected4, typedProperties);
     // Verify the partitions being passed in getCloudObjectDataDF are correct.
     ArgumentCaptor<Integer> argumentCaptor = ArgumentCaptor.forClass(Integer.class);
-    verify(gcsObjectDataFetcher, atLeastOnce()).getCloudObjectDataDF(Mockito.any(), Mockito.any(), Mockito.any(), eq(schemaProvider), argumentCaptor.capture());
+    verify(cloudObjectsSelectorCommon, atLeastOnce()).loadAsDataset(any(), any(), any(), eq(schemaProvider), argumentCaptor.capture());
     if (snapshotCheckPoint.equals("3")) {
       Assertions.assertEquals(Arrays.asList(numPartitions.get(0), numPartitions.get(2)), argumentCaptor.getAllValues());
     } else {
@@ -312,6 +308,8 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
     Source gcsSource = UtilHelpers.createSource(GcsEventsHoodieIncrSource.class.getName(), typedProperties, jsc(), spark(), metrics,
         new DefaultStreamContext(schemaProvider.orElse(null), Option.of(sourceProfileSupplier)));
     assertEquals(Source.SourceType.ROW, gcsSource.getSourceType());
+    assertThrows(IOException.class, () -> UtilHelpers.createSource(GcsEventsHoodieIncrSource.class.getName(), new TypedProperties(), jsc(), spark(), metrics,
+        new DefaultStreamContext(schemaProvider.orElse(null), Option.of(sourceProfileSupplier))));
   }
 
   private void setMockQueryRunner(Dataset<Row> inputDs) {
@@ -320,7 +318,7 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
 
   private void setMockQueryRunner(Dataset<Row> inputDs, Option<String> nextCheckPointOpt) {
 
-    when(queryRunner.run(Mockito.any(QueryInfo.class), Mockito.any())).thenAnswer(invocation -> {
+    when(queryRunner.run(any(QueryInfo.class), any())).thenAnswer(invocation -> {
       QueryInfo queryInfo = invocation.getArgument(0);
       QueryInfo updatedQueryInfo = nextCheckPointOpt.map(nextCheckPoint ->
               queryInfo.withUpdatedEndInstant(nextCheckPoint))
@@ -341,7 +339,8 @@ public class TestGcsEventsHoodieIncrSource extends SparkClientFunctionalTestHarn
                              TypedProperties typedProperties) {
 
     GcsEventsHoodieIncrSource incrSource = new GcsEventsHoodieIncrSource(typedProperties, jsc(),
-        spark(), new GcsObjectMetadataFetcher(typedProperties), gcsObjectDataFetcher, queryRunner, new DefaultStreamContext(schemaProvider.orElse(null), Option.of(sourceProfileSupplier)));
+        spark(), new CloudDataFetcher(typedProperties, jsc(), spark(), cloudObjectsSelectorCommon), queryRunner,
+        new DefaultStreamContext(schemaProvider.orElse(null), Option.of(sourceProfileSupplier)));
 
     Pair<Option<Dataset<Row>>, String> dataAndCheckpoint = incrSource.fetchNextBatch(checkpointToPull, sourceLimit);
 

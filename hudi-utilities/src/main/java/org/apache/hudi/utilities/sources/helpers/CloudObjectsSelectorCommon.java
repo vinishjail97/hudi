@@ -37,9 +37,11 @@ import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.DataFrameReader;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 import org.slf4j.Logger;
@@ -62,6 +64,7 @@ import static org.apache.hudi.utilities.config.CloudSourceConfig.IGNORE_RELATIVE
 import static org.apache.hudi.utilities.config.CloudSourceConfig.PATH_BASED_PARTITION_FIELDS;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.SELECT_RELATIVE_PATH_PREFIX;
 import static org.apache.hudi.utilities.config.CloudSourceConfig.SPARK_DATASOURCE_READER_COMMA_SEPARATED_PATH_FORMAT;
+import static org.apache.hudi.utilities.config.S3EventsHoodieIncrSourceConfig.S3_FS_PREFIX;
 import static org.apache.hudi.utilities.config.S3EventsHoodieIncrSourceConfig.S3_IGNORE_KEY_PREFIX;
 import static org.apache.hudi.utilities.config.S3EventsHoodieIncrSourceConfig.S3_IGNORE_KEY_SUBSTRING;
 import static org.apache.hudi.utilities.config.S3EventsHoodieIncrSourceConfig.S3_KEY_PREFIX;
@@ -83,6 +86,13 @@ public class CloudObjectsSelectorCommon {
   public static final String GCS_OBJECT_KEY = "name";
   public static final String GCS_OBJECT_SIZE = "size";
   private static final String SPACE_DELIMTER = " ";
+  private static final String GCS_PREFIX = "gs://";
+
+  private final TypedProperties properties;
+
+  public CloudObjectsSelectorCommon(TypedProperties properties) {
+    this.properties = properties;
+  }
 
   /**
    * Return a function that extracts filepaths from a list of Rows.
@@ -203,8 +213,40 @@ public class CloudObjectsSelectorCommon {
     return filter.toString();
   }
 
-  public static Option<Dataset<Row>> loadAsDataset(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata,
-                                                   TypedProperties props, String fileFormat, Option<SchemaProvider> schemaProviderOption, int numPartitions) {
+  /**
+   * @param cloudObjectMetadataDF a Dataset that contains metadata of S3/GCS objects. Assumed to be a persisted form
+   *                              of a Cloud Storage SQS/PubSub Notification event.
+   * @param checkIfExists         Check if each file exists, before returning its full path
+   * @return A {@link List} of {@link CloudObjectMetadata} containing file info.
+   */
+  public static List<CloudObjectMetadata> getObjectMetadata(
+      Type type,
+      JavaSparkContext jsc,
+      Dataset<Row> cloudObjectMetadataDF,
+      boolean checkIfExists,
+      TypedProperties props
+  ) {
+    SerializableConfiguration serializableHadoopConf = new SerializableConfiguration(jsc.hadoopConfiguration());
+    if (type == Type.GCS) {
+      return cloudObjectMetadataDF
+          .select("bucket", "name", "size")
+          .distinct()
+          .mapPartitions(getCloudObjectMetadataPerPartition(GCS_PREFIX, serializableHadoopConf, checkIfExists), Encoders.kryo(CloudObjectMetadata.class))
+          .collectAsList();
+    } else if (type == Type.S3) {
+      String s3FS = getStringWithAltKeys(props, S3_FS_PREFIX, true).toLowerCase();
+      String s3Prefix = s3FS + "://";
+      return cloudObjectMetadataDF
+          .select(CloudObjectsSelectorCommon.S3_BUCKET_NAME, CloudObjectsSelectorCommon.S3_OBJECT_KEY, CloudObjectsSelectorCommon.S3_OBJECT_SIZE)
+          .distinct()
+          .mapPartitions(getCloudObjectMetadataPerPartition(s3Prefix, serializableHadoopConf, checkIfExists), Encoders.kryo(CloudObjectMetadata.class))
+          .collectAsList();
+    }
+    throw new UnsupportedOperationException("Invalid cloud type " + type);
+  }
+
+  public Option<Dataset<Row>> loadAsDataset(SparkSession spark, List<CloudObjectMetadata> cloudObjectMetadata,
+                                            String fileFormat, Option<SchemaProvider> schemaProviderOption, int numPartitions) {
     if (LOG.isDebugEnabled()) {
       LOG.debug("Extracted distinct files " + cloudObjectMetadata.size()
           + " and some samples " + cloudObjectMetadata.stream().map(CloudObjectMetadata::getPath).limit(10).collect(Collectors.toList()));
@@ -214,7 +256,7 @@ public class CloudObjectsSelectorCommon {
       return Option.empty();
     }
     DataFrameReader reader = spark.read().format(fileFormat);
-    String datasourceOpts = getStringWithAltKeys(props, CloudSourceConfig.SPARK_DATASOURCE_OPTIONS, true);
+    String datasourceOpts = getStringWithAltKeys(properties, CloudSourceConfig.SPARK_DATASOURCE_OPTIONS, true);
     if (schemaProviderOption.isPresent()) {
       Schema sourceSchema = schemaProviderOption.get().getSourceSchema();
       if (sourceSchema != null && !sourceSchema.equals(InputBatch.NULL_SCHEMA)) {
@@ -223,7 +265,7 @@ public class CloudObjectsSelectorCommon {
     }
     if (StringUtils.isNullOrEmpty(datasourceOpts)) {
       // fall back to legacy config for BWC. TODO consolidate in HUDI-6020
-      datasourceOpts = getStringWithAltKeys(props, S3EventsHoodieIncrSourceConfig.SPARK_DATASOURCE_OPTIONS, true);
+      datasourceOpts = getStringWithAltKeys(properties, S3EventsHoodieIncrSourceConfig.SPARK_DATASOURCE_OPTIONS, true);
     }
     if (StringUtils.nonEmpty(datasourceOpts)) {
       final ObjectMapper mapper = new ObjectMapper();
@@ -240,7 +282,7 @@ public class CloudObjectsSelectorCommon {
     for (CloudObjectMetadata o : cloudObjectMetadata) {
       paths.add(o.getPath());
     }
-    boolean isCommaSeparatedPathFormat = props.getBoolean(SPARK_DATASOURCE_READER_COMMA_SEPARATED_PATH_FORMAT.key(), false);
+    boolean isCommaSeparatedPathFormat = properties.getBoolean(SPARK_DATASOURCE_READER_COMMA_SEPARATED_PATH_FORMAT.key(), false);
 
     Dataset<Row> dataset;
     if (isCommaSeparatedPathFormat) {
@@ -250,8 +292,8 @@ public class CloudObjectsSelectorCommon {
     }
 
     // add partition column from source path if configured
-    if (containsConfigProperty(props, PATH_BASED_PARTITION_FIELDS)) {
-      String[] partitionKeysToAdd = getStringWithAltKeys(props, PATH_BASED_PARTITION_FIELDS).split(",");
+    if (containsConfigProperty(properties, PATH_BASED_PARTITION_FIELDS)) {
+      String[] partitionKeysToAdd = getStringWithAltKeys(properties, PATH_BASED_PARTITION_FIELDS).split(",");
       // Add partition column for all path-based partition keys. If key is not present in path, the value will be null.
       for (String partitionKey : partitionKeysToAdd) {
         String partitionPathPattern = String.format("%s=", partitionKey);
