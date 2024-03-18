@@ -137,27 +137,6 @@ public class UtilHelpers {
   }
 
   public static Source createSource(String sourceClass, TypedProperties cfg, JavaSparkContext jssc,
-      SparkSession sparkSession, SchemaProvider schemaProvider,
-      HoodieIngestionMetrics metrics) throws IOException {
-    try {
-      try {
-        return (Source) ReflectionUtils.loadClass(sourceClass,
-            new Class<?>[] {TypedProperties.class, JavaSparkContext.class,
-                SparkSession.class, SchemaProvider.class,
-                HoodieIngestionMetrics.class},
-            cfg, jssc, sparkSession, schemaProvider, metrics);
-      } catch (HoodieException e) {
-        return (Source) ReflectionUtils.loadClass(sourceClass,
-            new Class<?>[] {TypedProperties.class, JavaSparkContext.class,
-                SparkSession.class, SchemaProvider.class},
-            cfg, jssc, sparkSession, schemaProvider);
-      }
-    } catch (Throwable e) {
-      throw new IOException("Could not load source class " + sourceClass, e);
-    }
-  }
-
-  public static Source createSource(String sourceClass, TypedProperties cfg, JavaSparkContext jssc,
                                     SparkSession sparkSession, HoodieIngestionMetrics metrics, StreamContext streamContext) throws IOException {
     // All possible constructors.
     Class<?>[] constructorArgsStreamContextMetrics = new Class<?>[] {TypedProperties.class, JavaSparkContext.class, SparkSession.class, HoodieIngestionMetrics.class, StreamContext.class};
@@ -177,6 +156,8 @@ public class UtilHelpers {
         return (Source) ReflectionUtils.loadClass(sourceClass, constructor.getLeft(), constructor.getRight());
       } catch (HoodieException e) {
         sourceClassLoadException = e;
+      } catch (Throwable t) {
+        throw new IOException("Could not load source class " + sourceClass, t);
       }
     }
     throw new IOException("Could not load source class " + sourceClass, sourceClassLoadException);
