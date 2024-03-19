@@ -31,6 +31,7 @@ import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper.MissingCheckpo
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 import org.apache.hudi.utilities.sources.helpers.QueryRunner;
 import org.apache.hudi.utilities.streamer.DefaultStreamContext;
+import org.apache.hudi.utilities.streamer.SourceProfile;
 import org.apache.hudi.utilities.streamer.StreamContext;
 
 import org.apache.spark.api.java.JavaSparkContext;
@@ -175,6 +176,7 @@ public class GcsEventsHoodieIncrSource extends HoodieIncrSource {
           + queryInfo.getStartInstant());
       return Pair.of(Option.empty(), queryInfo.getStartInstant());
     }
-    return cloudDataFetcher.fetchPartitionedSource(GCS, cloudObjectIncrCheckpoint, this.sourceProfileSupplier, queryRunner.run(queryInfo, snapshotLoadQuerySplitter), this.schemaProvider, sourceLimit);
+    Option<SourceProfile<Long>> gcsSourceProfile = sourceProfileSupplier.isPresent() ? Option.ofNullable(sourceProfileSupplier.get().getSourceProfile()) : Option.empty();
+    return cloudDataFetcher.fetchPartitionedSource(GCS, cloudObjectIncrCheckpoint, gcsSourceProfile, queryRunner.run(queryInfo, snapshotLoadQuerySplitter), this.schemaProvider, sourceLimit);
   }
 }

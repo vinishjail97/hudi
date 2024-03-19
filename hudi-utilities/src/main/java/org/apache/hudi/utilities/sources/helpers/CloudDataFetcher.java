@@ -23,7 +23,7 @@ import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.StringUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.utilities.schema.SchemaProvider;
-import org.apache.hudi.utilities.streamer.SourceProfileSupplier;
+import org.apache.hudi.utilities.streamer.SourceProfile;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
@@ -82,14 +82,14 @@ public class CloudDataFetcher implements Serializable {
   public Pair<Option<Dataset<Row>>, String> fetchPartitionedSource(
       CloudObjectsSelectorCommon.Type cloudType,
       CloudObjectIncrCheckpoint cloudObjectIncrCheckpoint,
-      Option<SourceProfileSupplier> sourceProfileSupplier,
+      Option<SourceProfile<Long>> sourceProfileOption,
       Pair<QueryInfo, Dataset<Row>> queryInfoDatasetPair,
       Option<SchemaProvider> schemaProvider,
       long sourceLimit) {
-    boolean isSourceProfileSupplierAvailable = sourceProfileSupplier.isPresent() && sourceProfileSupplier.get().getSourceProfile() != null;
-    if (isSourceProfileSupplierAvailable) {
-      LOG.debug("Using source limit from source profile sourceLimitFromConfig {} sourceLimitFromProfile {}", sourceLimit, sourceProfileSupplier.get().getSourceProfile().getMaxSourceBytes());
-      sourceLimit = sourceProfileSupplier.get().getSourceProfile().getMaxSourceBytes();
+    boolean isSourceProfileAvailable = sourceProfileOption.isPresent() && sourceProfileOption.get() != null;
+    if (isSourceProfileAvailable) {
+      LOG.debug("Using source limit from source profile sourceLimitFromConfig {} sourceLimitFromProfile {}", sourceLimit, sourceProfileOption.get().getMaxSourceBytes());
+      sourceLimit = sourceProfileOption.get().getMaxSourceBytes();
     }
 
     QueryInfo queryInfo = queryInfoDatasetPair.getLeft();
@@ -113,8 +113,8 @@ public class CloudDataFetcher implements Serializable {
 
     long bytesPerPartition = props.containsKey(SOURCE_MAX_BYTES_PER_PARTITION.key()) ? props.getLong(SOURCE_MAX_BYTES_PER_PARTITION.key()) :
         props.getLong(PARQUET_MAX_FILE_SIZE.key(), Long.parseLong(PARQUET_MAX_FILE_SIZE.defaultValue()));
-    if (isSourceProfileSupplierAvailable) {
-      long bytesPerPartitionFromProfile = (long) sourceProfileSupplier.get().getSourceProfile().getSourceSpecificContext();
+    if (isSourceProfileAvailable) {
+      long bytesPerPartitionFromProfile = sourceProfileOption.get().getSourceSpecificContext();
       if (bytesPerPartitionFromProfile > 0) {
         LOG.debug("Using bytesPerPartition from source profile bytesPerPartitionFromConfig {} bytesPerPartitionFromProfile {}", bytesPerPartition, bytesPerPartitionFromProfile);
         bytesPerPartition = bytesPerPartitionFromProfile;

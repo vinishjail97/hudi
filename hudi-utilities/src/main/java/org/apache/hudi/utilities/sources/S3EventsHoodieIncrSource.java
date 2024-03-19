@@ -31,6 +31,7 @@ import org.apache.hudi.utilities.sources.helpers.IncrSourceHelper;
 import org.apache.hudi.utilities.sources.helpers.QueryInfo;
 import org.apache.hudi.utilities.sources.helpers.QueryRunner;
 import org.apache.hudi.utilities.streamer.DefaultStreamContext;
+import org.apache.hudi.utilities.streamer.SourceProfile;
 import org.apache.hudi.utilities.streamer.StreamContext;
 
 import org.apache.spark.api.java.JavaSparkContext;
@@ -123,6 +124,7 @@ public class S3EventsHoodieIncrSource extends HoodieIncrSource {
       LOG.warn("Already caught up. No new data to process");
       return Pair.of(Option.empty(), queryInfo.getEndInstant());
     }
-    return cloudDataFetcher.fetchPartitionedSource(S3, cloudObjectIncrCheckpoint, this.sourceProfileSupplier, queryRunner.run(queryInfo, snapshotLoadQuerySplitter), this.schemaProvider, sourceLimit);
+    Option<SourceProfile<Long>> s3SourceProfile = sourceProfileSupplier.isPresent() ? Option.ofNullable(sourceProfileSupplier.get().getSourceProfile()) : Option.empty();
+    return cloudDataFetcher.fetchPartitionedSource(S3, cloudObjectIncrCheckpoint, s3SourceProfile, queryRunner.run(queryInfo, snapshotLoadQuerySplitter), this.schemaProvider, sourceLimit);
   }
 }
