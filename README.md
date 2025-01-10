@@ -34,6 +34,52 @@ to ingest, index, store, serve, transform and manage your data across multiple c
 [![Twitter Follow](https://img.shields.io/twitter/follow/ApacheHudi)](https://twitter.com/apachehudi)
 [![Follow Linkedin](https://img.shields.io/badge/apache%E2%80%93hudi-0077B5?style=for-the-badge&logo=linkedin&logoColor=white&label=Follow)](https://www.linkedin.com/company/apache-hudi/?viewAsMember=true)
 
+## hudi-internal PR Process
+
+This repo serves as the internal mirror of Apache Hudi OSS with the latest fixes for cutting internal Hudi releases.
+Any proprietary code should be committed [onehouse-dataplane repo](https://github.com/onehouseinc/onehouse-dataplane)
+instead.
+
+In the case of a new proprietary feature that requires changing Hudi abstraction and APIs, e.g., add new source or
+plugged-in functionality in write client, you should break the code changes into two part: (1) API changes, such as
+method signature changes or new public interface and abstract class, only in Hudi, which is merged in Hudi OSS and this
+repo, (2) actual implementation in [onehouse-dataplane repo](https://github.com/onehouseinc/onehouse-dataplane). One
+example is the feature Onehouse added as a proprietary one: Snapshot load query split by considering row limit, which
+is split into two (1) `SnapshotLoadQuerySplitter`: an abstract class with the APIs in Hudi,
+(2) `SnapshotLoadQuerySplitterByRowLimit`: an implementation of `SnapshotLoadQuerySplitter` class
+in `onehouse-dataplane`.
+
+Here is the process for creating a `hudi-internal` PR. All PRs must have clickup task ID mentioned at the start in PR
+title, i.e., `[AUDIT-<ID>]`, `[ONHS-<ID>]`, or `[ENG-<ID>]`. There are four case for PR title check:
+
+- **Feature development and bug fixes**: create [Hudi JIRA](https://issues.apache.org/jira/projects/HUDI/issues),
+  create a [Hudi OSS](https://github.com/apache/hudi) PR, get reviews and approval, and then cherry-pick the same
+  changes into `hudi-internal` with the PR title included and OSS PR link `apache/hudi#<pr_id>` (or
+  URL, `https://github.com/apache/hudi/pull/<pr_id>`) mentioned in the PR description (this is enforced by PR compliance
+  check).
+    - For example, for OSS PR, https://github.com/apache/hudi/pull/10923, with title
+      `[HUDI-7531] Consider pending clustering when scheduling a new clustering plan`, the internal PR should be titled
+      `[ENG-8056][HUDI-7531] Consider pending clustering when scheduling a new clustering plan`, with the Clickup task ID
+      at the beginning and the exact title content as OSS PR subsequently.
+- **Urgent feature and hotfix**: for urgent feature and hotfix for outage mitigation,
+  create [Hudi JIRA](https://issues.apache.org/jira/projects/HUDI/issues), create a
+  placeholder [Hudi OSS](https://github.com/apache/hudi) PR, then in parallel create a `hudi-internal` PR of the
+  hotfix with the PR title included and OSS PR link `apache/hudi#<pr_id>` (or URL,
+  `https://github.com/apache/hudi/pull/<pr_id>`) mentioned in the PR description (this is
+  enforced by PR compliance check). This is to make sure we always remember to upstream the hotfix later on. In such a
+  case, [Hudi Committers](https://github.com/orgs/onehouseinc/teams/hudi-committers) are responsible for reviewing and
+  approving the `hudi-internal` PR by holding the same standard as Hudi OSS PR review and approval (e.g., backwards
+  compatibility, extreme care around public interface changes and format changes, test coverage, etc.).
+    - For example, you may follow the same convention as **Feature development and bug fixes** above.
+    - As another example, you may have the PR tile as `[ENG-7807][INTERNAL] Hotfix` if the fix is intended for internal
+      temporary hotfix.
+- **Release cut**: create AUDIT ticket and PR with the AUDIT ticket in the title (e.g.,
+  `[AUDIT-689] Upgrade to release`), by
+  following [Dataplane Rollout Process](https://app.clickup.com/18029943/v/dc/h67bq-25107/h67bq-72820)
+- **Other cases**: in the cases of internal or cherrypick PRs, add `[INTERNAL]` or `[CHERRYPICK]` to the PR title.
+    - For example:
+      `[ENG-1234][INTERNAL] Internal tooling changes`, `[ENG-5678][CHERRYPICK] Cherrypick community OSS changes`, etc.
+
 ## Features
 
 Hudi stores all data and metadata on cloud storage in open formats, providing the following features across different aspects.

@@ -1,0 +1,646 @@
+---[2024-01-27 16:05:12] [release-v1.1.8] Adding release tag for hudi-internal release-v1.1.8---
+36cfc6aef [ENG-5849] remove meta cols from incoming schema (#518)
+c7c5909b0 [ENG-5826] Pull patches from open source (#520)
+d50e0391f [ENG-5575] Write bad records to error table in more cases instead of failing (#519)
+17a4c0dd3 [ENG-5661] stream sync doesn't differentiate replace commits (#513)
+be13faf63 [ENG-5699] Release hudi-integ-test-bundle to mvn artifact (#512)
+---[2024-02-02 09:25:13] [release-v1.1.9] Adding release tag for hudi-internal release-v1.1.9---
+34a0d3f0dc6 [ENG-6338] Cherry pick fixes to close resources  (#526)
+8f48a7a40eb [ENG-5861] Cherry pick changes for archived timeline used for community edition (#517)
+91ab8b7e3f3 [ENG-6338] Cherry pick fixes to stabilize CI and UT failures (#525)
+53eda0e5437 [AUDIT-639] Hudi internal release v1.1.8 (#521)
+
+---[2024-02-03 10:51:32] [release-v1.2.0] ---
+71c1a6466cd [ENG-6356] Fixing glue sync tool for partition location to use s3 instead of s3a (#530)
+ce72655e8fd [ENG-6338] Cherry pick OSS PRs to reduce CI test times (#531)
+ca7d6a87911 [ENG-6372] remove shutdown hook when close is called (#529)
+a427a1fe467 [AUDIT-646] Upgrade to version release-v1.1.9 (#527)
+
+---[2024-02-05 18:09:48] [release-v1.2.1] Adding release tag for hudi-internal release-v1.2.1---
+1987a043c [ENG-4534] allow onetable row writer support (#523)
+a6b1f8cbf [ENG-6237] handle case where source schema is providing the kafka offset columns (#522)
+682e85a2e [ENG-6374] Parallelize the builds (#532)
+198e69f16 [AUDIT-647] Upgrade to version release-v1.2.0 (#534)
+
+---[2024-02-10 14:14:06] [release-v1.2.2] [AUDIT-656] Upgrade hudi-internal to release-v1.2.2---
+80617645a [ENG-6494] Add validation on hoodie.streamer.source.kafka.minPartitions config and improve logging on kafka offsets (#543)
+7b879a76b [ENG-5489] Skip validation if table not found (#533)
+483f205d6 Upgrade to version release-v1.2.1 (#538)
+
+---[2024-02-13 23:01:53] [release-v1.2.3] Adding release tag for hudi-internal release-v1.2.3---
+cb4346e23ec [ENG-6636] Revert changes around Spark partitioning inside cloud source (#550)
+8ee50ee2d1f [ENG-6636] Fix Spark repartition causing input file name to be null in cloud incremental source (#545)
+1b6bf4730f3 Upgrade to version release-v1.2.2
+
+---[2024-02-23 10:52:00] [release-v1.3.0] ---
+01fc971ff [HUDI-7416] Add interface for StreamProfile to be used in StreamSync for reading and writing data (#542)
+353377512 [HUDI-7427] Improve meta sync latency logging (#568)
+aec5a0aea [HUDI-7418] Add file extension filter for s3 incr source (#564)
+18c717148 [HUDI-1517] create marker file for every log file (#4913) (#524)
+395c44859 [HUDI-7416] Remove duplicate code for getFileFormat and Refactor filter methods for S3/GCS sources (#560)
+b1c09fe69 [HUDI-7424] Throw conversion error of Avro record properly for error table (#567)
+aa38cdb2f [HUDI-7104] Fixing cleaner savepoint interplay to fix edge case with incremental cleaning (#566)
+e391c379e [HUDI-7381]  Fix flaky test introduced in PR 10619 (#565)
+6fd603686 [HUDI-7147] Fix npe stream sync first batch, empty schema, upsert (#561)
+596ff50db [ENG-6840][BREAKGLASS] Allow Hudi OSS PR URL for PR compliance check (#562)
+5d1412ce8 [ENG-6840][BREAKGLASS] Add PR compliance check to hudi-internal (#557)
+cb28bf1be [ENG-6757] Fix compaction write stats and metrics for create and upsert time (#555)
+c957444d0 [AUDIT-664] Hudi internal release v1.2.3 (#556)
+808f9d119 [ENG-6178] add better errors for schema validation (#541)
+1d5d3a491 [ENG-6696] Enable record index validation by default (#553)
+e49edd606 [ENG-5489] Improve mdt validator and upsert partitioner logs (#552)
+9c16f024b [ENG-6636] Revert changes around Spark partitioning inside cloud source (#550)
+7a320d3e2 [ENG-6636] Fix Spark repartition causing input file name to be null in cloud incremental source (#545)
+b08eb3952 [ENG-6316] Bump cleaner retention for MDT (#537)
+b254a252b [AUDIT-656] Upgrade hudi-internal to release-v1.2.2 (#544)
+
+---[2024-02-25 17:00:55] [release-v1.3.1] ---
+27c362e0f [HUDI-7416] Add interface for StreamProfile to be used in StreamSync for reading and writing data (#570)
+54daa91db [ENG-6283] Upgrade to version release-v1.3.0 (#569)
+
+---[2024-03-05 11:03:30] [release-v1.3.3] Adding release tag for hudi-internal release-v1.3.3---
+203be9da0 [HUDI-7479] SQL confs don't propagate to spark row writer properly (#579)
+84ebd5f01 [HUDI-7413] Fix schema exception types and error messages thrown with schema exceptions (#578)
+586b88d6c [HUDI-7462] Refactor checkTopicCheckpoint in KafkaOffsetGen for reusability (#576)
+
+---[2024-03-08 16:47:33] [release-v1.4.0] Adding release tag for hudi-internal release-v1.4.0---
+7b456a81482 [HUDI-7491] Fixing handling null values of extra metadata in clean commit metadata (#584)
+0f669701dab [HUDI-7491] Fixing handling null values of extra metadata in clean commit metadata (#583)
+35ae9c45aa4 [HUDI-7418] Create a common method for filtering in S3 and GCS sources and add tests for filtering out extensions (#581)
+ccda484b4e9 [AUDIT-682] Upgrade to version release-v1.3.3 (#580)
+
+---[2024-03-11 17:50:08] [release-v1.5.0] ---
+0823c1f83d7 [HUDI-7489] Avoid collecting WriteStatus to driver in row writer code path (#582)
+9d564fe3990 [MINOR] additional job contexts for ease of debugging (#587)
+11fc9eb4a17 [HUDI-7460] Relaxing compaction scheduling when there are pending delta commits (#549)
+80481436585 [AUDIT-685] Upgrade to version release-v1.4.0 (#585)
+
+---[2024-03-15 16:59:20] [release-v1.6.0] [AUDIT-698] Upgrade to version release-v1.6.0---
+201036279 [HUDI-7429] Fixing average record size estimation for delta commits (#592)
+de16d46f4 [HUDI-7506] Compute offsetRanges based on eventsPerPartition allocated in each range (#594)
+fdf2c5576 [AUDIT-689] Upgrade to version release-v1.5.0 (#588)
+
+---[2024-03-17 22:11:11] [release-v1.6.1] Upgrade to version release-v1.6.1---
+6f82b3413 [HUDI-7511] Fixing offset range calculation for kafka (#598)
+a7474658d [AUDIT-698] Upgrade to version release-v1.6.0 (#596)
+
+---[2024-03-19 19:21:12] [release-v1.7.0] Upgrade to version release-v1.7.0---
+5864423ef73 [BREAKGLASS][ENG-7688] Fix IllegalArgumentException in reattempt of failed rollback for non partitioned tables (#601)
+6d6140abbed [HUDI-7501] Use source profile for S3 and GCS sources (#591)
+7573ed25355 [HUDI-7478] Fix max delta commits guard check w/ MDT (#593)
+7470771e74b [AUDIT-86drzn5xg] Upgrade to version release-v1.6.1 (#599)
+
+---[2024-03-21 13:14:55] [release-v1.7.1] ---
+8bf2b68db [HUDI-7523] Add HOODIE_SPARK_DATASOURCE_OPTIONS to be used in HoodieIncrSource (#606)
+2ace7cb13 [AUDIT-705] Upgrade to version release-v1.7.0 (#602)
+
+---[2024-03-25 20:41:41] [release-v1.7.2] ---
+1eb7c3f07 [HUDI-7535] Add metrics for sourceParallelism and Refresh profile in S3/GCS (#611)
+96f3fe33e [HUDI-7508] Avoid collecting records in HoodieStreamerUtils.createHoodieRecords and JsonKafkaSource mapPartitions (#595)
+bd3525032 [HUDI-7528] Fixing RowCustomColumnsSortPartitioner to use repartition instead of coalesce (#608)
+561ecab03 [AUDIT-711] Upgrade to version release-v1.7.1 (#607)
+
+---[2024-03-27 19:27:12] [release-v1.7.4] Upgrade to version release-v1.7.4---
+2d8d7c718 [ENG-8111][INTERNAL] revert pr 608 (#621)
+
+---[2024-04-02 18:17:00] [release-v1.8.0] ---
+2d31a336545 [ENG-6179][HUDI-7500] fix gaps with deduce schema and null schema (#633)
+da43ca2d7eb [ENG-7800][HUDI-7532] Include only compaction instants for lastCompaction in getDeltaCommitsSinceLatestCompaction (#609)
+d40b79d9091 [ENG-8175][HUDI-7557] Fix incremental cleaner when commit for savepoint removed (#631)
+
+---[2024-04-03 15:23:26] [release-v1.8.1] Upgrade to version release-v1.8.1---
+230c0371e54 [ENG-7800][HUDI-7532] Include only compaction instants for lastCompaction in getDeltaCommitsSinceLatestCompaction (#635)
+
+---[2024-04-10 14:10:38] [release-v1.9.0] Upgrade to version release-v1.9.0---
+82686f69137 [ENG-6690][HUDI-7486] Classify schema exceptions when converting from avro to spark row representation (#637)
+2167be53923 [ENG-7810][HUDI-7571] Add api to get exception details in HoodieMetadataTableValidator with ignoreFailed mode (#646)
+e63df27e97c [ENG-7532][HUDI-7556] Fixing false positive validation with MDT validator (#643)
+e6768880874 [ENG-8499][HUDI-7597] Add logs of Kafka offsets when the checkpoint is out of bound (#644)
+83ff715913e [ENG-8478][HUDI-7583] Read log block header only for the schema and instant time (#642)
+3043f933126 [ENG-8410][MINOR] Handle cases of malformed records when converting to json (#641)
+f5916bb302e [ENG-8344][INTERNAL] Fix typo in workflow (#640)
+b3286a546dc [ENG-8344][INTERNAL] fix name of ref in workflow (#639)
+af2a99fe2bb [ENG-8344][INTERNAL] Update CI to run spark tests on merge to master (#638)
+d506f4b9608 [AUDIT-726] Upgrade to version release-v1.8.1 (#636)
+
+---[2024-04-17 16:24:37] [release-v1.10.0] ---
+493ab4d29 [ENG-8210][HUDI-7606] Unpersist RDDs after table services, mainly compaction and clustering (#650)
+d74f32b21 [ENG-8577][HUDI-7617] Fix issues for bulk insert user defined partitioner in StreamSync (#645)
+7f7f52e97 [ENG-8657][HUDI-7616] Avoid multiple cleaner plans and deprecate hoodie.clean.allow.multiple (#649)
+7d65c9134 [ENG-6353][HUDI-7378] Fix Spark SQL DML with custom key generator (#535)
+60023c101 [ENG-6324][HUDI-7391] HoodieMetadataMetrics should use Metrics instance for metrics registry (#536)
+8689cc42e [AUDIT-737] Upgrade to version release-v1.9.0 (#647)
+
+---[2024-04-26 08:08:32] [release-v1.12.0] Upgrade to version release-v1.12.0---
+c3355cacb [ENG-8953][HUDI-7673] Fixing false positive validation failure for RLI with MDT validation tool (#679)
+d03bfcf30 [ENG-9141][HUDI-7467] Fixing flaky deltastreamer tests for auto record key gen (#678)
+6d3d0c930 [ENG-8115][HUDI-7624] Fixing index tagging duration (#671)
+d2985612f [ENG-9123][MINOR] Make KafkaSource abstraction public and more flexible (#677)
+10c8f301a [ENG-8880][HUDI-6089] Handle default insert behaviour to ingest duplicates (#676)
+954c2c282 [ENG-9084][INTERNAL] Run spark tests on every PR (#672)
+e3502338b [ENG-8880][HUDI-6089] Handle default insert behaviour to ingest duplicates (#674)
+efd85e62c [ENG-9037][HUDI-7657] Disable a flaky test in deltastreamer (#668)
+add86c42c [ENG-9034][HUDI-7656] Disable a flaky test (#667)
+e5723499f [AUDIT-759] Revert [ENG-8115][HUDI-7624] Fixing index tagging duration (#669)
+e2c193a09 [ENG-8914][HUDI-4732] Add support for confluent schema registry with proto (#663)
+03463bc3e [ENG-8431][HUDI-7655] Minor fix to rli validation with MDT validator (#660)
+0379a4842 [ENG-880][HUDI-6089] Handle default insert behaviour to ingest duplicates (#666)
+
+---[2024-05-01 18:12:06] [release-v1.13.0] Upgrade to version release-v1.13.0---
+f99aaa5d2 [ENG-9186][HUDI-7683] Make HoodieMetadataMetrics log level debug ro reduce noise (#682)
+12ef2fee3 [ENG-8638][HUDI-7689] Allow users to leverage HoodieTable and Engine Context in Compaction Strategy (#684)
+f9813a4f8 [ENG-8991][HUDI-7667] Created util method to get offset range for fetching new data (#673)
+42b27ed75 [AUDIT-764] Upgrade to version release-v1.12.0 (#680)
+
+---[2024-05-07 11:09:09] [release-v1.14.0] ---
+6e1adf5f4 [ENG-9415][HUDI-7718] Use source profile in HoodieIncrSource (#689)
+4544b991f [ENG-9405][INTERNAL] Expose BQ sync constructor so we can override implementations internally (#690)
+5d84aefcc [ENG-6678][INTERNAL] Set explicit name to sonar projects (#686)
+796d2fa8a [ENG-6678][INTERNAL] Upload coverage reports to sonar (#665)
+d36a374bd [AUDIT-776] Upgrade to version release-v1.13.0 (#685)
+
+---[2024-05-07 14:18:30] [release-v1.14.1] Upgrade to version release-v1.14.1---
+787c8cc4dbb [ENG-9371][HUDI-7710] Use compaction.requested during conflict resolution (#687)
+d94e34c5898 [AUDIT-781] Upgrade to version release-v1.14.0 (#691)
+
+---[2024-05-08 23:22:38] [release-v1.14.2] ---
+53358e4e8 [ENG-9415][HUDI-7718] Try to fetch the latestSourceProfile in HoodieIncrSource (#693)
+c29d62a70 [AUDIT-781]: Upgrade to version release-v1.14.1 (#692)
+
+---[2024-05-09 13:39:51] [release-v1.14.3] ---
+87c9171b278 [ENG-9551][HUDI-4732] Add support for confluent schema registry with proto (#695)
+354f664ecbb [AUDIT-781] Upgrade to version release-v1.14.2 (#694)
+
+---[2024-05-14 11:28:25] [release-v1.14.4] Upgrade to version release-v1.14.4---
+c8336d5b0 [ENG-8631][MINOR] Use parent as the glob path when full file path specified (#706)
+5d7fd31f7 [AUDIT-784] Upgrade to version release-v1.14.3 (#696)
+
+---[2024-05-17 20:48:11] [release-v1.14.5] ---
+cc81d75927f [ENG-9689][INTERNAL] Properly resolve proto schemas in SchemaRegistryProvider (#711)
+00ea1c8fa7c [ENG-9687][INTERNAL] Make the getInstance of BigQuerySchemaResolver public (#718)
+8268e04637e [ENG-9687] [MINOR] Make the ManifestWriter Extendable (#710)
+7e9591051eb [ENG-8542][INTERNAL] Revert old log format by default to ensure all tables write in new log format with 0.14 (#715)
+458d1396b29 [ENG-9695][HUDI-7758] Only consider files in Hudi partitions when initializing MDT (#707)
+de5dd1ca2d0 [AUDIT-789] Upgrade to version release-v1.14.4 (#708)
+
+---[2024-05-22 08:51:34] [release-v1.15.0] Upgrade to version release-v1.15.0---
+dbe2b4d7e08 [ENG-9189][HUDI-7778] Fixing global index for duplicate updates (#720)
+2dd9899b7ae [ENG-9189][HUDI-7712] Fixing RLI initialization to account for file slices instead of just base files while initializing (#713)
+819af5a4eb6 [ENG-9644][INTERNAL] Spark3.4 build workflow (#724)
+f488c527fde [AUDIT-795] Upgrade to version release-v1.14.5 (#719)
+
+---[2024-05-28 18:13:35] [release-v1.16.0] Upgrade to version release-v1.16.0---
+19faaa08b [ENG-10032][MINOR] Update log level for some MDT logs (#726)
+d18adf3e0 [ENG-9990][CHERRYPICK] Upgrade h2 and hive dependency version (#729)
+846030351 [AUDIT-802]: Upgrade to version release-v1.15.0 (#725)
+
+---[2024-05-30 13:56:13] [release-v1.17.0] Upgrade to version release-v1.17.0---
+6f0beba06d9 [ENG-9739][HUDI-7816] Provide SourceProfileSupplier option into the SnapshotLoadQuerySplitter (#728)
+b004bdea59f [AUDIT-809] Upgrade to version release-v1.16.0 (#734)
+9e1c2150cf0 [ENG-9990][HUDI-7808] Upgrade io.acryl:datahub-client from 0.8.31 to 0.8.45 (#733)
+
+---[2024-06-04 08:24:31] [release-v1.18.0] ---
+2d36ffca425 [ENG-10247][HUDI-7824] Fixing incr cleaner with savepoint removal (#746)
+dff1ccd7315 [ENG-10157][HUDI-7821] Handle case where older proto message is read with new schema (#740)
+57edb88606d [ENG-10204][MINOR] Avoid logging full commit metadata at info level (#743)
+7084e2bd9b4 [ENG-10119][INTERNAL] Use latest client method instead of providing -1 version (#736)
+649ae3a3758 [ENG-9739][INTERNAL] Upgrade to version release-v1.17.0 (#739)
+
+---[2024-06-06 19:02:17] [release-v1.18.1] Upgrade to version release-v1.18.1---
+d79d8c0d4d3 [ENG-9437][HUDI-7713] Enforce ordering of fields during schema reconciliation (#749)
+22ba18c1af3 [ENG-10381][MINOR] Add logs whenever fallback to fs listing even with MDT enabled (#750)
+cc1cfd8a6fc [ENG-10231][MINOR] Allow recreation of metrics instance for base path (#748)
+0422c65b40d [AUDIT-813] Upgrade to version release-v1.18.0 (#747)
+
+---[2024-06-13 08:48:56] [release-v1.19.0] Upgrade to version release-v1.19.0---
+1e4fa80ae [ENG-10413][HUDI-7779] Guard archival on savepoint removal until cleaner is able to clean it up (#752)
+c5dc593b3 [ENG-10330][INTERNAL] Fixing clustering to avoid repeated rdd trigger and Adding guards to catch spurious data files with clustering (#753)
+34ae0ffce [ENG-10230][HUDI-7826] Make column nullable when setNullForMissingColumns is true (#758)
+5b69b06e3 [ENG-9200][HUDI-7855] Add ability to configure bulk insert write parallelism (#714)
+330d3eb0b [AUDIT-815]: Upgrade to version release-v1.18.1 (#751)
+
+---[2024-06-18 12:04:14] [release-v1.20.0] ---
+
+
+---[2024-06-23 21:08:16] [release-v1.20.1] ---
+32e613ccb18 [ENG-9899][HUDI-7881] Verify table base path as well for syncing table in bigquery metastore (#777)
+a22af4bcfe4 [ENG-10771][INTERNAL] MDT initialization failure if inconsistencies found in FSV (#778)
+f490ff75ed8 [ENG-10656][INTERNAL] Make FSView consistent when multiple base files are present (#763)
+84ff62d8b9d [ENG-10550][HUDI-7909] Add Comment to the FieldSchema returned by Aws Glue Client (#773)
+1f73f2e1131 [ENG-9899][HUDI-7881] Verify table base path as well for syncing table in bigquery metastore (#764)
+9d7b01f97cd [AUDIT-827] Changelog for release-v1.20.0 (#772)
+
+---[2024-07-01 10:22:36] [release-v1.21.0] ---
+d0b2f68be46 [ENG-11023][INTERNAL] Fix hudi-integ-test usage of readFromSource (#802)
+5f59a366256 [ENG-10592][HUDI-7937] Handle legacy writer requirements in StreamSync and Clustering (#790)
+fc8495ab6f4 [ENG-10989][INTERNAL] Support decimal in jsonkafkasource (#780)
+60ac3d08423 [ENG-10962][HUDI-7927] Lazy init secondary view in FS view (#791)
+ba4a79376e2 [ENG-10642][HUDI-7924] Capture Latency and Failure Metrics For Hive Table recreation (#775)
+0f73453ad12 [ENG-8468][HUDI-7774] Add Avro Logical type support for Merciful Java convertor (#697)
+a50f83ae187 [ENG-10237][MINOR] Reduce logging volume (#760)
+e1a2c0a3cf4 [AUDIT-830]: Changelog for release-v1.20.1 (#785)
+
+---[2024-07-09 15:05:43] [release-v1.22.0] ---
+df9f58ac6 [ENG-7929][HUDI-7940] Pass HoodieIngestionMetrics to Error Table Writer to be able to emit metrics for Error Table Writer (#799)
+384b888b3 [ENG-10678][HUDI-7933] Sync table in Glue/HMS if table base path is updated (#776)
+
+---[2024-07-14 06:59:03] [release-v1.24.0] ---
+a1d9ea930 [ENG-11435][INTERNAL] Fixing build failure with hudi-cli module (#824)
+3b7d6e7f6 [ENG-11454][INTERNAL] Fix Duplicate handling behavior when Precombine value is not set (#821)
+0e8f4091a [ENG-11551][HUDI-7985] Support more formats in timestamp logical types in Json Avro converter (#822)
+fef3ecd08 [ENG-11435][INTERNAL] lazy initialize objects in HoodieTable when possible (#818)
+ee80332be [ENG-8251][HUDI-7979] Adjusting defaults with spillable map memory (#820)
+5b7826936 [ENG-8251][INTERNAL] Cherry picking HUDI-7961 with PR 11581 and HUDI-7921 with PR 11496 (#819)
+a523e6492 [ENG-8251][INTERNAL] Refactor FileSystemView classes to support rocksDb, spillable map FSVs with metadata table (#784)
+
+---[2024-07-19 15:07:29] [release-v1.25.0] ---
+df51091a29a [ENG-11947][MINOR] Update how RLI validation filters out new entries (#829)
+4c2aa94a958 [ENG-11551][HUDI-7985] Support timestamp string without zone offset in timestamp logical types and integers for decimals in Json Avro converter (#830)
+f3c8f858bcb [ENG-11950][MINOR] Improve error logging in JSON Avro conversion (#832)
+f06b244373f [ENG-11551][HUDI-7985] Support timestamp string without zone offset in timestamp logical types in Json Avro converter (#828)
+14a0086b0d9 [AUDIT-862] Fixing integ-test bundle build (#826)
+c742b6c4f56 [AUDIT-862]: Changelog for release-v1.24.0 (#825)
+
+---[2024-07-24 16:02:00] [release-v1.25.1] ---
+6696e5e356 [ENG-12088][HUDI-8015] Fix Glue Meta Sync Failure on base path change (#837)
+
+---[2024-07-25 02:54:54] [release-v1.25.2] ---
+1086134d66 [ENG-12149][HUDI-8016] LastSyncedTime is not updated for Snapshot table in Glue Sync (#841)
+22e3f7d66b [ENG-12142][HUDI-7881] Compare bigquery table base path via source-uris if hive partitioning options are not available (#840)
+
+---[2024-08-01 11:39:44] [release-v1.26.0] ---
+3a17791bac9 [ENG-12108][INTERNAL] allow filter query of timestamp partition column for mor rt if timestamp keygen is used to change the pattern (#845)
+684f191b99b [ENG-12283][INTERNAL] Allow custom serialization and add hoodie file group estimator (#844)
+a28448ebc00 [ENG-11284][HUDI-8029] Enforce s3 base path format for partition key calculation (#846)
+8215f76249e [AUDIT-883] Change log for release-v1.25.2 (#842)
+374895a746d [ENG-11948][INTERNAL] Allow batch lookup with spillable fsviews (#843)
+1d683be075f [ENG-11847][HUDI-8005] Add new lock provider implementation (#833)
+1086134d661 [ENG-12149][HUDI-8016] LastSyncedTime is not updated for Snapshot table in Glue Sync (#841)
+
+---[2024-08-01 13:34:45] [release-v1.26.1] ---
+e0c211aedd8 [ENG-12523] fix master branch compilation error
+
+---[2024-08-06 08:10:12] [release-v1.26.2] ---
+99444f5ea9f [ENG-11977][HUDI-8043] Fix DDB Lock provider bug (#855)
+7ccf28fe6f2 [AUDIT-891] : Changelog for release-v1.26.1 (#853)
+9bf4b717e4f fix master branch compilation error (#852)
+
+---[2024-08-09 15:32:35] [release-v1.27.1] ---
+1287e315bc2 [ENG-12730][INTERNAL] Add flag to allow old code path when decimals are present in json (#863)
+7d65c8a7930 [ENG-12709][INTERNAL] Disable some tests failing in github actions due to updated runner image (#862)
+
+---[2024-08-13 16:00:17] [release-v1.28.0] ---
+ba9bddf1e [ENG-12062][HUDI-8012] Update checkstyle.xml and fix checkstyle errors (#836)
+9ff5e7223 [ENG-12169][HUDI-6948] Fix schema evolution for non row writer (#858)
+07c2b90b2 [AUDIT-899]: Changelog for release-v1.27.1 (#868)
+
+---[2024-08-20 19:57:17] [release-v1.29.0] ---
+72058305390 [ENG-12106][INTERNAL] Add support for rounding decimals to support scale 0 inputs (#883)
+fc7d5182a9f [ENG-11464][HUDI-8071] Handle skew for user defined sort columns in BULK_INSERT (#847)
+e42995fd308 [ENG-12709][INTERNAL] Renable tests (#876)
+bd4188ad3ed [AUDIT-913] Changelog for release-v1.28.0 (#871)
+8f3a92b2d5f [ENG-12698][INTERNAL] Remove StreamProfile as its not required and used anymore (#873)
+4db312464b6 [ENG-12698][HUDI-8068] Hook up source partitions to s3 incr source (#865)
+b131896ba9c [ENG-12062][INTERNAL] Downgrade maven-checkstyle-plugin to lower required maven version (#872)
+
+---[2024-08-26 13:48:16] [release-v1.29.1] ---
+8e1ab9f1c00 [ENG-13432][MINOR] Update handling of non-string inputs for string fields in MercifulJsonConverter (#893)
+cf41c616d31 [AUDIT-920]: Changelog for release-v1.29.0
+
+---[2024-08-28 09:53:01] [release-v1.30.0] ---
+4b28b1d4dc [ENG-13289][HUDI-8123] Fix MDT file listing to exclude non-existent log files in marker-based rollback (#886)
+168d5ab9e3 [ENG-13386][INTERNAL] throw exception on null in the hoodie fg serializer (#898)
+8e2b933727 [ENG-13143][HUDI-8105] Refactor MercifulJsonConverter to be extendible for Json to Row conversion (#880)
+645d1d3213 [AUDIT-925]: Changelog for release-v1.29.1 (#894)
+1b0b0bec12 [ENG-13432][MINOR] Update handling of non-string inputs for string fields in MercifulJsonConverter (#893)
+750444a035 [AUDIT-920]: Changelog for release-v1.29.0 (#885)
+
+---[2024-09-07 22:00:17] [release-v1.31.0] ---
+5c604e49d [ENG-13527][INTERNAL] Adding commit metadata validation (#896)
+c31fcc897 [ENG-13527][HUDI-8111] Adding support to validate last N file slices with HoodieMetadataValidator (#913)
+075d53b9f [ENG-13174][HUDI-8083] Read precombine value from both table write config (#911)
+bf2d4cba9 [ENG-13536][HUDI-8137] Support time travel query on MDT in Spark Datasource (#901)
+12c1549a8 [ENG-10726][HUDI-5829] Optimize conversion from json to row format when sanitizing field names (#897)
+3c80adf0a [ENG-11375][HUDI-8116] Coalesce Row Source Aliases with Schema Fields in S3/GCS (#887)
+
+---[2024-09-10 14:09:02] [changelog-release-v1.32.0] ---
+f0ef3848c3 [ENG-13288][HUDI-8126] Persist sourceRdd to optimise writeStatus DAG (#892)
+22a7d4cfa3 [ENG-13552][INTERNAL] Update coverage reports to generate less logs (#891)
+1d5a09415c [ENG-13555][MINOR] Add remote file system props to meta sync properties (#916)
+f8f31946ee [ENG-12604][HUDI-8126] Use union to parallelize data and error table writes (#879)
+
+---[2024-09-10 10:06:21] [release-v1.32.1] ---
+0fee04a70a1 [ENG-12228][HUDI-8124] Allow reuse of meta client in Meta Sync path (#890)
+
+---[2024-09-17 03:17:29] [release-v1.33.0] ---
+c1819f43e9b [ENG-8251][INTERNAL] Enhancing FSV tests to account for sync apis and adding logs to External spillable map (#920)
+58588f38dba [ENG-13890][INTERNAL] Implement retry logic for all HTTP calls to timeline server including remote file system view and markers (#912)
+b0c7977636a [ENG-14449][INTERNAL] Fix the insert splits to avoid integer overflow (#923)
+d68f36112f4 [ENG-12764][HUDI-8090] Add new zookeeper based lock provider (#877)
+2cff3d74c86 [AUDIT-953] Changelog for release-v1.32.0 (#917)
+5918ecab770 [AUDIT-953]: Changelog for release-v1.32.1 (#918)
+318d0b94e46 [ENG-12228][HUDI-8124] Allow reuse of meta client in Meta Sync path (#890)
+
+---[2024-09-27 19:46:06] [release-v1.35.0] ---
+5a8a4442822 [ENG-14965][HUDI-8266] Ensure CleanPlanner is serializable (#935)
+e4f7f69d87a [ENG-14372][HUDI-8248] Fixing Log Record reader to include rollback blocks with timestamps > maxInstant times (#930)
+09ecdbb1022 [ENG-13527][INTERNAL] immutable collection causes runtime issue (#934)
+
+---[2024-10-07 00:39:42] [release-v1.37.0] ---
+7b4a714147 [ENG-14712][HUDI-8126] Support proto messages for spark kryo serializer (#956)
+e35e8ec88c [ENG-14712][HUDI-8126] Support proto messages for spark kryo serializer (#943)
+d5bea46c20 [ENG-15261][INTERNAL] Resolve CI issues with larger heap, fork timeout by default in surefire (#952)
+ab7ad5f149 [ENG-14556][HUDI-8276] Add support for File path regex for Hoodie Incr Source (#940)
+6f60263d99 [ENG-14372][HUDI-8248] Fixing Log Record reader to include rollback blocks with timestamps > maxInstant times (#942)
+03d8210bf0 [ENG-10945][INTERNAL] Migrate to Spark 3.5 (#906)
+
+---[2024-10-09 22:44:42] [release-v1.37.1] ---
+6d2a0afd24ff [AUDIT-993] Remove protobuf shading from utilities and utilities-slim bundle (#958)
+55b31380fdb3 [ENG-15261][INTERNAL] split out functional tests into own step in GH actions (#953)
+e481e769241b [AUDIT-993] Changelog for release-v1.37.0 (#957)
+
+---[2024-10-13 00:09:44] [changelog-release-v1.38.0] ---
+ac2cb4d95e [ENG-14712][HUDI-8126] Support proto messages for spark kryo serializer excluding DynamicMessages (#968)
+0c9cb2c74b [ENG-15012][HUDI-8331] Remove excessive table validity check (#967)
+f21f1807b2 [ENG-15634][INTERNAL] Fixing failure handling with HoodieMetadataTableValidator (#961)
+b74c97d91c [AUDIT-993] Changelog for release-v1.37.1 (#960)
+
+---[2024-10-19 16:22:46] [release-v1.39.0] ---
+186d43b625c [ENG-12790][INTERNAL] Adding support for empty cleans (#972)
+3b938bd2fbc [ENG-10226][HUDI-8378] Fix Avro schema deserializer failing with schema evolution (#971)
+b2543229a2f [AUDIT-993] Change log for release-v1.38.0 (#969)
+
+---[2024-10-20 10:21:48] [release-v1.40.0] ---
+a3a099bba34 [AUDIT-1011]: Changelog for release-v1.39.0 (#973)
+
+---[2024-10-28 16:35:09] [release-v1.41.0] ---
+d478b280ab [ENG-15502][HUDI-8371] Fixing column stats index with MDT for few scenarios (#980)
+cef0183d62 [ENG-14385][HUDI-8219] add concurrent schema evolution conflict detection (#929)
+ac9d0a8074 [ENG-15012][INTERNAL] Making bootstrap index default to false (#978)
+fef00d28a3 [ENG-16026][MINOR] Allow check for uncommitted log files in Metadata Validation (#976)
+ccd30871c9 [AUDIT-1011] Changelog for release-v1.40.0 (#975)
+
+---[2024-11-07 17:52:24] [release-v1.41.1] ---
+14042cf1949 [ENG-16492][INTERNAL] Close the remote view when the write client is closed (#1010)
+5cecceff48c [ENG-16492][INTERNAL] Include port in TimelineServerIdentifier to support multiple timeline servers with same host (#1005)
+b6a798da914 [ENG-16492][INTERNAL] Initialize timeline from client and use it to create view (#1004)
+
+---[2024-11-09 20:23:43] [release-v1.42.0] ---
+18771f05fb7 [AUDIT-1049]: Changelog for release-v1.41.1 (#1012)
+38886742526 [ENG-16492][INTERNAL] Close the remote view when the write client is closed (#1010)
+08b36f31070 [ENG-15951][HUDI-7655] Ensuring clean action executor cleans up all intended files (#986)
+80c48bbdfde [ENG-16492][INTERNAL] Include port in TimelineServerIdentifier to support multiple timeline servers with same host (#1005)
+c68ddd57437 [ENG-16492][INTERNAL] Initialize timeline from client and use it to create view (#1004)
+72dc47da0bf [ENG-15951][INTERNAL] Adding more guard rails to RLI (#985)
+8b327068d28 [ENG-15951][INTERNAL] Adding logs to assist with data consistency issues (#999)
+a3808d49f6b [ENG-16600][HUDI-8126] Support proto messages for spark kryo serializer (#998)
+fa536c95038 [ENG-12785][INTERNAL] Fixing metadata metrics to honor metrics prefix (#993)
+
+---[2024-11-11 11:46:35] [changelog-release-v1.42.2] ---
+d0ecc40ce3 [ENG-16492][INTERNAL] Fix client close and heartbeat removal after conflict (#1023)
+1c2b0cceca [AUDIT-1050]: Changelog for release-v1.42.0 (#1018)
+
+---[2024-11-11 14:51:02] [release-v1.43.1] ---
+ed151b31835 [AUDIT-1051] Change log for release-v1.42.2 (Hotfix on top of 1.42.0)  (#1028)
+576c5fcdb6d [ENG-16492][INTERNAL] Fix client close and heartbeat removal after conflict (#1023)
+14f7da2a94e [ENG-10945][INTERNAL] Update workflows to build/test with Spark 3.5 (#933)
+e20cb5fb603 [AUDIT-1050]: Changelog for release-v1.42.0 (#1018)
+
+---[2024-11-13 13:42:31] [release-v1.44.1] ---
+4dd96c385a [ENG-17106][HUDI-7507] Adding timestamp ordering validation before creating requested instant (#1025)
+de8b829cea [ENG-16492][INTERNAL] Fail fast when deltacommit cannot be started with instantTime in StreamSync (#1031)
+e191a70c52 [ENG-17203][HUDI-8508] Fix timeline service port assignment bug (#1032)
+ed151b3183 [AUDIT-1051] Change log for release-v1.42.2 (Hotfix on top of 1.42.0)  (#1028)
+
+---[2024-11-16 08:49:02] [release-v1.45.0] ---
+0f6863ab2a [ENG-17348][HUDI-8442] Reduce timeline loads while rolling back failed writes (#808)
+3f7c602374 Eng 16600 1 (#1002)
+7a331ec620 [ENG-16838][HUDI-8491] Handle empty commits for concurrent schema evolution (#1013)
+d89468c85c [ENG-17004][INTERNAL] Load partition requests via request body to avoid overlong URI (#1017)
+93e65096cf [ENG-17094][HUDI-8490] Implicit lock provider use different lock key scheme (#1011)
+8520c4a4d6 [ENG-15831][HUDI-8499] Complex data types and nested schema support in DataHubSyncTool (#1016)
+528c93e0de [AUDIT-1057] Change log for release-v1.44.1 (#1035)
+4dd96c385a [ENG-17106][HUDI-7507] Adding timestamp ordering validation before creating requested instant (#1025)
+de8b829cea [ENG-16492][INTERNAL] Fail fast when deltacommit cannot be started with instantTime in StreamSync (#1031)
+e191a70c52 [ENG-17203][HUDI-8508] Fix timeline service port assignment bug (#1032)
+ed151b3183 [AUDIT-1051] Change log for release-v1.42.2 (Hotfix on top of 1.42.0)  (#1028)
+576c5fcdb6 [ENG-16492][INTERNAL] Fix client close and heartbeat removal after conflict (#1023)
+14f7da2a94 [ENG-10945][INTERNAL] Update workflows to build/test with Spark 3.5 (#933)
+e20cb5fb60 [AUDIT-1050]: Changelog for release-v1.42.0 (#1018)
+
+---[2024-11-21 13:07:18] [release-v1.45.1] ---
+3305c31c322 [ENG-17701][INTERNAL] Update refresh command for RemoteFSView (#1047)
+
+---[2024-11-24 11:07:00] [changelog-release-v1.46.0] ---
+a3e4a9c48c [ENG-16611][INTERNAL] change payload default class (#1042)
+3de27016a8 [ENG-15951][INTERNAL] Creating separate config for rli guards. one for writer and another for reader (#1045)
+5576edb99b [AUDIT-1071][ENG-17447] Write shell script to perform daily branch cuts and changelog updates (#1048)
+490f736459 [ENG-16529][HUDI-7236] Allow MIT to change partition path when using global inde… (#992)
+215a76ec5e [AUDIT-1069]: Changelog for release-v1.45.1 (#1049)
+de426e0fd6 [ENG-17701][INTERNAL] Update refresh command for RemoteFSView (#1047)
+5333e88012 [ENG-17391][HUDI-8365] Reduce serialization overhead of HoodieTable (#1039)
+39b54e32cf [AUDIT-1052]: Changelog for release-v1.43.1 (#1030)
+7f8f0b3bb1 [ENG-11991][MINOR] Move field ordering lookup outside of loop for proto conversion (#1040)
+c6badaeb3a [AUDIT-1061]: Changelog for release-v1.45.0 (#1038)
+
+--- [2024-12-03 00:08:19] [release-v1.51.0] ---
+[AUDIT-1071][ENG-17447] Allow for bot.yml test bypass to speed up builds. (#1064)
+[AUDIT-1071][ENG-17447] Workflow changelog PR automation improvements (#1061)
+[ENG-17990][INTERNAL] Set REMOTE_INIT_TIMELINE_ENABLE correctly in updateWriteConfigWithTimelineServer (#1055)
+[AUDIT-1074] Change log for release-v1.46.0 (#1051)
+
+--- [2024-12-04 16:04:17] [release-v1.52.0] ---
+[ENG-9224][MINOR] Pass in engine context from StreamSync to dedupe (#1067)
+[AUDIT-1071][ENG-17447] Fix default trigger variables (#1068)
+[ENG-17390][MINOR] Remove extra timeline reload during conflict resolution (#996)
+[AUDIT-1071][ENG-17447] Final set of workflow automation follow ups (#1066)
+[AUDIT-1071]: Changelog for release-v1.51.0 (#1065)
+
+--- [2024-12-07 16:03:42] [release-v1.53.0] ---
+[ENG-17446][INTERNAL] Expose methods as protected in MultipleSparkJobExecutionStrategy (#1074)
+[AUDIT-1071][ENG-17447] Additional fixes to default trigger variables (#1072)
+[AUDIT-1071]: Changelog for release-v1.52.0 (#1071)
+
+--- [2024-12-10 16:04:00] [release-v1.54.0] ---
+[ENG-17123][HUDI-8673] Simple and Global-Simple Index improvements (#1015)
+[AUDIT-1071]: Changelog for release-v1.53.0 (#1075)
+
+--- [2024-12-11 16:04:12] [release-v1.55.0] ---
+[ENG-18575][HUDI-8135] Limit number of meta clients created in StreamSync (#1081)
+[ENG-18520][INTERNAL] Fix Hoodie Hive Sync Tool to Throw Exceptions on Sync Failures (#1077)
+[ENG-18495][HUDI-8378] Fix Avro schema deserializer failing with schema evolution (#1076)
+[AUDIT-1071]: Changelog for release-v1.54.0 (#1080)
+
+--- [2024-12-11 23:02:23] [release-v1.56.0] ---
+[ENG-18575][HUDI-8706] Avoid reading partition path from records if not required (#1083)
+[AUDIT-1071]: Changelog for release-v1.55.0 (#1084)
+
+--- [2024-12-14 01:12:19] [release-v1.57.0] ---
+[ENG-17359][HUDI-8596] Fix hudi spark sql cancelling issue (#1062)
+[ENG-18575][MINOR] Avoid scanning raw timeline on archival if no instants to archive (#1087)
+[ENG-18445][HUDI-8748] Fix check for whether legacy mode is enabled for file (#1086)
+[AUDIT-1093]: Changelog for release-v1.56.0 (#1085)
+
+--- [2024-12-14 16:03:38] [release-v1.58.0] ---
+[ENG-17422][INTERNAL] Add abstraction of HoodieMergeHandle to make its implementations configurable. (#1078)
+[AUDIT-1097]: Changelog for release-v1.57.0 (#1089)
+
+--- [2024-12-17 16:04:15] [release-v1.59.0] ---
+[ENG-19077][MINOR] Reduce logs from marker creation (#1092)
+[AUDIT-1071]: Changelog for release-v1.58.0 (#1090)
+
+--- [2024-12-18 16:04:00] [release-v1.60.0] ---
+[ENG-18477][HUDI-8769] Limit instantsToArchive to avoid expensive locks blocking ingestion and table services (#1091)
+[AUDIT-1071]: Changelog for release-v1.59.0 (#1094)
+
+--- [2024-12-19 16:04:01] [release-v1.61.0] ---
+[ENG-10945][INTERNAL] Spark3.4 release workflow (#1095)
+[AUDIT-1071]: Changelog for release-v1.60.0 (#1097)
+
+--- [2024-12-21 16:03:45] [release-v1.62.0] ---
+[ENG-13584][INTERNAL] Fix jenkins compile issue (#1101)
+[ENG-18492][HUDI-8701] prevent lock metrics failure from failing process (#1079)
+[ENG-13584][INTERNAL] Initial changes to allow us to use streams instead of byte arrays (#1098)
+[AUDIT-1071]: Changelog for release-v1.61.0 (#1099)
+
+--- [2024-12-24 16:03:34] [release-v1.63.0] ---
+[ENG-19380][HUDI-8792] Fix bug with timeline server reuse overriding client properties (#1104)
+[ENG-13584][INTERNAL] Migrate HoodieCommitMetadata and HoodieReplaceCommitMetadata reading (#1100)
+[AUDIT-1071]: Changelog for release-v1.62.0 (#1102)
+
+---[2024-12-30 13:01:12] [release-v1.63.1] ---
+[AUDIT-1112] Fix compilation failure with integration test profile (#1108)
+
+--- [2024-12-30 16:03:36] [release-v1.64.0] ---
+[ENG-18034][HUDI-8798] Validate Metadata Table Enabled during Archival (#1105)
+[AUDIT-1112]: Changelog for release-v1.63.1 (#1109)
+[AUDIT-1112] Fix compilation failure with integration test profile (#1108)
+[AUDIT-1071]: Changelog for release-v1.63.0 (#1106)
+
+--- [2025-01-01 16:03:30] [release-v1.66.0] ---
+[AUDIT-1071]: Changelog for release-v1.64.0 (#1110)
+[ENG-13584][INTERNAL] Update commit metadata writers to use OutputStream directly (#1103)
+
+--- [2025-01-04 16:03:20] [release-v1.68.0] ---
+[ENG-19435][HUDI-8808] Fix concurrent execution of appending rollback blocks in the same file group (#1116)
+[ENG-13584][INTERNAL] Fix NPEs when serializing timeline (#1119)
+[ENG-13584][INTERNAL] Update readers to deserialize Avro data from input stream  (#1107)
+[AUDIT-1071]: Changelog for release-v1.66.0 (#1114)
+
+--- [2025-01-09 04:09:48] [release-v1.68.1] ---
+[ENG-17683][INTERNAL] Add column mismatch test coverage (#1050)
+[ENG-20127][INTERNAL] Fixing resource closure and heartbeat stopping in HoodieStreamer (#1123)
+[ENG-13584][INTERNAL] Avoid any race condition on conflicting schema for readers/writers (#1122)
+[AUDIT-1071]: Changelog for release-v1.68.0 (#1121)
+
+--- [2025-01-10 16:03:47] [release-v1.70.0] ---
+[AUDIT-1127]: Changelog for release-v1.68.1 (#1124)
+[AUDIT-1071] Exclude CHANGELOG from sonar (#1125)
+[ENG-17683][INTERNAL] Add column mismatch test coverage (#1050)
+[ENG-20127][INTERNAL] Fixing resource closure and heartbeat stopping in HoodieStreamer (#1123)
+[ENG-13584][INTERNAL] Avoid any race condition on conflicting schema for readers/writers (#1122)
+[AUDIT-1071]: Changelog for release-v1.68.0 (#1121)
+
+--- [2025-01-14 21:21:15] [release-v1.75.0] ---
+[AUDIT-1071] Add fetch-depth: 0 to checkout in bot.yml (#1138)
+[ENG-7182][HUDI-8811] Handle Kafka source configuration-related failures with specific exception handling (#1117)
+[ENG-20196][HUDI-8860] Avoid calling values() on ExternalSpillableMap (#1135)
+[ENG-19953][HUDI-8857] Log shortened list of files instead of all files in MDT validator to avoid huge log message (#1132)
+[ENG-20198][INTERNAL] create custom concat handle config (#1128)
+[ENG-19830][INTERNAL] Add publish-adhoc-jar github workflow yaml for hudi-internal (#1130)
+[AUDIT-1071]: Changelog for release-v1.70.0 (#1131)
+
+--- [2025-01-16 16:03:43] [release-v1.76.0] ---
+[ENG-17105][HUDI-7949] insert into hudi table with columns specified (#1140)
+[AUDIT-1071]: Changelog for release-v1.75.0 (#1139)
+
+--- [2025-01-18 16:03:18] [release-v1.77.0] ---
+[ENG-18351][HUDI-8868] Use external spillable map for cachedAllInputFileSlices in BaseHoodieTableFileIndex (#1111)
+[AUDIT-1071]: Changelog for release-v1.76.0 (#1145)
+
+--- [2025-01-21 21:15:42] [release-v1.78.0] ---
+[AUDIT-1071] Modify changelog workflow to allow for manual audit runs (#1151)
+[AUDIT-1136] Make Spark 3.5 the default for Hudi Internal (#1150)
+[AUDIT-1071][INTERNAL] Fix dependency for HoodieMemoryConfig (#1149)
+[AUDIT-1071]: Changelog for release-v1.77.0 (#1148)
+
+--- [2025-01-22 16:03:50] [release-v1.79.0] ---
+[ENG-19951][INTERNAL] Fix code issues reported by SonarQube (#1120)
+[ENG-20453][HUDI-8885] Improve the efficiency of initializing the metadata table and table services (#1024)
+[AUDIT-1136]: Changelog for release-v1.78.0 (#1152)
+
+--- [2025-01-23 16:03:50] [release-v1.80.0] ---
+[ENG-20769][HUDI-8901] Fix Timeline Server to process requests from multiple storage lakes (#1157)
+[AUDIT-1071]: Changelog for release-v1.79.0 (#1155)
+
+--- [2025-01-25 08:56:42] [release-v1.81.0] ---
+[ENG-20941][INTERNAL] Avoid scheduling rollback for compaction and clustering (#1164)
+[ENG-21049][MINOR] Fix bloom index shuffle setup (#1163)
+[ENG-20414][HUDI-8898] Support INSERT SQL statement with a subset of columns in Spark 3.5 (#1158)
+[AUDIT-1071]: Changelog for release-v1.80.0 (#1160)
+
+--- [2025-01-29 16:03:51] [release-v1.82.0] ---
+[ENG-19873][INTERNAL] Conditional write lock scaffolding (#1166)
+[AUDIT-1146]: Changelog for release-v1.81.0 (#1165)
+
+--- [2025-01-31 16:03:37] [release-v1.83.0] ---
+[ENG-20641][INTERNAL] Remove validations for clustering metadata (#1153)
+[ENG-19658][HUDI-8804] clean and archival should also be in try-catch block (#1113)
+[AUDIT-1071]: Changelog for release-v1.82.0 (#1170)
+
+--- [2025-02-01 05:34:04] [release-v1.84.0] ---
+[ENG-17393][HUDI-8883] Add ability to configure HoodieCompactionPlanGenerator using reflection (#1147)
+[AUDIT-1071]: Changelog for release-v1.83.0 (#1172)
+
+--- [2025-02-04 16:03:49] [release-v1.85.0] ---
+[ENG-21391][INTERNAL] Lock provider heartbeat manager (#1169)
+[AUDIT-1157]: Changelog for release-v1.84.0 (#1173)
+
+--- [2025-02-06 16:03:29] [release-v1.86.0] ---
+[ENG-20982][HUDI-8940] Fix Bloom Index Partitioner to distribute keys uniformly across partitions (#1171)
+[AUDIT-1071]: Changelog for release-v1.85.0 (#1175)
+
+--- [2025-02-08 04:48:22] [release-v1.87.0] ---
+[ENG-22058][INTERNAL] Add back Insert Into test with static partition (#1177)
+[AUDIT-1071]: Changelog for release-v1.86.0 (#1176)
+
+--- [2025-02-13 16:03:49] [release-v1.89.0] ---
+[ENG-22091][INTERNAL] Heartbeat Manager Followups (#1180)
+[AUDIT-1166]: Changelog for release-v1.87.0 (#1178)
+
+--- [2025-02-14 16:03:53] [release-v1.90.0] ---
+[ENG-18993][INTERNAL] Move successful jobs to self hosted runner  (#1168)
+[AUDIT-1071]: Changelog for release-v1.89.0 (#1195)
+
+--- [2025-02-15 06:50:31] [release-v1.91.0] ---
+[ENG-21393][INTERNAL] GCP implementation of managed lock provider (#1161)
+[ENG-19872][INTERNAL] Managed Lock Provider with Conditional Writes (#1127)
+[ENG-18993][INTERNAL] reverted self hosted runner (#1200)
+[AUDIT-1071]: Changelog for release-v1.90.0 (#1199)
+
+--- [2025-02-19 16:04:06] [release-v1.92.0] ---
+[ENG-16319][HUDI-8955] Resolve Kafka beginning offsets with retention to prevent OffsetOutOfRange exception (#1159)
+[ENG-11493][INTERNAL] code clean up for managed lock provider (#1210)
+[AUDIT-1176]: Changelog for release-v1.91.0 (#1202)
+
+--- [2025-02-21 16:03:57] [release-v1.93.0] ---
+[ENG-22489][INTERNAL] Tweaking logging for LP based on usage in staging (#1216)
+[AUDIT-1071]: Changelog for release-v1.92.0 (#1212)
+
+--- [2025-02-22 16:03:23] [release-v1.94.0] ---
+[ENG-22755][HUDI-9045] Spillable Map operational improvements (#1219)
+[AUDIT-1071]: Changelog for release-v1.93.0 (#1220)
+
+--- [2025-02-22 19:50:43] [release-v1.95.0] ---
+[ENG-21984][HUDI-9067] Fixing num spark tasks for clean action (#1223)
+[AUDIT-1071]: Changelog for release-v1.94.0 (#1224)
+
+--- [2025-02-23 16:03:12] [release-v1.96.0] ---
+[ENG-22750][INTERNAL] Enable timestamp ordering validation by default (#1225)
+[ENG-22747][INTERNAL] Add validation in Merge Handle base class to ensure that the new file version produced has a higher instant time (#1217)
+[AUDIT-1071]: Changelog for release-v1.95.0 (#1226)
+
+--- [2025-02-25 16:04:13] [release-v1.97.0] ---
+[ENG-22655][INTERNAL] MDT validator can configure if we need log truncation (#1213)
+[ENG-22592][HUDI-8361] Fixing getLatestFileSlice calls to getLatestMergedFileSlice in MDT writer (#1231)
+[AUDIT-1071]: Changelog for release-v1.96.0 (#1228)

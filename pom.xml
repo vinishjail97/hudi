@@ -235,6 +235,13 @@
     <copy.files>false</copy.files>
     <copy.files.target.dir>${maven.multiModuleProjectDirectory}</copy.files.target.dir>
     <jacoco.agent.dest.filename>jacoco.exec</jacoco.agent.dest.filename>
+    <sonar.projectKey>onehouseinc_hudi-internal</sonar.projectKey>
+    <sonar.organization>onehouseinc</sonar.organization>
+    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+    <sonar.scm.provider>git</sonar.scm.provider>
+    <sonar.verbose>true</sonar.verbose>
+    <sonar.java.binaries>**/*</sonar.java.binaries>
+    <sonar.project.monorepo.enabled>true</sonar.project.monorepo.enabled>
   </properties>
 
   <scm>
