@@ -32,6 +32,7 @@ class TestHoodieDataSourceHelper extends HoodieSparkClientTestHarness with Spark
     assertEquals(expected, actual)
   }
 
+  // [ENG-23090]: need to cherry pick OSS fix in order to re-enable the test.
   @Disabled("HUDI-9086")
   def testExtractPredicatesWithinOutputSet() : Unit = {
     val dataColsWithNoPartitionCols = Set("id", "extra_col")
