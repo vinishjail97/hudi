@@ -217,6 +217,7 @@ public class BootstrapExecutor implements Serializable {
         .setRecordMergeMode(cfg.recordMergeMode)
         .setRecordMergeStrategyId(cfg.recordMergeStrategyId)
         .setBaseFileFormat(cfg.baseFileFormat)
+        .setBootstrapIndexEnable(true)
         .setBootstrapIndexClass(cfg.bootstrapIndexClass)
         .setBootstrapBasePath(bootstrapBasePath)
         .setHiveStylePartitioningEnable(props.getBoolean(

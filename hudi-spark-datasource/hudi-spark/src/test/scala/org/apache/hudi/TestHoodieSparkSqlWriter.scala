@@ -570,7 +570,8 @@ def testBulkInsertForDropPartitionColumn(): Unit = {
         DataSourceWriteOptions.KEYGENERATOR_CLASS_NAME.key -> classOf[NonpartitionedKeyGenerator].getCanonicalName,
         DataSourceWriteOptions.PAYLOAD_CLASS_NAME.key() -> classOf[DefaultHoodieRecordPayload].getCanonicalName,
         "hoodie.write.table.version" -> tableVersion.toString,
-        HoodieMetadataConfig.ENABLE_METADATA_INDEX_COLUMN_STATS.key -> "false")
+        HoodieMetadataConfig.ENABLE_METADATA_INDEX_COLUMN_STATS.key -> "false",
+        "hoodie.bootstrap.index.enable" -> "true")
       val fooTableParams = HoodieWriterUtils.parametersWithWriteDefaults(fooTableModifier)
       initializeMetaClientForBootstrap(fooTableParams, tableType, addBootstrapPath = true, initBasePath = false)
 
@@ -797,6 +798,7 @@ def testBulkInsertForDropPartitionColumn(): Unit = {
         .option(HoodieWriteConfig.KEYGENERATOR_CLASS_NAME.key, classOf[NonpartitionedKeyGenerator].getCanonicalName)
         .option(DataSourceWriteOptions.OPERATION.key, DataSourceWriteOptions.BOOTSTRAP_OPERATION_OPT_VAL)
         .option(HoodieBootstrapConfig.PARALLELISM_VALUE.key, "4")
+        .option("hoodie.bootstrap.index.enable", "true")
         .mode(SaveMode.Overwrite).save(tempBasePath)
       df.write.format("hudi").options(options)
         .option(DataSourceWriteOptions.OPERATION.key, "insert_overwrite_table")

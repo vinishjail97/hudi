@@ -245,6 +245,7 @@ public class BootstrapExecutorUtils implements Serializable {
             TIMELINE_HISTORY_PATH.key(), TIMELINE_HISTORY_PATH.defaultValue()))
         .setPayloadClassName(cfg.payloadClass)
         .setBaseFileFormat(cfg.baseFileFormat)
+        .setBootstrapIndexEnable(true)
         .setBootstrapIndexClass(cfg.bootstrapIndexClass)
         .setBootstrapBasePath(bootstrapBasePath)
         .setCDCEnabled(props.getBoolean(HoodieTableConfig.CDC_ENABLED.key(),
