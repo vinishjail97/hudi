@@ -16,7 +16,7 @@
   limitations under the License.
 -->
 
-# Apache Hudi
+# Apache Hudi Internal
 
 Apache Hudi is an open data lakehouse platform, built on a high-performance open table format 
 to ingest, index, store, serve, transform and manage your data across multiple cloud data environments.
