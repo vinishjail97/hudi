@@ -36,6 +36,8 @@ public class InstantDTO {
   String timestamp;
   @JsonProperty("state")
   String state;
+  @JsonProperty("completionTime")
+  String completionTime;
 
   public static InstantDTO fromInstant(HoodieInstant instant) {
     if (null == instant) {
@@ -45,6 +47,7 @@ public class InstantDTO {
     InstantDTO dto = new InstantDTO();
     dto.action = instant.getAction();
     dto.timestamp = instant.requestedTime();
+    dto.completionTime = instant.getCompletionTime();
     dto.state = instant.getState().toString();
     return dto;
   }
@@ -54,6 +57,6 @@ public class InstantDTO {
       return null;
     }
 
-    return factory.createNewInstant(HoodieInstant.State.valueOf(dto.state), dto.action, dto.timestamp);
+    return factory.createNewInstant(HoodieInstant.State.valueOf(dto.state), dto.action, dto.timestamp, dto.completionTime);
   }
 }
