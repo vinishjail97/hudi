@@ -19,19 +19,14 @@
 package org.apache.hudi.client;
 
 import org.apache.hudi.client.embedded.EmbeddedTimelineService;
-import org.apache.hudi.client.transaction.lock.InProcessLockProvider;
 import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.model.HoodieCommitMetadata;
-import org.apache.hudi.common.model.WriteConcurrencyMode;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
-import org.apache.hudi.common.table.HoodieTableVersion;
-import org.apache.hudi.common.table.timeline.HoodieActiveTimeline;
-import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.FileSystemViewStorageConfig;
 import org.apache.hudi.common.table.view.FileSystemViewStorageType;
+import org.apache.hudi.common.table.view.SyncableFileSystemView;
 import org.apache.hudi.common.testutils.HoodieCommonTestHarness;
 import org.apache.hudi.common.util.Option;
-import org.apache.hudi.config.HoodieLockConfig;
 import org.apache.hudi.config.HoodieWriteConfig;
 import org.apache.hudi.index.HoodieIndex;
 import org.apache.hudi.index.simple.HoodieSimpleIndex;
@@ -40,6 +35,8 @@ import org.apache.hudi.table.HoodieTable;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.IOException;
 import java.util.List;
@@ -47,83 +44,72 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 
 import static org.apache.hudi.common.testutils.HoodieTestUtils.getDefaultStorageConf;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class TestBaseHoodieWriteClient extends HoodieCommonTestHarness {
 
-  @Test
-  void startCommitWillRollbackFailedWritesInEagerMode() throws IOException {
+  @ParameterizedTest
+  @EnumSource(value = FileSystemViewStorageType.class, names = {"REMOTE_FIRST", "REMOTE_ONLY"})
+  void validateClientClose(FileSystemViewStorageType viewStorageType) throws IOException {
     initMetaClient();
-    HoodieWriteConfig writeConfig = HoodieWriteConfig.newBuilder()
-        .withPath(basePath)
-        .build();
+    HoodieWriteConfig writeConfig = getHoodieWriteConfigForRemoteView(viewStorageType);
     HoodieTable<String, String, String, String> table = mock(HoodieTable.class);
-    HoodieTableMetaClient mockMetaClient = mock(HoodieTableMetaClient.class, RETURNS_DEEP_STUBS);
+    EmbeddedTimelineService service = mock(EmbeddedTimelineService.class);
+    BaseHoodieTableServiceClient<String, String, String> tableServiceClient = mock(BaseHoodieTableServiceClient.class);
+    TestWriteClient writeClient = new TestWriteClient(writeConfig, table, Option.of(service), tableServiceClient);
+    SyncableFileSystemView view = mock(SyncableFileSystemView.class);
+    when(table.getHoodieView()).thenReturn(view);
+
+    writeClient.close();
+    verify(view).close();
+    verify(tableServiceClient).close();
+  }
+
+  @ParameterizedTest
+  @EnumSource(value = FileSystemViewStorageType.class, names = {"REMOTE_FIRST", "REMOTE_ONLY"})
+  void validateClientCloseSkippedIfTimelineServiceNotProvided(FileSystemViewStorageType viewStorageType) throws IOException {
+    initMetaClient();
+    HoodieWriteConfig writeConfig = getHoodieWriteConfigForRemoteView(viewStorageType);
+    HoodieTable<String, String, String, String> table = mock(HoodieTable.class);
     BaseHoodieTableServiceClient<String, String, String> tableServiceClient = mock(BaseHoodieTableServiceClient.class);
     TestWriteClient writeClient = new TestWriteClient(writeConfig, table, Option.empty(), tableServiceClient);
 
-    // mock no inflight restore
-    HoodieTimeline inflightRestoreTimeline = mock(HoodieTimeline.class);
-    when(mockMetaClient.getActiveTimeline().getRestoreTimeline().filterInflightsAndRequested()).thenReturn(inflightRestoreTimeline);
-    when(inflightRestoreTimeline.countInstants()).thenReturn(0);
-    // mock no pending compaction
-    when(mockMetaClient.getActiveTimeline().filterPendingCompactionTimeline().lastInstant()).thenReturn(Option.empty());
-    // mock table version
-    when(mockMetaClient.getTableConfig().getTableVersion()).thenReturn(HoodieTableVersion.EIGHT);
-
-    writeClient.startCommit(HoodieActiveTimeline.COMMIT_ACTION, mockMetaClient);
-    verify(tableServiceClient).rollbackFailedWrites(mockMetaClient);
+    writeClient.close();
+    verify(table, never()).getHoodieView();
+    verify(tableServiceClient).close();
   }
 
-  @Test
-  void rollbackDelegatesToTableServiceClient() throws IOException {
-    initMetaClient();
+  private HoodieWriteConfig getHoodieWriteConfigForRemoteView(FileSystemViewStorageType viewStorageType) {
     HoodieWriteConfig writeConfig = HoodieWriteConfig.newBuilder()
         .withPath(basePath)
+        .withFileSystemViewConfig(FileSystemViewStorageConfig.newBuilder()
+            .withStorageType(FileSystemViewStorageType.MEMORY)
+            .build())
         .build();
-    HoodieTable<String, String, String, String> table = mock(HoodieTable.class);
-    HoodieTableMetaClient mockMetaClient = mock(HoodieTableMetaClient.class);
-    BaseHoodieTableServiceClient<String, String, String> tableServiceClient = mock(BaseHoodieTableServiceClient.class);
-    TestWriteClient writeClient = new TestWriteClient(writeConfig, table, Option.empty(), tableServiceClient);
-
-    writeClient.rollbackFailedWrites(mockMetaClient);
-    verify(tableServiceClient).rollbackFailedWrites(mockMetaClient);
+    // update the view config to simulate how the configs are updated when adding the embedded timeline service url and port
+    writeConfig.setViewStorageConfig(FileSystemViewStorageConfig.newBuilder().withStorageType(viewStorageType).build());
+    return writeConfig;
   }
 
   @Test
-  void testStartCommit() throws IOException {
+  void validateClientCloseSkippedIfViewIsNotRemote() throws IOException {
     initMetaClient();
     HoodieWriteConfig writeConfig = HoodieWriteConfig.newBuilder()
         .withPath(basePath)
         .withFileSystemViewConfig(FileSystemViewStorageConfig.newBuilder()
             .withStorageType(FileSystemViewStorageType.MEMORY)
             .build())
-        .withWriteConcurrencyMode(WriteConcurrencyMode.OPTIMISTIC_CONCURRENCY_CONTROL)
-        .withLockConfig(HoodieLockConfig.newBuilder()
-            .withLockProvider(InProcessLockProvider.class)
-            .withLockWaitTimeInMillis(50L)
-            .withNumRetries(2)
-            .withRetryWaitTimeInMillis(10L)
-            .withClientNumRetries(2)
-            .withClientRetryWaitTimeInMillis(10L)
-            .build())
         .build();
-
     HoodieTable<String, String, String, String> table = mock(HoodieTable.class);
     BaseHoodieTableServiceClient<String, String, String> tableServiceClient = mock(BaseHoodieTableServiceClient.class);
     TestWriteClient writeClient = new TestWriteClient(writeConfig, table, Option.empty(), tableServiceClient);
 
-    writeClient.startCommitWithTime("001", "commit");
-
-    HoodieTimeline writeTimeline = metaClient.getActiveTimeline().getWriteTimeline();
-    assertTrue(writeTimeline.lastInstant().isPresent());
-    assertEquals("commit", writeTimeline.lastInstant().get().getAction());
-    assertEquals("001", writeTimeline.lastInstant().get().requestedTime());
+    writeClient.close();
+    verify(table, never()).getHoodieView();
+    verify(tableServiceClient).close();
   }
 
   private static class TestWriteClient extends BaseHoodieWriteClient<String, String, String, String> {
