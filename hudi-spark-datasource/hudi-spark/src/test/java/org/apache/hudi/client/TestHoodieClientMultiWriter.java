@@ -746,9 +746,8 @@ public class TestHoodieClientMultiWriter extends HoodieClientTestBase {
     }
   }
 
-  //  [ENG-23109] Need to check the jira for what's the fix to cherry pick.
-  //  @ParameterizedTest
-  //  @MethodSource("providerClassResolutionStrategyAndTableType")
+  @ParameterizedTest
+  @MethodSource("providerClassResolutionStrategyAndTableType")
   public void testMultiWriterWithAsyncTableServicesWithConflict(HoodieTableType tableType, Class<? extends LockProvider<?>> providerClass,
                                                                 ConflictResolutionStrategy resolutionStrategy) throws Exception {
     // create inserts X 1
@@ -813,6 +812,9 @@ public class TestHoodieClientMultiWriter extends HoodieClientTestBase {
     final SparkRDDWriteClient client1 = getHoodieWriteClient(cfg2);
     final SparkRDDWriteClient client2 = getHoodieWriteClient(cfg);
     final SparkRDDWriteClient client3 = getHoodieWriteClient(cfg);
+    final String upsertCommitTime = client1.createNewInstantTime(); // upsert commit time has to be lesser than compaction instant time.
+    // and w/ MOR table, during conflict resolution, we will definitely hit conflict resolution exception.
+    // if the delta commit's instant time is not guaranteed to be < compaction instant time, then delta commit will succeed w/o issues.
 
     // Test with concurrent operations could be flaky, to reduce possibility of wrong ordering some queue is added
     // For InProcessLockProvider we could wait less
@@ -821,7 +823,6 @@ public class TestHoodieClientMultiWriter extends HoodieClientTestBase {
 
     // Create upserts, schedule cleaning, schedule compaction in parallel
     Future future1 = executors.submit(() -> {
-      final String newCommitTime = client1.createNewInstantTime();
       final int numRecords = 100;
       final String commitTimeBetweenPrevAndNew = secondCommitTime;
 
@@ -835,11 +836,12 @@ public class TestHoodieClientMultiWriter extends HoodieClientTestBase {
         // Since the concurrent modifications went in, this upsert has
         // to fail
         assertThrows(HoodieWriteConflictException.class, () -> {
-          createCommitWithUpserts(cfg, client1, thirdCommitTime, Option.of(commitTimeBetweenPrevAndNew), newCommitTime, numRecords);
+          createCommitWithUpserts(cfg, client1, thirdCommitTime, Option.of(commitTimeBetweenPrevAndNew), upsertCommitTime, numRecords);
         });
       } else {
         // We don't have the compaction for COW and so this upsert
         // has to pass
+        final String newCommitTime = client1.createNewInstantTime();
         assertDoesNotThrow(() -> {
           createCommitWithUpserts(cfg, client1, thirdCommitTime, Option.of(commitTimeBetweenPrevAndNew), newCommitTime, numRecords);
         });
