@@ -89,8 +89,9 @@ public class TestHoodieFileGroupRecordBuffer {
 
     String preCombineField = "ts";
     List<String> dataSchemaFields = new ArrayList<>();
-    dataSchemaFields.addAll(Arrays.asList(HoodieRecord.RECORD_KEY_METADATA_FIELD, HoodieRecord.PARTITION_PATH_METADATA_FIELD, preCombineField,
-        "colA","colB","colC","colD"));
+    dataSchemaFields.addAll(Arrays.asList(
+        HoodieRecord.RECORD_KEY_METADATA_FIELD, HoodieRecord.PARTITION_PATH_METADATA_FIELD, preCombineField,
+        "colA", "colB", "colC", "colD"));
     if (addHoodieIsDeleted) {
       dataSchemaFields.add(HoodieRecord.HOODIE_IS_DELETED_FIELD);
     }

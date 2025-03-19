@@ -150,7 +150,7 @@ public class DataSourceTestUtils {
       } else {
         values[1] = partition;
       }
-      values[2] = ((Long) row.getAs("ts")) + (lowerTs ? (- 1 - RANDOM.nextInt(1000)) : (RANDOM.nextInt(1000)));
+      values[2] = ((Long) row.getAs("ts")) + (lowerTs ? (-1 - RANDOM.nextInt(1000)) : RANDOM.nextInt(1000));
       values[3] = false;
       rows.add(RowFactory.create(values));
     }
