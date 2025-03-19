@@ -44,6 +44,7 @@ import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.table.marker.MarkerType;
 import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.table.timeline.InstantComparison;
 import org.apache.hudi.common.table.view.FileSystemViewStorageConfig;
 import org.apache.hudi.common.table.view.FileSystemViewStorageType;
 import org.apache.hudi.common.testutils.HoodieTestTable;
@@ -51,6 +52,7 @@ import org.apache.hudi.common.testutils.HoodieTestUtils;
 import org.apache.hudi.common.util.CommitUtils;
 import org.apache.hudi.common.util.FileIOUtils;
 import org.apache.hudi.common.util.Option;
+import org.apache.hudi.common.util.ValidationUtils;
 import org.apache.hudi.config.HoodieArchivalConfig;
 import org.apache.hudi.config.HoodieCleanConfig;
 import org.apache.hudi.config.HoodieClusteringConfig;
@@ -853,6 +855,7 @@ public class TestHoodieClientMultiWriter extends HoodieClientTestBase {
       if (tableType == MERGE_ON_READ) {
         assertDoesNotThrow(() -> {
           String compactionTimeStamp = client2.createNewInstantTime();
+          ValidationUtils.checkArgument(InstantComparison.compareTimestamps(compactionTimeStamp, InstantComparison.GREATER_THAN, upsertCommitTime));
           client2.scheduleTableService(compactionTimeStamp, Option.empty(), TableServiceType.COMPACT);
         });
       }
