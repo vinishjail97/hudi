@@ -112,6 +112,7 @@
                   <include>com.github.davidmoten:hilbert-curve</include>
                   <!-- SPARK-43489 Spark 3.5+ has marked protobuf as provided -->
                   <include>com.google.protobuf:protobuf-java</include>
+                  <include>com.google.protobuf:protobuf-java-util</include>
                   <include>com.twitter:bijection-avro_${scala.binary.version}</include>
                   <include>com.twitter:bijection-core_${scala.binary.version}</include>
                   <include>com.twitter:chill-protobuf</include>
