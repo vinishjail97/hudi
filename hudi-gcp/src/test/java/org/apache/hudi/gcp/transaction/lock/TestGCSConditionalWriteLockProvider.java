@@ -23,6 +23,7 @@ import org.apache.hudi.client.transaction.lock.ConditionalWriteLockConfig;
 import org.apache.hudi.client.transaction.lock.ConditionalWriteLockProvider;
 import org.apache.hudi.common.config.LockConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
+import org.apache.hudi.common.testutils.HoodieTestUtils;
 
 import com.google.cloud.NoCredentials;
 import com.google.cloud.storage.Blob;
@@ -31,7 +32,6 @@ import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Bucket;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
-import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -91,7 +91,6 @@ public class TestGCSConditionalWriteLockProvider
   @Override
   protected ConditionalWriteLockProvider createLockProvider() {
     LockConfiguration lockConf = new LockConfiguration(providerProperties);
-    Configuration conf = new Configuration();
     try (MockedStatic<StorageOptions> storageOptionsMock = mockStatic(StorageOptions.class)) {
       StorageOptions.Builder builderMock = mock(StorageOptions.Builder.class);
       StorageOptions storageOptionsInstanceMock = mock(StorageOptions.class);
@@ -100,7 +99,7 @@ public class TestGCSConditionalWriteLockProvider
       when(storageOptionsInstanceMock.getService()).thenReturn(storage);
       return new ConditionalWriteLockProvider(
           lockConf,
-          conf);
+          null);
     }
   }
 
@@ -127,9 +126,8 @@ public class TestGCSConditionalWriteLockProvider
     props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
 
     LockConfiguration lockConf = new LockConfiguration(props);
-    Configuration conf = new Configuration();
 
-    ConditionalWriteLockProvider provider = new ConditionalWriteLockProvider(lockConf, conf);
+    ConditionalWriteLockProvider provider = new ConditionalWriteLockProvider(lockConf, HoodieTestUtils.getDefaultStorageConf());
     assertNull(provider.getLock());
     provider.close();
   }
@@ -143,9 +141,8 @@ public class TestGCSConditionalWriteLockProvider
     props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
 
     LockConfiguration lockConf = new LockConfiguration(props);
-    Configuration conf = new Configuration();
 
-    ConditionalWriteLockProvider provider = new ConditionalWriteLockProvider(lockConf, conf);
+    ConditionalWriteLockProvider provider = new ConditionalWriteLockProvider(lockConf, HoodieTestUtils.getDefaultStorageConf());
     try {
       Field field = provider.getClass().getDeclaredField("lockFilePath");
       field.setAccessible(true);

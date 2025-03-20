@@ -30,8 +30,8 @@ import org.apache.hudi.common.util.VisibleForTesting;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.common.util.hash.HashID;
 import org.apache.hudi.exception.HoodieLockException;
+import org.apache.hudi.storage.StorageConfiguration;
 
-import org.apache.hadoop.conf.Configuration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -104,9 +104,9 @@ public class ConditionalWriteLockProvider implements LockProvider<ConditionalWri
   /**
    * Default constructor for ConditionalWriteLockProvider, required by LockManager to instantiate it using reflection.
    * @param lockConfiguration The lock configuration, should be transformable into ConditionalWriteLockConfig
-   * @param conf Hadoop config, ignored.
+   * @param conf Storage config, ignored.
    */
-  public ConditionalWriteLockProvider(final LockConfiguration lockConfiguration, final Configuration conf) {
+  public ConditionalWriteLockProvider(final LockConfiguration lockConfiguration, final StorageConfiguration<?> conf) {
     ConditionalWriteLockConfig config = new ConditionalWriteLockConfig.Builder().fromProperties(lockConfiguration.getConfig()).build();
     heartbeatIntervalMs = config.getHeartbeatPollMs();
     lockValidityMs = config.getLockValidityTimeoutMs();

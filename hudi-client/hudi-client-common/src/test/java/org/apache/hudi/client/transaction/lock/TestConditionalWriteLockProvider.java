@@ -23,10 +23,11 @@ import org.apache.hudi.client.transaction.lock.models.ConditionalWriteLockFile;
 import org.apache.hudi.client.transaction.lock.models.HeartbeatManager;
 import org.apache.hudi.common.config.LockConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
+import org.apache.hudi.common.testutils.HoodieTestUtils;
 import org.apache.hudi.common.util.collection.Pair;
 import org.apache.hudi.exception.HoodieLockException;
+import org.apache.hudi.storage.StorageConfiguration;
 
-import org.apache.hadoop.conf.Configuration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -102,10 +103,10 @@ class TestConditionalWriteLockProvider {
     props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
 
     LockConfiguration lockConf = new LockConfiguration(props);
-    Configuration conf = new Configuration();
+    StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
 
     HoodieLockException ex = assertThrows(HoodieLockException.class,
-        () -> new ConditionalWriteLockProvider(lockConf, conf));
+        () -> new ConditionalWriteLockProvider(lockConf, storageConf));
     assertTrue(ex.getMessage().contains("No implementation of ConditionalWriteLockService supports this lock storage location"));
   }
 
@@ -118,10 +119,10 @@ class TestConditionalWriteLockProvider {
     props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
 
     LockConfiguration lockConf = new LockConfiguration(props);
-    Configuration conf = new Configuration();
+    StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
 
     HoodieLockException ex = assertThrows(HoodieLockException.class,
-        () -> new ConditionalWriteLockProvider(lockConf, conf));
+        () -> new ConditionalWriteLockProvider(lockConf, storageConf));
     assertTrue(ex.getMessage().contains("Failed to load and initialize ConditionalWriteLockService"));
   }
 
@@ -134,10 +135,10 @@ class TestConditionalWriteLockProvider {
     props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
 
     LockConfiguration lockConf = new LockConfiguration(props);
-    Configuration conf = new Configuration();
+    StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
 
     HoodieLockException ex = assertThrows(HoodieLockException.class,
-        () -> new ConditionalWriteLockProvider(lockConf, conf));
+        () -> new ConditionalWriteLockProvider(lockConf, storageConf));
     Throwable cause = ex.getCause();
     assertNotNull(cause);
     assertTrue(cause instanceof URISyntaxException);
@@ -153,10 +154,10 @@ class TestConditionalWriteLockProvider {
     props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
 
     LockConfiguration lockConf = new LockConfiguration(props);
-    Configuration conf = new Configuration();
+    StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
 
     HoodieLockException ex = assertThrows(HoodieLockException.class,
-        () -> new ConditionalWriteLockProvider(lockConf, conf));
+        () -> new ConditionalWriteLockProvider(lockConf, storageConf));
     assertTrue(ex.getMessage().contains("Failed to load and initialize ConditionalWriteLockService"));
   }
 
