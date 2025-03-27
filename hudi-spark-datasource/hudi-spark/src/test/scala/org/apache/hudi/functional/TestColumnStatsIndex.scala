@@ -83,11 +83,20 @@ class TestColumnStatsIndex extends ColumnStatIndexTestBase {
       "hoodie.compact.inline.max.delta.commits" -> "10"
     ) ++ metadataOpts
 
+    // write empty first commit to validate edge cases
+    sparkSession.emptyDataFrame
+      .write
+      .format("hudi")
+      .options(commonOpts)
+      .option(DataSourceWriteOptions.OPERATION.key, DataSourceWriteOptions.INSERT_OPERATION_OPT_VAL)
+      .mode(SaveMode.Overwrite)
+      .save(basePath)
+
     doWriteAndValidateColumnStats(ColumnStatsTestParams(testCase, metadataOpts, commonOpts,
       dataSourcePath = "index/colstats/input-table-json",
       expectedColStatsSourcePath = "index/colstats/column-stats-index-table.json",
       operation = DataSourceWriteOptions.INSERT_OPERATION_OPT_VAL,
-      saveMode = SaveMode.Overwrite))
+      saveMode = SaveMode.Append))
 
     doWriteAndValidateColumnStats(ColumnStatsTestParams(testCase, metadataOpts, commonOpts,
       dataSourcePath = "index/colstats/another-input-table-json",
