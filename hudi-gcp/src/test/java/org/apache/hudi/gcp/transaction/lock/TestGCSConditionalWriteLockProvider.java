@@ -19,6 +19,7 @@
 
 package org.apache.hudi.gcp.transaction.lock;
 
+import org.apache.hudi.client.transaction.lock.AbstractLockProviderTestBase;
 import org.apache.hudi.client.transaction.lock.ConditionalWriteLockConfig;
 import org.apache.hudi.client.transaction.lock.ConditionalWriteLockProvider;
 import org.apache.hudi.common.config.LockConfiguration;
@@ -105,9 +106,8 @@ public class TestGCSConditionalWriteLockProvider
 
   @BeforeEach
   void setupLockProvider() {
-    providerProperties.put(ConditionalWriteLockConfig.LOCK_INTERNAL_STORAGE_LOCATION.key(), "gs://" + testBucket + "/locks");
-    providerProperties.put(BASE_PATH.key(), "gs://bucket/lake/db/tbl-default");
-    recreateLockProvider();
+    providerProperties.put(BASE_PATH.key(), String.format("gs://%s/lake/db/tbl-default", testBucket));
+    lockProvider = createLockProvider();
   }
 
   @AfterAll
@@ -120,7 +120,6 @@ public class TestGCSConditionalWriteLockProvider
   @Test
   void testValidDefaultConstructor() {
     TypedProperties props = new TypedProperties();
-    props.put(ConditionalWriteLockConfig.LOCK_INTERNAL_STORAGE_LOCATION.key(), "gs://test-bucket/locks");
     props.put(BASE_PATH.key(), "gs://bucket/lake/db/tbl-default");
     props.put(ConditionalWriteLockConfig.LOCK_VALIDITY_TIMEOUT_MS.key(), "5000");
     props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");

@@ -31,6 +31,8 @@ import org.apache.hudi.storage.StorageConfiguration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.Logger;
 
 import java.net.URISyntaxException;
@@ -93,30 +95,49 @@ class TestConditionalWriteLockProvider {
   void cleanupLockProvider() {
     lockProvider.close();
   }
-
+  
   @Test
   void testUnsupportedLockStorageLocation() {
     TypedProperties props = new TypedProperties();
-    props.put(ConditionalWriteLockConfig.LOCK_INTERNAL_STORAGE_LOCATION.key(), "s3a://test-bucket/locks");
-    props.put(BASE_PATH.key(), "gs://bucket/lake/db/tbl-default");
-    props.put(ConditionalWriteLockConfig.LOCK_VALIDITY_TIMEOUT_MS.key(), "5000");
-    props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
+    props.put(BASE_PATH.key(), "hdfs://bucket/lake/db/tbl-default");
+    LockConfiguration lockConf = new LockConfiguration(props);
+    StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
+    HoodieLockException ex = assertThrows(HoodieLockException.class,
+        () -> new ConditionalWriteLockProvider(lockConf, storageConf));
+    assertTrue(ex.getCause().getMessage().contains("No implementation of ConditionalWriteLockService supports this scheme"));
+  }
+
+  @Test
+  void testValidLockStorageLocation() {
+    TypedProperties props = new TypedProperties();
+    props.put(BASE_PATH.key(), "s3://bucket/lake/db/tbl-default");
+    props.put(ConditionalWriteLockConfig.LOCK_INTERNAL_STORAGE_LOCATION.key(), "s3://bucket/locks");
 
     LockConfiguration lockConf = new LockConfiguration(props);
     StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
 
     HoodieLockException ex = assertThrows(HoodieLockException.class,
         () -> new ConditionalWriteLockProvider(lockConf, storageConf));
-    assertTrue(ex.getMessage().contains("No implementation of ConditionalWriteLockService supports this lock storage location"));
+    assertTrue(ex.getMessage().contains("Failed to load and initialize ConditionalWriteLockService"));
   }
 
   @Test
-  void testNonExistentWriteService() {
+  void testInvalidLockStorageLocation() {
     TypedProperties props = new TypedProperties();
-    props.put(ConditionalWriteLockConfig.LOCK_INTERNAL_STORAGE_LOCATION.key(), "gs://test-bucket/locks");
-    props.put(BASE_PATH.key(), "gs://bucket/lake/db/tbl-default");
-    props.put(ConditionalWriteLockConfig.LOCK_VALIDITY_TIMEOUT_MS.key(), "5000");
-    props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
+    props.put(BASE_PATH.key(), "s3://bucket/lake/db/tbl-default");
+    props.put(ConditionalWriteLockConfig.LOCK_INTERNAL_STORAGE_LOCATION.key(), "s3://bucket/lake/db/tbl-default/.hoodie/.metadata");
+
+    LockConfiguration lockConf = new LockConfiguration(props);
+    StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
+
+    assertThrows(IllegalArgumentException.class, () -> new ConditionalWriteLockProvider(lockConf, storageConf));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"gs://bucket/lake/db/tbl-default", "s3://bucket/lake/db/tbl-default", "s3a://bucket/lake/db/tbl-default"})
+  void testNonExistentWriteServiceWithDefaults(String tableBasePathString) {
+    TypedProperties props = new TypedProperties();
+    props.put(BASE_PATH.key(), tableBasePathString);
 
     LockConfiguration lockConf = new LockConfiguration(props);
     StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
@@ -143,22 +164,6 @@ class TestConditionalWriteLockProvider {
     assertNotNull(cause);
     assertTrue(cause instanceof URISyntaxException);
     assertTrue(ex.getMessage().contains("Unable to parse locks location as a URI"));
-  }
-
-  @Test
-  void testValidLocksLocationForWriteService() {
-    TypedProperties props = new TypedProperties();
-    props.put(ConditionalWriteLockConfig.LOCK_INTERNAL_STORAGE_LOCATION.key(), "https://storage.googleapis.com/bucket/locks");
-    props.put(BASE_PATH.key(), "gs://bucket/lake/db/tbl-default");
-    props.put(ConditionalWriteLockConfig.LOCK_VALIDITY_TIMEOUT_MS.key(), "5000");
-    props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
-
-    LockConfiguration lockConf = new LockConfiguration(props);
-    StorageConfiguration<?> storageConf = HoodieTestUtils.getDefaultStorageConf();
-
-    HoodieLockException ex = assertThrows(HoodieLockException.class,
-        () -> new ConditionalWriteLockProvider(lockConf, storageConf));
-    assertTrue(ex.getMessage().contains("Failed to load and initialize ConditionalWriteLockService"));
   }
 
   @Test

@@ -17,10 +17,8 @@
  * under the License.
  */
 
-package org.apache.hudi.gcp.transaction.lock;
+package org.apache.hudi.client.transaction.lock;
 
-import org.apache.hudi.client.transaction.lock.ConditionalWriteLockConfig;
-import org.apache.hudi.client.transaction.lock.ConditionalWriteLockProvider;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.exception.HoodieLockException;
 
@@ -34,6 +32,7 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -49,10 +48,6 @@ public abstract class AbstractLockProviderTestBase {
   protected static TypedProperties providerProperties;
   // A method that subclasses must implement to instantiate the correct provider.
   protected abstract ConditionalWriteLockProvider createLockProvider();
-
-  protected void recreateLockProvider() {
-    lockProvider = createLockProvider();
-  }
 
   @BeforeEach
   void setUp() {
@@ -98,24 +93,26 @@ public abstract class AbstractLockProviderTestBase {
     providerProperties.put(ConditionalWriteLockConfig.LOCK_VALIDITY_TIMEOUT_MS.key(), 5000);
     providerProperties.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), 1000);
 
+    AtomicReference<ConditionalWriteLockProvider> lp = new AtomicReference<>();
     // Create a thread with a new lock provider to acquire the lock
     Thread lockingThread = new Thread(() -> {
-      createLockProvider().tryLock();
+      lp.set(createLockProvider());
+      lp.get().tryLock();
     });
     lockingThread.start();
 
     // Wait for the thread to acquire the lock
     // Ensure the locking thread is dead.
-    lockingThread.join(500);
+    lockingThread.join(2000);
     assertFalse(lockingThread.isAlive());
 
     // After the validity expires, should be able to reacquire
-    ConditionalWriteLockProvider newLockProvider = createLockProvider();
-    boolean lockAcquired = newLockProvider.tryLock(15, TimeUnit.SECONDS);
+    boolean lockAcquired = lockProvider.tryLock(15, TimeUnit.SECONDS);
     assertTrue(lockAcquired, "Lock should be reacquired after expiration");
-    assertNotNull(newLockProvider.getLock(), "Lock should be reacquired and getLock() should return non-null");
-    newLockProvider.unlock();
-    newLockProvider.close();
+    assertNotNull(lockProvider.getLock(), "Lock should be reacquired and getLock() should return non-null");
+    lockProvider.unlock();
+    lockProvider.close();
+    lp.get().close();
   }
 
   @Test
