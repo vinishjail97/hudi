@@ -33,9 +33,7 @@ import org.apache.hudi.index.HoodieIndex;
 import org.apache.hudi.index.SparkHoodieIndexFactory;
 import org.apache.hudi.metadata.HoodieTableMetadata;
 import org.apache.hudi.metadata.HoodieTableMetadataWriter;
-import org.apache.hudi.metadata.SparkHoodieBackedTableMetadataWriter;
 import org.apache.hudi.metadata.SparkMetadataWriterFactory;
-import org.apache.hudi.table.action.commit.HoodieMergeHelper;
 
 import org.apache.spark.TaskContext;
 import org.apache.spark.TaskContext$;
