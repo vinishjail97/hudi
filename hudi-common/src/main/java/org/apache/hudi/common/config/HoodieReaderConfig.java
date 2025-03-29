@@ -19,11 +19,6 @@
 
 package org.apache.hudi.common.config;
 
-
-import org.apache.hudi.common.table.HoodieTableVersion;
-
-import org.apache.hadoop.conf.Configuration;
-
 import javax.annotation.concurrent.Immutable;
 
 /**
