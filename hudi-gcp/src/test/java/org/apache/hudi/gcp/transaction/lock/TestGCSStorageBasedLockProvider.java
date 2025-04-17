@@ -19,9 +19,8 @@
 
 package org.apache.hudi.gcp.transaction.lock;
 
-import org.apache.hudi.client.transaction.lock.AbstractLockProviderTestBase;
-import org.apache.hudi.client.transaction.lock.ConditionalWriteLockConfig;
-import org.apache.hudi.client.transaction.lock.ConditionalWriteLockProvider;
+import org.apache.hudi.client.transaction.lock.StorageBasedLockProvider;
+import org.apache.hudi.client.transaction.lock.StorageBasedLockProviderTestBase;
 import org.apache.hudi.common.config.LockConfiguration;
 import org.apache.hudi.common.config.TypedProperties;
 import org.apache.hudi.common.testutils.HoodieTestUtils;
@@ -41,21 +40,16 @@ import org.mockito.MockedStatic;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.utility.DockerImageName;
 
-import java.lang.reflect.Field;
-import java.net.URI;
-import java.net.URISyntaxException;
-
 import static org.apache.hudi.common.config.HoodieCommonConfig.BASE_PATH;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
-public class TestGCSConditionalWriteLockProvider
-    extends AbstractLockProviderTestBase {
+public class TestGCSStorageBasedLockProvider
+    extends StorageBasedLockProviderTestBase {
 
   private static final DockerImageName FAKE_GCS_IMAGE =
       DockerImageName.parse("fsouza/fake-gcs-server:latest");
@@ -90,7 +84,7 @@ public class TestGCSConditionalWriteLockProvider
   }
 
   @Override
-  protected ConditionalWriteLockProvider createLockProvider() {
+  protected StorageBasedLockProvider createLockProvider() {
     LockConfiguration lockConf = new LockConfiguration(providerProperties);
     try (MockedStatic<StorageOptions> storageOptionsMock = mockStatic(StorageOptions.class)) {
       StorageOptions.Builder builderMock = mock(StorageOptions.Builder.class);
@@ -98,7 +92,7 @@ public class TestGCSConditionalWriteLockProvider
       storageOptionsMock.when(StorageOptions::newBuilder).thenReturn(builderMock);
       when(builderMock.build()).thenReturn(storageOptionsInstanceMock);
       when(storageOptionsInstanceMock.getService()).thenReturn(storage);
-      return new ConditionalWriteLockProvider(
+      return new StorageBasedLockProvider(
           lockConf,
           null);
     }
@@ -121,35 +115,12 @@ public class TestGCSConditionalWriteLockProvider
   void testValidDefaultConstructor() {
     TypedProperties props = new TypedProperties();
     props.put(BASE_PATH.key(), "gs://bucket/lake/db/tbl-default");
-    props.put(ConditionalWriteLockConfig.LOCK_VALIDITY_TIMEOUT_MS.key(), "5000");
-    props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
 
     LockConfiguration lockConf = new LockConfiguration(props);
 
-    ConditionalWriteLockProvider provider = new ConditionalWriteLockProvider(lockConf, HoodieTestUtils.getDefaultStorageConf());
+    StorageBasedLockProvider provider = new StorageBasedLockProvider(lockConf, HoodieTestUtils.getDefaultStorageConf());
     assertNull(provider.getLock());
     provider.close();
-  }
-
-  @Test
-  void testValidDefaultConstructorWithWeirdBasePath() {
-    TypedProperties props = new TypedProperties();
-    props.put(ConditionalWriteLockConfig.LOCK_INTERNAL_STORAGE_LOCATION.key(), "gs://test-bucket/locks");
-    props.put(BASE_PATH.key(), "//中文/路径//测试/emoji-u83DuDE0E-text//\\\\invalid*chars%$#end\n");
-    props.put(ConditionalWriteLockConfig.LOCK_VALIDITY_TIMEOUT_MS.key(), "5000");
-    props.put(ConditionalWriteLockConfig.HEARTBEAT_POLL_MS.key(), "1000");
-
-    LockConfiguration lockConf = new LockConfiguration(props);
-
-    ConditionalWriteLockProvider provider = new ConditionalWriteLockProvider(lockConf, HoodieTestUtils.getDefaultStorageConf());
-    try {
-      Field field = provider.getClass().getDeclaredField("lockFilePath");
-      field.setAccessible(true);
-      String lockFilePath = (String) field.get(provider);
-      new URI(lockFilePath);
-    } catch (URISyntaxException | NoSuchFieldException | IllegalAccessException e) {
-      fail("Should not throw exception!");
-    }
   }
 
   @Test
