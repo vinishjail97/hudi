@@ -269,7 +269,7 @@ jobs:
               -Dsonar.coverage.jacoco.xmlReportPaths="${jacoco_xml_report_files}" \
               -Dsonar.branch.name=${{ github.HEAD_REF }}
           fi
-  spark-java-tests:
+  spark-tests:
     needs: skip-check
     runs-on: arc-8-cores-ondemand-staging
     strategy:
