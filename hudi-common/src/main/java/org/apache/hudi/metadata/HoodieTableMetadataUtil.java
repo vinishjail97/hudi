@@ -95,6 +95,7 @@ import org.apache.hudi.common.table.timeline.InstantGenerator;
 import org.apache.hudi.common.table.timeline.TimelineFactory;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
 import org.apache.hudi.common.util.CollectionUtils;
+import org.apache.hudi.common.util.ExternalFilePathUtil;
 import org.apache.hudi.common.util.FileFormatUtils;
 import org.apache.hudi.common.util.Option;
 import org.apache.hudi.common.util.PartitionPathEncodeUtils;
@@ -900,8 +901,10 @@ public class HoodieTableMetadataUtil {
             String fileId = writeStatsByFileIdEntry.getKey();
             List<HoodieWriteStat> writeStats = writeStatsByFileIdEntry.getValue();
             // Partition the write stats into base file and log file write stats
+            // a file written outside Hudi is recorded with the external file marker after its extension
             List<HoodieWriteStat> baseFileWriteStats = writeStats.stream()
-                .filter(writeStat -> writeStat.getPath().endsWith(baseFileFormat.getFileExtension()))
+                .filter(writeStat -> writeStat.getPath().endsWith(baseFileFormat.getFileExtension())
+                    || ExternalFilePathUtil.isExternallyCreatedFile(FSUtils.getFileNameFromPath(writeStat.getPath())))
                 .collect(Collectors.toList());
             List<HoodieWriteStat> logFileWriteStats = writeStats.stream()
                 .filter(writeStat -> FSUtils.isLogFile(new StoragePath(writeStats.get(0).getPath())))

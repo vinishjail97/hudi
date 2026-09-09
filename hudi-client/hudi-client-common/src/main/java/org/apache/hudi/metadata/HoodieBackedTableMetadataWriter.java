@@ -1659,7 +1659,7 @@ public abstract class HoodieBackedTableMetadataWriter<I, O> implements HoodieTab
     // If write operation type based on commit metadata is COMPACT or CLUSTER then no need to update,
     // because these operations do not change the secondary key - record key mapping.
     WriteOperationType operationType = commitMetadata.getOperationType();
-    if (operationType.isInsertOverwriteOrDeletePartition()) {
+    if (operationType != null && operationType.isInsertOverwriteOrDeletePartition()) {
       throw new HoodieIndexException(String.format("Can not perform operation %s on secondary index", operationType));
     } else if (operationType == WriteOperationType.COMPACT || operationType == WriteOperationType.CLUSTER) {
       return;
@@ -1687,7 +1687,8 @@ public abstract class HoodieBackedTableMetadataWriter<I, O> implements HoodieTab
       return engineContext.emptyHoodieData();
     }
     HoodieIndexDefinition indexDefinition = getIndexDefinition(indexPartition);
-    return convertWriteStatsToSecondaryIndexRecords(allWriteStats, instantTime, indexDefinition, dataWriteConfig.getMetadataConfig(), dataMetaClient, engineContext, dataWriteConfig);
+    return convertWriteStatsToSecondaryIndexRecords(allWriteStats, instantTime, indexDefinition, dataWriteConfig.getMetadataConfig(), dataMetaClient, engineContext, dataWriteConfig,
+        commitMetadata);
   }
 
   /**
@@ -2378,9 +2379,47 @@ public abstract class HoodieBackedTableMetadataWriter<I, O> implements HoodieTab
     } else if (operationType == WriteOperationType.DELETE_PARTITION) {
       // all records from the target partition(s) to be deleted from RLI
       return getRecordIndexReplacedRecords((HoodieReplaceCommitMetadata) commitMetadata);
+    } else if (commitMetadata instanceof HoodieReplaceCommitMetadata && operationType != WriteOperationType.CLUSTER) {
+      // a replace commit that is neither a table service nor an overwrite, e.g. files written outside Hudi being
+      // registered in the table. The replaced file groups are dropped without their records being rewritten under
+      // the same key, so the records of the replaced base files are deleted from RLI unless this commit wrote them again.
+      return getRecordIndexReplacedFileGroupRecords((HoodieReplaceCommitMetadata) commitMetadata)
+          .mapToPair(r -> Pair.of(r.getKey(), r))
+          .leftOuterJoin(updatesFromWriteStatuses.mapToPair(r -> Pair.of(r.getKey(), r)))
+          .values()
+          .filter(p -> !p.getRight().isPresent())
+          .map(Pair::getLeft);
     } else {
       return engineContext.emptyHoodieData();
     }
+  }
+
+  /**
+   * Reads the record keys of the latest base file of every file group replaced by the given commit and
+   * returns a delete record for each of them.
+   */
+  private HoodieData<HoodieRecord> getRecordIndexReplacedFileGroupRecords(HoodieReplaceCommitMetadata replaceCommitMetadata) {
+    HoodieTableFileSystemView fsView = getMetadataView();
+    List<Pair<String, HoodieBaseFile>> replacedBaseFiles = replaceCommitMetadata.getPartitionToReplaceFileIds().entrySet().stream()
+        .flatMap(partitionAndFileIds -> partitionAndFileIds.getValue().stream()
+            .map(fileId -> fsView.getLatestBaseFile(partitionAndFileIds.getKey(), fileId))
+            .filter(Option::isPresent)
+            .map(baseFile -> Pair.of(partitionAndFileIds.getKey(), baseFile.get())))
+        .collect(Collectors.toList());
+    if (replacedBaseFiles.isEmpty()) {
+      return engineContext.emptyHoodieData();
+    }
+    String basePath = dataMetaClient.getBasePath().toString();
+    StorageConfiguration<?> storageConfiguration = dataMetaClient.getStorageConf();
+    boolean isPartitionedRLI = dataWriteConfig.getMetadataConfig().isRecordLevelIndexEnabled();
+    int parallelism = Math.min(replacedBaseFiles.size(), dataWriteConfig.getMetadataConfig().getRecordIndexMaxParallelism());
+    engineContext.setJobStatus(this.getClass().getSimpleName(), "Record Index: reading record keys from " + replacedBaseFiles.size() + " replaced base files");
+    return engineContext.parallelize(replacedBaseFiles, parallelism).flatMap(partitionAndBaseFile -> {
+      StoragePath dataFilePath = partitionAndBaseFile.getValue().getStoragePath();
+      HoodieStorage storage = HoodieStorageUtils.getStorage(dataFilePath, storageConfiguration);
+      return BaseFileRecordParsingUtils.generateRLIMetadataHoodieRecordsForReplacedBaseFile(
+          basePath, partitionAndBaseFile.getKey(), dataFilePath, storage, isPartitionedRLI);
+    });
   }
 
   protected void closeInternal() {
