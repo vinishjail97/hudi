@@ -157,6 +157,7 @@ public class SparkIndexerSupport implements EngineIndexerSupport {
       HoodieSchema.Vector resolvedVectorType = (HoodieSchema.Vector) vectorSchema;
       int dimension = resolvedVectorType.getDimension();
 
+      validateVectorBootstrapFileSlices(indexDefinition.getIndexName(), fileSlices);
       JavaRDD<SparkVectorIndexBootstrap.VectorRow> vectorRows = buildVectorRowsRDD(
           dataMetaClient, tableSchema, vectorColumn, indexDefinition.getIndexName(), fileSlices);
 
@@ -167,6 +168,27 @@ public class SparkIndexerSupport implements EngineIndexerSupport {
           dimension, generation, sourceInstant, lastUpdatedTs);
     } catch (Exception e) {
       throw new HoodieMetadataException("Failed to bootstrap vector index records", e);
+    }
+  }
+
+  /**
+   * v1 postings address rows by file-absolute Parquet row position, so every indexed row must live in
+   * a base file. Fails fast on the driver, with the offending file group, when a slice is log-only or
+   * carries log files (records that exist only in, or are overridden by, log files).
+   */
+  private static void validateVectorBootstrapFileSlices(String indexName, List<FileSliceAndPartition> fileSlices) {
+    for (FileSliceAndPartition fileSliceAndPartition : fileSlices) {
+      FileSlice fileSlice = fileSliceAndPartition.getFileSlice();
+      boolean hasBaseFile = fileSlice.getBaseFile().isPresent();
+      boolean hasLogFiles = fileSlice.getLogFiles().findAny().isPresent();
+      if (!hasBaseFile || hasLogFiles) {
+        throw new HoodieMetadataException(String.format(
+            "Cannot bootstrap vector index '%s': file group '%s' in partition '%s' %s. Vector indexes "
+                + "currently index only rows stored in base files (COPY_ON_WRITE tables); records that "
+                + "exist only in log files are not supported. Compact the table or use a COPY_ON_WRITE table.",
+            indexName, fileSlice.getFileId(), fileSliceAndPartition.getPartitionPath(),
+            hasBaseFile ? "has log files" : "has no base file (log-only)"));
+      }
     }
   }
 
@@ -249,6 +271,13 @@ public class SparkIndexerSupport implements EngineIndexerSupport {
               }
               long rowPosition = readerContext.getRecordContext().extractRecordPosition(
                   record, requestedSchema, ROW_INDEX_TEMPORARY_COLUMN_NAME, -1L);
+              if (rowPosition < 0) {
+                throw new HoodieMetadataException(String.format(
+                    "Cannot bootstrap vector index '%s': record '%s' in file group '%s' (partition '%s') has no "
+                        + "base-file row position; it exists only in a log file. Vector indexes currently "
+                        + "support only rows stored in base files (COPY_ON_WRITE tables).",
+                    indexName, recordKey, fileSlice.getFileId(), partitionPath));
+              }
               rows.add(new SparkVectorIndexBootstrap.VectorRow(
                   recordKey, partitionPath, fileSlice.getFileId(),
                   fileSlice.getBaseInstantTime(), vectorBytes, rowPosition));
