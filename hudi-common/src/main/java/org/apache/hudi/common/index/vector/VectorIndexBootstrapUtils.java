@@ -99,7 +99,10 @@ public final class VectorIndexBootstrapUtils {
     return Arrays.copyOf(source, rowBytes);
   }
 
-  /** Converts dimension-interleaved lower bits into fixed-width posting-block planes. */
+  /**
+   * Converts dimension-interleaved lower bits (least-significant bit first) into fixed-width
+   * posting-block planes, most-significant plane first, as the posting scorers expect.
+   */
   public static byte[] splitExPlanes(
       byte[] extendedCode, int planeCount, int dimension, int rowBytes) {
     if (planeCount == 0) {
@@ -117,7 +120,8 @@ public final class VectorIndexBootstrapUtils {
       for (int plane = 0; plane < planeCount; plane++) {
         int sourceBit = dimensionIndex * planeCount + plane;
         if ((extendedCode[sourceBit >>> 3] & (1 << (sourceBit & 7))) != 0) {
-          int targetBit = plane * rowBytes * Byte.SIZE + dimensionIndex;
+          int targetPlane = planeCount - 1 - plane;
+          int targetBit = targetPlane * rowBytes * Byte.SIZE + dimensionIndex;
           planes[targetBit >>> 3] |= (byte) (1 << (targetBit & 7));
         }
       }
