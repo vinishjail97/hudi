@@ -387,6 +387,7 @@ public final class VectorIndexMdtSearchUtils {
         useAsymmetric,
         useResidualEncoding,
         queryPrepMs);
+    final int signCodeBytes = (dimension + 7) / 8;
     return postingMatches.mapPartitions(iterator -> {
       long partitionStartMs = System.currentTimeMillis();
       if (!iterator.hasNext()) {
@@ -442,9 +443,14 @@ public final class VectorIndexMdtSearchUtils {
           approxDistance = (float) multibitMetricQueryState.rankingDistance(rip, centerRip, residualNorm, vectorNorm, clusterQuery);
         } else {
           float effectiveScalar = match.getScalar() != null ? match.getScalar() : 1.0f;
+          // Posting-block sign rows are padded to codeRowBytes (a multiple of 8 bytes); the
+          // single-bit scorer expects exactly ceil(dimension / 8) bytes.
+          byte[] binaryCode = match.getBinaryCode().length > signCodeBytes
+              ? Arrays.copyOf(match.getBinaryCode(), signCodeBytes)
+              : match.getBinaryCode();
           approxDistance = encoder.estimateDistance(
               activeQueryState,
-              new QuantizedVector(match.getBinaryCode(), effectiveScalar),
+              new QuantizedVector(binaryCode, effectiveScalar),
               scoringMetric,
               useAsymmetric);
         }
