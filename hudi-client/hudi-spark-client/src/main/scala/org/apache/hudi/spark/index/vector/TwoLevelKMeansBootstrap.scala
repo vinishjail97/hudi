@@ -98,7 +98,9 @@ object TwoLevelKMeansBootstrap {
 
   def train(spark: SparkSession, sample: RDD[Array[Float]], cfg: TrainConfig): TwoLevelModel = {
     val dim = sample.first().length
-    val k1 = if (cfg.coarseCells > 0) cfg.coarseCells else math.max(16, math.round(math.sqrt(cfg.numClusters)).toInt)
+    val requestedCoarseCells = if (cfg.coarseCells > 0) cfg.coarseCells else math.max(16, math.round(math.sqrt(cfg.numClusters)).toInt)
+    // Never ask for more coarse cells than leaves; each cell yields at least one leaf.
+    val k1 = math.max(1, math.min(cfg.numClusters, requestedCoarseCells))
     val leavesPerCell = math.max(1, cfg.numClusters / k1)
     LOG.info("[vector_bootstrap][train] numClusters={} k1={} leavesPerCell={} dim={}",
       Int.box(cfg.numClusters), Int.box(k1), Int.box(leavesPerCell), Int.box(dim))
@@ -114,6 +116,8 @@ object TwoLevelKMeansBootstrap {
       .run(coarseInput)
     coarseInput.unpersist(blocking = false)
     val coarse: Array[Array[Float]] = coarseModel.clusterCenters.map(_.toArray.map(_.toFloat))
+    // MLlib may return fewer centers than requested on small or duplicate-heavy samples.
+    val coarseCellCount = coarse.length
     LOG.info("[vector_bootstrap][train] coarse fit done in {} ms", Long.box((System.nanoTime() - t0) / 1000000))
 
     // ---- Level 2: partition sample by coarse cell, local Lloyd's per cell ----
@@ -123,7 +127,7 @@ object TwoLevelKMeansBootstrap {
 
     val perCellLeaves: Array[(Int, Array[Array[Float]])] = sample
       .map { v => (nearest(bcCoarse.value, bcCoarseNorms.value, v), v) }
-      .groupByKey(k1)
+      .groupByKey(coarseCellCount)
       .map { case (cell, it) =>
         val pts = it.toArray
         val leaves = localLloyds(pts, leavesPerCell, cfg.subMaxIter, cfg.subConvergenceTol,
@@ -137,7 +141,7 @@ object TwoLevelKMeansBootstrap {
     LOG.info("[vector_bootstrap][train] sub-level done in {} ms", Long.box((System.nanoTime() - t1) / 1000000))
 
     // ---- Flatten: dense leaf ids ordered by (coarseCell, localLeaf) ----
-    val offsets = new Array[Int](k1 + 1)
+    val offsets = new Array[Int](coarseCellCount + 1)
     val flat = new ArrayBuffer[Array[Float]](cfg.numClusters)
     var cellIdx = 0
     perCellLeaves.foreach { case (cell, leaves) =>
@@ -146,7 +150,7 @@ object TwoLevelKMeansBootstrap {
       offsets(cell + 1) = flat.length
       cellIdx = cell + 1
     }
-    while (cellIdx < k1) { offsets(cellIdx + 1) = flat.length; cellIdx += 1 }
+    while (cellIdx < coarseCellCount) { offsets(cellIdx + 1) = flat.length; cellIdx += 1 }
 
     val leafCentroids = flat.toArray
     val model = TwoLevelModel(coarse, leafCentroids, offsets, leafCentroids.map(sqNorm), coarse.map(sqNorm))
