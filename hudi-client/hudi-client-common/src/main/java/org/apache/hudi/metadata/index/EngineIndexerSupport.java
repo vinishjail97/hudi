@@ -112,6 +112,8 @@ public interface EngineIndexerSupport {
    * @param fileSlices      latest merged file slices of the data table to read vectors from
    * @param tableSchema     resolved data-table schema
    * @param generation      index generation id (always 1 for initial bootstrap)
+   * @param sourceInstant   data-table instant the bootstrap snapshot covers; recorded as the
+   *                        manifest baseline and verified frontier
    * @return vector index metadata records to commit to the MDT partition
    */
   HoodieData<HoodieRecord> generateVectorIndexRecords(
@@ -119,5 +121,6 @@ public interface EngineIndexerSupport {
       HoodieTableMetaClient dataMetaClient,
       List<FileSliceAndPartition> fileSlices,
       HoodieSchema tableSchema,
-      int generation);
+      int generation,
+      String sourceInstant);
 }
